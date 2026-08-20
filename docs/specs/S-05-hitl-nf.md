@@ -1,0 +1,60 @@
+---
+id: S-05
+titulo: HITL + emissão de NF
+status: aprovada
+branch: spec/s-05-hitl-nf
+issue: 
+adrs: [ADR-003, ADR-004]
+riscos_cobertos: [R3, R8]
+---
+
+# S-05 — HITL + emissão de NF
+
+## Objetivo
+Irreversível exige humano: o grafo pausa antes de emitir a NF, o operador aprova em fila
+própria, e a emissão sai por port com mock fiel (DANFE/XML "SEM VALOR FISCAL").
+
+## Requisitos
+- [ ] REQ-1 Após pagamento confirmado: pedido → `aguardando_aprovacao_nf` e interrupt persistido no checkpointer.
+- [ ] REQ-2 API da fila do operador: listar pendentes com dados completos da nota; aprovar/rejeitar com registro (quem, quando, motivo na rejeição).
+- [ ] REQ-3 Aprovação retoma o grafo; rejeição comunica o motivo ao fluxo do cliente.
+- [ ] REQ-4 Port `NFEmitter` + `MockAdapter` (XML e DANFE PDF fiéis ao layout NF-e 55, tarja "SEM VALOR FISCAL"); `HomologacaoAdapter` fica na S-09.
+- [ ] REQ-5 Invariante testada em integração: nenhum caminho emite NF sem aprovação registrada.
+- [ ] REQ-6 Cliente recebe confirmação no chat com acesso à DANFE/XML.
+
+## Fora de escopo
+UI do operador (S-07 — aqui só API); homologação real (S-09).
+
+## Tasks
+1. `feat(s-05): interrupt before nf emission with persisted state`
+2. `feat(s-05): operator queue api with audited approve/reject`
+3. `feat(s-05): nf emitter port with faithful mock adapter (danfe + xml)`
+4. `feat(s-05): resume flow and customer notification`
+5. `test(s-05): integration test for the no-approval-no-emission invariant`
+
+## BDD
+```gherkin
+Cenário: NF só sai com aprovação
+  Dado um pedido pago aguardando aprovação
+  Quando o operador aprova na fila
+  Então o grafo retoma, a DANFE é gerada com tarja "SEM VALOR FISCAL" e o cliente é notificado
+
+Cenário: emissão sem aprovação é impossível
+  Dado um pedido pago aguardando aprovação
+  Quando qualquer caminho tenta invocar emitir_nf sem registro de aprovação
+  Então a emissão é bloqueada e o incidente é registrado
+```
+
+## Métricas de sucesso
+| Métrica | Alvo | Como medir |
+|---|---|---|
+| NFs emitidas sem aprovação registrada | 0 | teste de integração + auditoria |
+| Retomada pós-aprovação | 100% dos casos de teste | integração |
+
+## Verificação independente
+- Percorrer o fluxo completo com Pix de teste; matar o processo durante o interrupt e
+  confirmar retomada após restart (estado persistido).
+- Tentar emitir via chamada direta sem aprovação e confirmar bloqueio.
+
+## Definition of Done
+- [ ] Checklist padrão do template

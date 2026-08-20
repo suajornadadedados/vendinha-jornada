@@ -1,0 +1,38 @@
+# Configuração única de lint/format do projeto.
+#
+# Fica na raiz de propósito: o ruff resolve config subindo a árvore, então esta
+# vale para backend/ quando a S-00 criar a pasta, e já vale hoje para
+# scripts/ e tests/discovery/. Uma régua só, um lugar só.
+
+target-version = "py312"
+line-length = 100
+
+# .claude/skills/ é derivado do lockfile (ADR-009) e contém código Python de
+# terceiros. Lintar ali só produziria achados que não podemos corrigir: a
+# correção seria perdida no próximo vendor-skills.sh e o job skills-drift
+# reprovaria o PR.
+exclude = [".claude/skills"]
+
+[lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort — import fora de ordem é ruído de diff
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "S",    # bandit — segurança
+    "ARG",  # argumento não usado
+    "PTH",  # pathlib em vez de os.path
+    "RUF",
+]
+ignore = [
+    "E501",  # comprimento de linha é do formatter, não do lint
+]
+
+[lint.per-file-ignores]
+# Em teste, assert é a ferramenta, não um problema (S101).
+"tests/**" = ["S101"]
+"backend/tests/**" = ["S101"]
+
+[format]
+quote-style = "double"

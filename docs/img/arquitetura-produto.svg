@@ -1,0 +1,265 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1080" width="1640" height="1080" font-family="Inter, 'Segoe UI', Roboto, system-ui, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8A837B"/>
+    </marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5F5850"/>
+    </marker>
+
+    <symbol id="ic-python" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#3776AB"/>
+      <path d="M24 8c-6 0-9 1.5-9 5v4.5h9.5v2H12c-3.6 0-6.5 2.5-6.5 8s2.9 8 6.5 8h3.5v-6.5c0-3.6 2.9-6 6.5-6h7c2.8 0 5-1.8 5-4.5V13c0-3.5-3-5-10-5zm-5.2 3.2a1.7 1.7 0 110 3.4 1.7 1.7 0 010-3.4z" fill="#FFFFFF"/>
+      <path d="M24 40c6 0 9-1.5 9-5v-4.5h-9.5v-2H36c3.6 0 6.5-2.5 6.5-8s-2.9-8-6.5-8h-3.5v6.5c0 3.6-2.9 6-6.5 6h-7c-2.8 0-5 1.8-5 4.5V35c0 3.5 3 5 10 5zm5.2-3.2a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4z" fill="#FFD43B"/>
+    </symbol>
+
+    <symbol id="ic-fastapi" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#05998B"/>
+      <path d="M27 6 12 27h9l-2 15 15-21h-9z" fill="#FFFFFF"/>
+    </symbol>
+
+    <symbol id="ic-langgraph" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#0F766E"/>
+      <g stroke="#FFFFFF" stroke-width="2.2">
+        <path d="M24 14 14 32M24 14l10 18M14 32h20"/>
+      </g>
+      <g fill="#FFFFFF">
+        <circle cx="24" cy="13" r="4.6"/><circle cx="14" cy="33" r="4.6"/><circle cx="34" cy="33" r="4.6"/>
+      </g>
+    </symbol>
+
+    <symbol id="ic-langfuse" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#1E2A5A"/>
+      <path d="M8 30h6l4-12 5 20 5-14 3 6h9" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <symbol id="ic-react" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#20232A"/>
+      <g transform="translate(24,24)" stroke="#61DAFB" stroke-width="1.9" fill="none">
+        <ellipse rx="15" ry="5.7"/>
+        <ellipse rx="15" ry="5.7" transform="rotate(60)"/>
+        <ellipse rx="15" ry="5.7" transform="rotate(120)"/>
+      </g>
+      <circle cx="24" cy="24" r="3.3" fill="#61DAFB"/>
+    </symbol>
+
+    <symbol id="ic-vite" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#646CFF"/>
+      <path d="M27 6 12 27h9l-2 15 15-21h-9z" fill="#FFD62E"/>
+    </symbol>
+
+    <symbol id="ic-docker" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#2496ED"/>
+      <g fill="#FFFFFF">
+        <rect x="11" y="22" width="6.4" height="6.4" rx="1"/>
+        <rect x="18.8" y="22" width="6.4" height="6.4" rx="1"/>
+        <rect x="26.6" y="22" width="6.4" height="6.4" rx="1"/>
+        <rect x="18.8" y="14.6" width="6.4" height="6.4" rx="1"/>
+        <rect x="26.6" y="14.6" width="6.4" height="6.4" rx="1"/>
+        <path d="M7 30.4h30.5c.4 5.6-3.6 9.4-10.3 9.4-8.2 0-13-3.6-15.4-9.4z"/>
+        <path d="M36.6 24.4c1.8-1.8 4-1 5.4.2-1.3 1.5-3.4 2.2-5.4 1.2z"/>
+      </g>
+    </symbol>
+
+    <symbol id="ic-postgres" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#336791"/>
+      <g fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round">
+        <ellipse cx="24" cy="14.5" rx="12" ry="5"/>
+        <path d="M12 14.5v19c0 2.8 5.4 5 12 5s12-2.2 12-5v-19"/>
+        <path d="M12 24c0 2.8 5.4 5 12 5s12-2.2 12-5"/>
+      </g>
+    </symbol>
+
+    <symbol id="ic-qdrant" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#DC244C"/>
+      <g fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round">
+        <path d="M24 8l12 7v14l-12 7-12-7V15z"/>
+        <path d="M24 22l12-7M24 22v14M24 22 12 15"/>
+      </g>
+    </symbol>
+
+    <symbol id="ic-mp" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#009EE3"/>
+      <path d="M11 30c3-8.5 7.2-13 13-13s10 4.5 13 13c-4 3.2-8.2 4.6-13 4.6S15 33.2 11 30z" fill="#FFFFFF"/>
+      <path d="M17.5 28.5c2.2-2.2 4.3-3.3 6.5-3.3s4.3 1.1 6.5 3.3" fill="none" stroke="#009EE3" stroke-width="2.6" stroke-linecap="round"/>
+    </symbol>
+
+    <symbol id="ic-doc" viewBox="0 0 48 48">
+      <rect width="48" height="48" rx="11" fill="#6B5B95"/>
+      <path d="M17 11h11l7 7v19a2 2 0 01-2 2H17a2 2 0 01-2-2V13a2 2 0 012-2z" fill="#FFFFFF"/>
+      <path d="M28 11v7h7" fill="none" stroke="#6B5B95" stroke-width="2"/>
+      <path d="M20 26h9M20 31h9" stroke="#6B5B95" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+
+  <rect width="1640" height="1080" fill="#FAF8F5"/>
+
+  <text x="44" y="50" font-size="30" font-weight="700" fill="#1A1714">Vendinha — arquitetura do produto</text>
+  <text x="44" y="80" font-size="15.5" fill="#6B645C">O LLM decide o que dizer. O código decide o que pode ser feito.</text>
+  <rect x="44" y="94" width="120" height="3" rx="1.5" fill="#1F6F5C"/>
+
+  <!-- ===== DOCKER ENVELOPE ===== -->
+  <rect x="44" y="116" width="1552" height="846" rx="18" fill="none" stroke="#2496ED" stroke-width="2" stroke-dasharray="9 7"/>
+  <rect x="72" y="100" width="516" height="34" rx="17" fill="#FAF8F5"/>
+  <use href="#ic-docker" x="80" y="101" width="31" height="31"/>
+  <text x="120" y="122" font-size="13.5" font-weight="700" fill="#1D6FB0">Docker + compose — um comando sobe tudo, tudo mockado (RNF-1)</text>
+
+  <!-- ===== FRONTEND ===== -->
+  <g>
+    <rect x="76" y="200" width="290" height="300" rx="12" fill="#FFFFFF" stroke="#E3DCD2"/>
+    <use href="#ic-react" x="96" y="220" width="32" height="32"/>
+    <use href="#ic-vite" x="134" y="220" width="32" height="32"/>
+    <text x="176" y="236" font-size="15.5" font-weight="700" fill="#1A1714">Frontend</text>
+    <text x="176" y="253" font-size="11.5" fill="#8A837B">React + Vite</text>
+
+    <rect x="96" y="272" width="250" height="72" rx="9" fill="#F6F9FB" stroke="#DCE6EC"/>
+    <text x="112" y="296" font-size="13" font-weight="700" fill="#1A1714">Chat do cliente</text>
+    <text x="112" y="318" font-size="11.5" fill="#5F5850">resposta em streaming (SSE);</text>
+    <text x="112" y="334" font-size="11.5" fill="#5F5850">link de pagamento no chat</text>
+
+    <rect x="96" y="356" width="250" height="72" rx="9" fill="#FBF7F2" stroke="#EADFCE"/>
+    <text x="112" y="380" font-size="13" font-weight="700" fill="#1A1714">Área do operador</text>
+    <text x="112" y="402" font-size="11.5" fill="#5F5850">fila de pedidos aguardando</text>
+    <text x="112" y="418" font-size="11.5" fill="#5F5850">aprovação de NF (RF-4)</text>
+
+    <text x="96" y="456" font-size="11.5" fill="#8A837B">Cliente TypeScript gerado do OpenAPI —</text>
+    <text x="96" y="474" font-size="11.5" fill="#8A837B">contrato único entre API e tela (ADR-004).</text>
+  </g>
+
+  <path d="M368 330 H406" stroke="#8A837B" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="387" y="322" font-size="10.5" fill="#8A837B" text-anchor="middle">HTTP · SSE</text>
+
+  <!-- ===== BACKEND ===== -->
+  <rect x="410" y="170" width="780" height="660" rx="14" fill="#FFFFFF" stroke="#D8D0C5"/>
+  <use href="#ic-python" x="430" y="182" width="30" height="30"/>
+  <text x="468" y="203" font-size="15.5" font-weight="700" fill="#1A1714">Backend — Python 3.12</text>
+  <text x="1168" y="203" font-size="11.5" fill="#8A837B" text-anchor="end">contratos Pydantic em toda fronteira (RNF-5)</text>
+
+  <!-- FastAPI -->
+  <rect x="432" y="222" width="736" height="100" rx="10" fill="#F2FAF9" stroke="#CDE5E2"/>
+  <use href="#ic-fastapi" x="450" y="234" width="26" height="26"/>
+  <text x="486" y="252" font-size="13.5" font-weight="700" fill="#05776C">FastAPI</text>
+  <text x="452" y="282" font-size="12" fill="#3F4A48">POST /chat (SSE)  ·  /pedidos  ·  /operador/pendentes  ·  /operador/{id}/aprovar</text>
+  <text x="452" y="304" font-size="12" fill="#3F4A48">POST /webhook/pagamento — zero IA: idempotente, com verificação de origem (RF-2.5)</text>
+
+  <path d="M800 324 V332" stroke="#8A837B" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- LangGraph -->
+  <rect x="432" y="336" width="736" height="354" rx="10" fill="#F3FAF8" stroke="#CFE7E1"/>
+  <use href="#ic-langgraph" x="450" y="348" width="26" height="26"/>
+  <text x="486" y="366" font-size="13.5" font-weight="700" fill="#0D6B62">LangGraph — o grafo do atendimento</text>
+  <text x="1150" y="366" font-size="11" fill="#8A837B" text-anchor="end">estado = identificadores, nunca payloads (RNF-6)</text>
+
+  <rect x="600" y="384" width="400" height="48" rx="9" fill="#FFFFFF" stroke="#C3DED8"/>
+  <text x="800" y="405" font-size="13" font-weight="700" fill="#1A1714" text-anchor="middle">supervisor</text>
+  <text x="800" y="422" font-size="11" fill="#6B645C" text-anchor="middle">roteia a conversa · não executa side effect</text>
+
+  <path d="M800 434 C 800 452 622 452 622 466" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M800 434 C 800 452 978 452 978 466" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <line x1="800" y1="440" x2="800" y2="554" stroke="#A03A3A" stroke-width="1.8" stroke-dasharray="7 5"/>
+
+  <rect x="456" y="470" width="330" height="80" rx="9" fill="#FFFFFF" stroke="#B9D9CE"/>
+  <rect x="456" y="470" width="330" height="4" rx="2" fill="#1F6F5C"/>
+  <text x="472" y="497" font-size="12.5" font-weight="700" fill="#1F6F5C">subagent RECOMENDAÇÃO</text>
+  <text x="472" y="518" font-size="11.5" fill="#4A5450">tools READ-ONLY: buscar_produtos,</text>
+  <text x="472" y="534" font-size="11.5" fill="#4A5450">detalhar_produto, consultar_preco</text>
+
+  <rect x="814" y="470" width="330" height="80" rx="9" fill="#FFFFFF" stroke="#E5D3B4"/>
+  <rect x="814" y="470" width="330" height="4" rx="2" fill="#B4711F"/>
+  <text x="830" y="497" font-size="12.5" font-weight="700" fill="#B4711F">subagent CHECKOUT</text>
+  <text x="830" y="518" font-size="11.5" fill="#4A5450">tools de escrita: criar_pedido,</text>
+  <text x="830" y="534" font-size="11.5" fill="#4A5450">gerar_link_pagamento</text>
+
+  <rect x="600" y="556" width="400" height="22" rx="11" fill="#FDF3F3" stroke="#E8C9C9"/>
+  <text x="800" y="571" font-size="10.5" font-weight="700" fill="#A03A3A" text-anchor="middle">fronteira de permissão — desconto não existe (ADR-002 · R2 · R4)</text>
+
+  <path d="M1100 552 V584" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="456" y="590" width="688" height="52" rx="9" fill="#FDF3F3" stroke="#DFB6B6"/>
+  <text x="474" y="612" font-size="13" font-weight="700" fill="#A03A3A">INTERRUPT — o único ponto onde o sistema para sozinho</text>
+  <text x="474" y="631" font-size="11.5" fill="#6B4A4A">pausa persistida no checkpointer; a retomada só existe a partir de uma aprovação gravada com quem e quando (ADR-003 · RF-3.5)</text>
+
+  <path d="M800 644 V656" stroke="#8A837B" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="456" y="658" width="688" height="24" rx="7" fill="#FFFFFF" stroke="#D8D0C5"/>
+  <text x="470" y="675" font-size="11.5" font-weight="700" fill="#1A1714">emitir_nf</text>
+  <text x="540" y="675" font-size="11.5" fill="#6B645C">— só é alcançável depois do interrupt aprovado</text>
+
+  <!-- Ports -->
+  <rect x="432" y="706" width="736" height="104" rx="10" fill="#FBF9FD" stroke="#DFD6E8"/>
+  <text x="452" y="732" font-size="13" font-weight="700" fill="#5B4A7D">Ports &amp; adapters — mock-first (ADR-004)</text>
+  <text x="452" y="752" font-size="11.5" fill="#5F5850">O default é mock: por isso o quickstart roda sem conta em serviço nenhum.</text>
+  <rect x="452" y="764" width="330" height="34" rx="8" fill="#FFFFFF" stroke="#DFD6E8"/>
+  <text x="468" y="786" font-size="12" font-weight="700" fill="#1A1714">PaymentGateway</text>
+  <rect x="806" y="764" width="330" height="34" rx="8" fill="#FFFFFF" stroke="#DFD6E8"/>
+  <text x="822" y="786" font-size="12" font-weight="700" fill="#1A1714">NFEmitter</text>
+
+  <!-- ===== DADOS ===== -->
+  <text x="1210" y="192" font-size="12" font-weight="700" letter-spacing="1.4" fill="#8A837B">DADOS</text>
+  <rect x="1210" y="200" width="360" height="270" rx="12" fill="#FFFFFF" stroke="#E3DCD2"/>
+
+  <use href="#ic-postgres" x="1232" y="222" width="30" height="30"/>
+  <text x="1272" y="243" font-size="14" font-weight="700" fill="#1A1714">PostgreSQL</text>
+  <text x="1232" y="272" font-size="11.5" fill="#5F5850">Fonte da verdade de <tspan font-weight="700" fill="#1A1714">preço</tspan> — o modelo</text>
+  <text x="1232" y="289" font-size="11.5" fill="#5F5850">nunca cita valor de memória (R1).</text>
+  <text x="1232" y="311" font-size="11.5" fill="#5F5850">Pedidos, aprovações e o</text>
+  <text x="1232" y="328" font-size="11.5" fill="#5F5850">checkpointer do grafo (RNF-6).</text>
+
+  <line x1="1232" y1="348" x2="1548" y2="348" stroke="#EDE7DE"/>
+
+  <use href="#ic-qdrant" x="1232" y="364" width="30" height="30"/>
+  <text x="1272" y="385" font-size="14" font-weight="700" fill="#1A1714">Qdrant</text>
+  <text x="1232" y="414" font-size="11.5" fill="#5F5850">Catálogo semântico: embeddings +</text>
+  <text x="1232" y="431" font-size="11.5" fill="#5F5850">payload estruturado para filtros.</text>
+  <text x="1232" y="450" font-size="11.5" fill="#8A837B">Separado do Postgres de propósito:</text>
+  <text x="1232" y="464" font-size="11.5" fill="#8A837B">busca semântica ≠ fonte da verdade.</text>
+
+  <path d="M1170 496 C 1192 496 1192 300 1206 300" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M1170 516 C 1196 516 1196 410 1206 410" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- ===== EXTERNO ===== -->
+  <text x="1210" y="492" font-size="12" font-weight="700" letter-spacing="1.4" fill="#8A837B">MUNDO EXTERNO — só ambiente de teste</text>
+  <rect x="1210" y="500" width="360" height="260" rx="12" fill="#FFFFFF" stroke="#E3DCD2" stroke-dasharray="7 5"/>
+
+  <use href="#ic-mp" x="1232" y="522" width="30" height="30"/>
+  <text x="1272" y="543" font-size="14" font-weight="700" fill="#1A1714">Mercado Pago</text>
+  <text x="1232" y="572" font-size="11.5" fill="#5F5850">Ambiente <tspan font-weight="700" fill="#1A1714">sandbox</tspan>: preferência de</text>
+  <text x="1232" y="589" font-size="11.5" fill="#5F5850">pagamento e webhook de confirmação.</text>
+  <text x="1232" y="606" font-size="11.5" fill="#8A837B">Dinheiro real nunca entra no fluxo.</text>
+
+  <line x1="1232" y1="626" x2="1548" y2="626" stroke="#EDE7DE"/>
+
+  <use href="#ic-doc" x="1232" y="642" width="30" height="30"/>
+  <text x="1272" y="663" font-size="14" font-weight="700" fill="#1A1714">Emissor de NF-e</text>
+  <text x="1232" y="692" font-size="11.5" fill="#5F5850"><tspan font-weight="700" fill="#1A1714">MockAdapter</tspan> (default): XML + DANFE</text>
+  <text x="1232" y="709" font-size="11.5" fill="#5F5850">fiéis, com tarja SEM VALOR FISCAL.</text>
+  <text x="1232" y="729" font-size="11.5" fill="#8A837B">HomologacaoAdapter: opcional, S-09 —</text>
+  <text x="1232" y="743" font-size="11.5" fill="#8A837B">nunca no caminho do quickstart.</text>
+
+  <path d="M1140 770 C 1180 770 1180 585 1206 585" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M1140 792 C 1194 792 1194 700 1206 700" fill="none" stroke="#8A837B" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- ===== LANGFUSE ===== -->
+  <g stroke="#B9B2A8" stroke-width="1.4" stroke-dasharray="4 5">
+    <path d="M600 832 V852"/><path d="M800 832 V852"/><path d="M1000 832 V852"/>
+  </g>
+  <rect x="76" y="856" width="1494" height="82" rx="12" fill="#F4F5FB" stroke="#D3D6E8"/>
+  <use href="#ic-langfuse" x="96" y="874" width="30" height="30"/>
+  <text x="136" y="888" font-size="14" font-weight="700" fill="#1E2A5A">Langfuse Cloud — observabilidade desde o commit 1, não como fase de deploy</text>
+  <text x="136" y="910" font-size="12" fill="#48507A">Trace por sessão: roteamento entre subagents · cada tool chamada · custo · latência · budget cap por sessão e timeout por tool.</text>
+  <text x="136" y="929" font-size="12" font-weight="700" fill="#A03A3A">PII mascarada na origem: CPF, e-mail e nome nunca aparecem legíveis em trace ou log, em nenhum ambiente (ADR-007 · R5).</text>
+
+  <!-- ===== LEGENDA ===== -->
+  <g font-size="12" fill="#5F5850">
+    <rect x="44" y="990" width="14" height="14" rx="3" fill="#1F6F5C"/>
+    <text x="66" y="1002">read-only por construção — teste unitário falha se a fronteira vazar</text>
+    <rect x="530" y="990" width="14" height="14" rx="3" fill="#B4711F"/>
+    <text x="552" y="1002">escrita, com permissão declarada por subagent</text>
+    <rect x="900" y="990" width="14" height="14" rx="3" fill="#A03A3A"/>
+    <text x="922" y="1002">aprovação humana obrigatória · registrada</text>
+    <rect x="1250" y="990" width="14" height="14" rx="3" fill="none" stroke="#8A837B" stroke-dasharray="4 3"/>
+    <text x="1272" y="1002">adapter mock por padrão · ambiente de teste</text>
+  </g>
+  <text x="44" y="1036" font-size="12.5" fill="#8A837B">Cada escolha desta página é consequência de uma decisão registrada em <tspan font-family="ui-monospace, Consolas, Menlo, monospace" fill="#5F5850">docs/adr/</tspan> — nenhuma foi feita antes do discovery.</text>
+</svg>

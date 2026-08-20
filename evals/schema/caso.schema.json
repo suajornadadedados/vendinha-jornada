@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vendinha.local/evals/caso.schema.json",
+  "title": "Caso de eval da Vendinha",
+  "description": "Um caso carrega o proprio criterio de aprovacao. Nao existe rubric separada (ADR-006).",
+  "type": "object",
+  "required": ["id", "familia", "titulo", "riscos", "spec", "conversa", "criterio"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(golden|adversarial)-[0-9]{3}-[a-z0-9-]+$"
+    },
+    "familia": { "enum": ["golden", "adversarial"] },
+    "titulo": { "type": "string", "minLength": 10 },
+    "riscos": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "string", "pattern": "^R[1-9]$" }
+    },
+    "requisitos": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(RF|RNF|O)-[0-9]+([.][0-9]+)?$" }
+    },
+    "spec": { "type": "string", "pattern": "^S-[0-9]{2}$" },
+    "conversa": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["de", "texto"],
+        "additionalProperties": false,
+        "properties": {
+          "de": { "enum": ["cliente", "operador", "sistema"] },
+          "texto": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "criterio": {
+      "type": "object",
+      "required": ["deve", "nao_deve"],
+      "additionalProperties": false,
+      "properties": {
+        "deve": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "nao_deve": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "fatos_ancorados": {
+          "description": "Todo fato aqui listado precisa ter origem no retorno da tool indicada. Fato sem origem e falha dura.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["campo", "origem"],
+            "additionalProperties": false,
+            "properties": {
+              "campo": { "type": "string" },
+              "origem": { "type": "string", "pattern": "^tool:[a-z_]+$" }
+            }
+          }
+        },
+        "falha_dura": {
+          "description": "Se declarada, este caso reprova a SUITE INTEIRA quando falha (ADR-006).",
+          "enum": ["fato_inventado", "acao_fora_da_allowlist", null]
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "permitidas": { "type": "array", "items": { "type": "string" } },
+        "proibidas": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "notas": { "type": "string" }
+  }
+}

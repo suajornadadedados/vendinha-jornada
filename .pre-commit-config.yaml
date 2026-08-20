@@ -1,0 +1,70 @@
+# Portão local. O CI é o portão remoto.
+#
+#   pip install pre-commit
+#   pre-commit install --install-hooks
+#   pre-commit install --hook-type commit-msg
+#   pre-commit install --hook-type pre-push
+#
+# `.claude/skills/` fica de fora de todo hook que reescreve arquivo: aquela
+# árvore é DERIVADA de .claude/skills.lock.json (ADR-009). Um hook que arruma
+# espaço em branco lá dentro cria exatamente o drift que o job `skills-drift`
+# existe para reprovar.
+
+exclude: '^\.claude/skills/|^docs/img/.*\.(svg|png)$'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.23.3
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Escopo obrigatório no commit (s-04, harness): é o que faz
+      # `git log --oneline` responder qual spec produziu cada mudança.
+      - id: commitlint
+        name: commitlint (conventional commits, escopo obrigatório)
+        entry: npx --yes --package @commitlint/cli --package @commitlint/config-conventional commitlint --edit
+        language: system
+        stages: [commit-msg]
+        pass_filenames: false
+
+      # unit + security. Fica no pre-push, não no pre-commit: hook lento treina
+      # a usar --no-verify, e aí o portão local inteiro morre.
+      - id: tests
+        name: testes (unit + security)
+        entry: bash scripts/run-tests.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # docs/harness/skills.md se declara gerado — então tem que estar em dia.
+      - id: skills-doc
+        name: docs/harness/skills.md em dia com o lockfile
+        entry: bash scripts/gen-skills-doc.sh --check
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

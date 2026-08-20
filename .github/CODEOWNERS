@@ -1,0 +1,28 @@
+# CODEOWNERS — os arquivos que definem o gate não podem mudar em silêncio.
+#
+# ATENÇÃO: troque @SEU-USUARIO-GITHUB pelo handle real antes do primeiro push.
+# Handle inexistente faz o GitHub ignorar a regra sem avisar no PR.
+#
+# Por que isso existe: sem CODEOWNERS, um PR com eval vermelho fica verde
+# editando o caso que reprovou. O gate só é real se os arquivos que o definem
+# forem protegidos. (ADR-006)
+
+# A régua de qualidade do agente
+/evals/                     @SEU-USUARIO-GITHUB
+
+# Decisões aceitas — imutáveis; mudança gera ADR novo
+/docs/adr/                  @SEU-USUARIO-GITHUB
+
+# O que o produto é, e o que se testa nele
+/docs/PRD.md                @SEU-USUARIO-GITHUB
+/docs/riscos.md             @SEU-USUARIO-GITHUB
+/docs/testes.md             @SEU-USUARIO-GITHUB
+
+# O harness: contexto, rituais, skills e o lockfile que as governa
+/CLAUDE.md                  @SEU-USUARIO-GITHUB
+/.claude/                   @SEU-USUARIO-GITHUB
+
+# Os portões propriamente ditos
+/.github/                   @SEU-USUARIO-GITHUB
+/.pre-commit-config.yaml    @SEU-USUARIO-GITHUB
+/scripts/                   @SEU-USUARIO-GITHUB

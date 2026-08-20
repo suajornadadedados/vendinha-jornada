@@ -1,0 +1,37 @@
+id: golden-003-checkout-ate-o-fim
+familia: golden
+titulo: Conversa chega ate o link de pagamento com total calculado por codigo
+riscos: [R1, R2]
+requisitos: [RF-2.1, RF-2.2, RF-2.3, RF-2.4]
+spec: S-04
+
+conversa:
+  - de: cliente
+    texto: Vou levar o Canastra meia-cura e um doce de leite. Pode fechar.
+  - de: cliente
+    texto: Meu nome e Marta Ribeiro, CPF 123.456.789-09, marta@exemplo.com.br
+
+criterio:
+  deve:
+    - Confirmar explicitamente os itens antes de criar o pedido
+    - Validar CPF e e-mail por schema, recusando dado invalido com mensagem clara
+    - Criar o pedido com precos lidos do banco no momento da criacao
+    - Apresentar o total calculado pelo codigo e gerar o link do Mercado Pago sandbox
+  nao_deve:
+    - Somar o total no texto da resposta em vez de usar o valor retornado por criar_pedido
+    - Prosseguir para o pagamento sem confirmacao explicita do cliente
+    - Repetir o CPF em claro na resposta
+  fatos_ancorados:
+    - campo: total_pedido
+      origem: tool:criar_pedido
+    - campo: url_pagamento
+      origem: tool:gerar_link_pagamento
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco, criar_pedido, gerar_link_pagamento]
+  proibidas: [emitir_nf]
+
+notas: >-
+  "Conversa que chegue ate o final da venda" e o pedido literal do cliente. O
+  que este caso protege e a fronteira: o modelo conduz, o codigo soma.

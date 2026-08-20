@@ -1,0 +1,182 @@
+{
+  "$comment": "Fonte da verdade das skills vendorizadas (ADR-009). .claude/skills/ e DERIVADO deste arquivo: nao editar skills a mao. Materializar com: bash scripts/vendor-skills.sh. Toda skill precisa do campo 'porque' ligando-a a uma spec ou requisito.",
+  "sources": {
+    "mattpocock/skills": "8b36d4fb2635b3c21998dcd8144439c9e5ba7302",
+    "langchain-ai/langchain-skills": "f3ea282efb82c84f1093ae58006841e66ca28a94",
+    "langfuse/skills": "9cee84e588ec17ec65142aea1020da191c0ebb30",
+    "shadcn-ui/ui": "b1c580c637f4666890b25c69cdc315c93a892c5d"
+  },
+  "own": [
+    "vendinha-harness"
+  ],
+  "skills": [
+    {
+      "name": "tdd",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/tdd",
+      "porque": "S-02..S-06 — red-green-refactor nos seams; teste antes do codigo de agente"
+    },
+    {
+      "name": "code-review",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/code-review",
+      "porque": "complementa /verificar-spec no eixo padroes (o ritual cobre conformidade com a spec)"
+    },
+    {
+      "name": "codebase-design",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/codebase-design",
+      "porque": "S-04 — modulos profundos: a fronteira de permissao precisa de interface estreita"
+    },
+    {
+      "name": "diagnosing-bugs",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/diagnosing-bugs",
+      "porque": "loop disciplinado em bug nao-deterministico de agente (o pior tipo)"
+    },
+    {
+      "name": "grill-with-docs",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/grill-with-docs",
+      "porque": "S-01 — entrevista que endurece a spec ANTES de virar codigo"
+    },
+    {
+      "name": "grill-me",
+      "repo": "mattpocock/skills",
+      "path": "skills/productivity/grill-me",
+      "porque": "questionar plano de spec antes de aprovar"
+    },
+    {
+      "name": "grilling",
+      "repo": "mattpocock/skills",
+      "path": "skills/productivity/grilling",
+      "porque": "primitivo de entrevista usado por grill-me e grill-with-docs"
+    },
+    {
+      "name": "domain-modeling",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/domain-modeling",
+      "porque": "vocabulario unico: pedido, nota, aprovacao, sessao — evita sinonimos no codigo"
+    },
+    {
+      "name": "writing-for-agents",
+      "repo": "mattpocock/skills",
+      "path": "skills/productivity/writing-for-agents",
+      "porque": "meta-skill: escrever specs e ADRs que agentes leem sem ambiguidade"
+    },
+    {
+      "name": "research",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/research",
+      "porque": "Q1 do PRD — spike do emissor de NF contra fontes primarias"
+    },
+    {
+      "name": "resolving-merge-conflicts",
+      "repo": "mattpocock/skills",
+      "path": "skills/engineering/resolving-merge-conflicts",
+      "porque": "resolucao por intencao; specs em paralelo tocam docs comuns"
+    },
+    {
+      "name": "handoff",
+      "repo": "mattpocock/skills",
+      "path": "skills/productivity/handoff",
+      "porque": "sessao por spec: compactar contexto ao trocar de sessao sem perder decisoes"
+    },
+
+    {
+      "name": "ecosystem-primer",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/ecosystem-primer",
+      "porque": "LangChain vs LangGraph vs Deep Agents — escolha registrada em ADR"
+    },
+    {
+      "name": "langgraph-fundamentals",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langgraph-fundamentals",
+      "porque": "S-02 — StateGraph, nodes, edges, reducers"
+    },
+    {
+      "name": "langgraph-persistence",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langgraph-persistence",
+      "porque": "RNF-6 e R9 — checkpointer Postgres, pointer-not-payload, retomada de sessao"
+    },
+    {
+      "name": "langgraph-human-in-the-loop",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langgraph-human-in-the-loop",
+      "porque": "S-05 e R3 — interrupt/resume; nucleo do requisito de aprovacao humana no irreversivel"
+    },
+    {
+      "name": "langchain-fundamentals",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langchain-fundamentals",
+      "porque": "tools tipadas e structured output nas fronteiras"
+    },
+    {
+      "name": "langchain-middleware",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langchain-middleware",
+      "porque": "S-04 — aprovacao e allowlist como middleware, nao como prompt"
+    },
+    {
+      "name": "langchain-rag",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langchain-rag",
+      "porque": "S-03 e R1 — grounding sobre Qdrant; fato inventado reprova a suite de evals"
+    },
+    {
+      "name": "langchain-dependencies",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/langchain-dependencies",
+      "porque": "matriz de versoes; evita import inventado pelo modelo"
+    },
+    {
+      "name": "eval-engineering",
+      "repo": "langchain-ai/langchain-skills",
+      "path": "config/skills/eval-engineering",
+      "porque": "S-06 e R7 — construir e auditar evals; criterio de aprovacao declarado por caso"
+    },
+
+    {
+      "name": "langfuse",
+      "repo": "langfuse/skills",
+      "path": "skills/langfuse",
+      "porque": "S-02, R5, RF-5 — traces, datasets, scores e mascaramento de PII via API"
+    },
+
+    {
+      "name": "shadcn",
+      "repo": "shadcn-ui/ui",
+      "path": "skills/shadcn",
+      "porque": "S-07 — componentes acessiveis via CLI oficial em vez de JSX inventado"
+    }
+  ],
+  "rejeitadas": [
+    {
+      "name": "ask-matt, triage, to-tickets, wayfinder, implement, setup-matt-pocock-skills",
+      "repo": "mattpocock/skills",
+      "porque_nao": "pressupoem issue tracker e fluxo de tickets proprio, que compete com o SDD do ADR-005 (spec -> branch -> PR). Duas fontes de verdade sobre 'o que fazer agora' levam o agente a escolher a errada."
+    },
+    {
+      "name": "*-quickstart (6 skills)",
+      "repo": "langchain-ai/langchain-skills",
+      "porque_nao": "tutoriais hello-world; o repositorio ja tem specs como ponto de partida"
+    },
+    {
+      "name": "deep-agents-*, managed-deep-agents, swarm, langgraph-cli, langsmith-online-eval-engineering",
+      "repo": "langchain-ai/langchain-skills",
+      "porque_nao": "fora da stack decidida (LangGraph auto-hospedado + Langfuse). LangSmith conflita com ADR-007."
+    },
+    {
+      "name": "ui-ux-pro-max, frontend-slides",
+      "repo": "plugins locais",
+      "porque_nao": "contem CLI e assets binarios (16 MB). ADR-009: vendoriza-se markdown, nao se vendoriza software. Permanecem como plugin e sao roteadas pela skill vendinha-harness."
+    },
+    {
+      "name": "migrate-radix-to-base",
+      "repo": "shadcn-ui/ui",
+      "porque_nao": "migracao de codebase existente; o frontend da S-07 nasce do zero"
+    }
+  ]
+}

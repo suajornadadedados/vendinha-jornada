@@ -1,0 +1,28 @@
+# Configuração mínima da raiz: só o que a suíte de rastreabilidade da discovery
+# precisa para rodar. O projeto de produto vive em backend/ e traz o próprio
+# pyproject (entregável da S-00) — este arquivo não é o dele.
+#
+# Lint e format são configurados em ruff.toml, na raiz, e valem para a árvore
+# inteira.
+
+[project]
+name = "vendinha-discovery-checks"
+version = "0.0.0"
+description = "Testes de rastreabilidade dos documentos normativos da Vendinha"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+    "jsonschema>=4.21",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# --import-mode=importlib: sem ele, dois arquivos de mesmo nome em pastas
+# diferentes (tests/unit/test_pii.py e tests/security/test_pii.py) colidem na
+# importação e a coleta falha inteira.
+# --strict-markers: marker não registrado vira erro, não typo silencioso.
+addopts = "-q --strict-markers --import-mode=importlib"

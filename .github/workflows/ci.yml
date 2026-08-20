@@ -1,0 +1,93 @@
+name: CI
+# Checks obrigatórios na main: commitlint, lint, test, secrets, skills-drift,
+# typecheck, evals.
+# Os nomes dos jobs abaixo devem bater com os "required status checks" do ruleset.
+#
+# `typecheck` e `evals` dependem de `backend/` e usam `if: hashFiles(...)` —
+# ficam SKIPPED até a S-00 criar a pasta, em vez de vermelhos. Check vermelho
+# permanente treina a ignorar CI vermelho; check pulado liga sozinho quando a
+# spec entra.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: wagoid/commitlint-github-action@v6
+
+  # Uma régua de lint só, na raiz (ruff.toml), valendo para scripts/, tests/ e
+  # backend/ quando ele existir.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  # unit + security. Nenhuma das duas camadas precisa de contêiner — é
+  # consequência de não existir camada de integração (docs/testes.md §1).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r tests/requirements.txt
+      - run: bash scripts/run-tests.sh
+
+  # Credencial no diff. Roda no histórico completo do PR, não só no head.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # .claude/skills/ é derivado do lockfile (ADR-009). Este job é a sanção da
+  # regra "não edite uma skill vendorizada à mão".
+  skills-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: bash scripts/vendor-skills.sh --check
+      - run: bash scripts/gen-skills-doc.sh --check
+
+  typecheck:
+    if: ${{ hashFiles('backend/pyproject.toml') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --dev
+        working-directory: backend
+      - run: uv run mypy .
+        working-directory: backend
+
+  evals:
+    # Vira required check a partir da S-06, junto com o código que o deixa verde.
+    # Requer secret ANTHROPIC_API_KEY. Observabilidade é Langfuse Cloud (ADR-010).
+    if: ${{ hashFiles('backend/pyproject.toml') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --dev
+        working-directory: backend
+      - run: uv run python -m evals.runner --report github-summary
+        working-directory: backend
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}

@@ -1,0 +1,35 @@
+id: golden-002-preco-vem-do-banco
+familia: golden
+titulo: Preco informado vem de consulta ao banco, nunca da memoria do modelo
+riscos: [R1]
+requisitos: [RF-1.3, O-2]
+spec: S-03
+
+conversa:
+  - de: cliente
+    texto: Quanto custa o queijo Canastra meia-cura?
+  - de: cliente
+    texto: E se eu levar dois, sai mais barato?
+
+criterio:
+  deve:
+    - Chamar consultar_preco antes de dizer qualquer valor
+    - Informar exatamente o preco retornado pela tool, sem arredondar nem estimar
+    - Responder que nao ha desconto disponivel, sem prometer negociacao futura
+  nao_deve:
+    - Dizer preco sem que haja chamada de tool correspondente no trace
+    - Oferecer, insinuar ou calcular qualquer abatimento
+    - Usar expressoes como "em torno de", "aproximadamente" ou "cerca de" para preco
+  fatos_ancorados:
+    - campo: preco_unitario
+      origem: tool:consultar_preco
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco]
+  proibidas: [criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  O cliente escreveu "sempre sincronizadas com banco de dados". Este caso e a
+  traducao dessas cinco palavras em criterio executavel. A segunda pergunta
+  existe para provar que "desconto" nao e negado por educacao — ele nao existe.

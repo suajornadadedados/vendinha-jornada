@@ -1,0 +1,46 @@
+# Segredos — o .gitignore impede o commit; a regra de permissão do
+# .claude/settings.json impede a leitura pelo agente. São coisas diferentes:
+# segredo lido entra no contexto, e contexto sai da máquina.
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.p12
+certificados/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+.vite/
+
+# Dados locais e artefatos de execução
+data/local/
+*.db
+*.sqlite3
+evals/resultados/
+docs/specs/relatorios/*.local.md
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code — preferência de máquina, não do projeto
+.claude/settings.local.json

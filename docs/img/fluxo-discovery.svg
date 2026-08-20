@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1060" width="1600" height="1060" font-family="Inter, 'Segoe UI', Roboto, system-ui, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9A938A"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="1060" fill="#FAF8F5"/>
+
+  <text x="60" y="54" font-size="30" font-weight="700" fill="#1A1714">Como a Vendinha nasceu — antes da primeira linha de código</text>
+  <text x="60" y="84" font-size="15.5" fill="#6B645C">Cada documento consome o anterior. A ordem não é burocracia: é o argumento.</text>
+  <rect x="60" y="98" width="120" height="3" rx="1.5" fill="#1F6F5C"/>
+
+  <!-- ============ FASE 0 ============ -->
+  <text x="60" y="140" font-size="12" font-weight="700" letter-spacing="1.6" fill="#8A6F4E">FASE 0 · O PEDIDO</text>
+  <g transform="translate(60,152)">
+    <rect width="1480" height="82" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+    <rect width="4" height="82" rx="2" fill="#8A6F4E"/>
+    <text x="22" y="34" font-size="16" font-weight="700" fill="#1A1714">O enunciado do desafio — um cliente falando</text>
+    <text x="22" y="60" font-size="13" fill="#5F5850">8 linhas do que ele quer no produto  ·  6 medos  ·  6 perguntas em &quot;Antes de Codar&quot;  —  nenhuma stack, nenhuma arquitetura, nenhum requisito de engenharia.</text>
+  </g>
+  <path d="M800 240 V262" stroke="#9A938A" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- ============ FASE 1 ============ -->
+  <text x="60" y="292" font-size="12" font-weight="700" letter-spacing="1.6" fill="#1F6F5C">FASE 1 · DISCOVERY — os documentos normativos, nesta ordem</text>
+  <g font-size="12.5" fill="#5F5850">
+
+    <g transform="translate(60,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">requisitos.md</text>
+      <text x="20" y="72">O que o cliente quer, com a</text>
+      <text x="20" y="90">nossa tradução ao lado — e o</text>
+      <text x="20" y="108">que recusamos em cada linha.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">traduz o pedido em requisito</text>
+    </g>
+
+    <g transform="translate(310,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">jornada.md</text>
+      <text x="20" y="72">Cada etapa classificada em</text>
+      <text x="20" y="90">quem resolve: LLM · LLM</text>
+      <text x="20" y="108">ancorado · código puro.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">onde a IA gera valor vs. risco</text>
+    </g>
+
+    <g transform="translate(560,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">riscos.md</text>
+      <text x="20" y="72">R1-R9: risco → mitigação →</text>
+      <text x="20" y="90">spec → verificação. Sem a 4ª</text>
+      <text x="20" y="108">coluna é desejo, não requisito.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">onde preciso de garantia</text>
+    </g>
+
+    <g transform="translate(810,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">PRD.md</text>
+      <text x="20" y="72">Escopo, personas, métricas</text>
+      <text x="20" y="90">com número e fora de escopo</text>
+      <text x="20" y="108">com motivo declarado.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">o que fica de fora, e por quê</text>
+    </g>
+
+    <g transform="translate(1060,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">decisoes.md + adr/</text>
+      <text x="20" y="72">D1-D13 → ADR-001..010.</text>
+      <text x="20" y="90">Todo ADR exige 2 alternativas</text>
+      <text x="20" y="108">e a consequência negativa.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">por que, e o que recusei</text>
+    </g>
+
+    <g transform="translate(1310,306)">
+      <rect width="230" height="164" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="164" rx="2" fill="#1F6F5C"/>
+      <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
+      <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+      <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">specs/ + templates</text>
+      <text x="20" y="72">S-00 a S-09. Cada spec fecha</text>
+      <text x="20" y="90">um risco antes do próximo</text>
+      <text x="20" y="108">aparecer.</text>
+      <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
+      <text x="20" y="147" font-size="11.5" font-weight="600" fill="#1F6F5C">o que vira trabalho</text>
+    </g>
+  </g>
+
+  <g stroke="#C9C1B6" stroke-width="1.4" marker-end="url(#ar)">
+    <path d="M292 388 H306"/><path d="M542 388 H556"/><path d="M792 388 H806"/>
+    <path d="M1042 388 H1056"/><path d="M1292 388 H1306"/>
+  </g>
+  <path d="M800 476 V498" stroke="#9A938A" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- ============ FASE 2 ============ -->
+  <text x="60" y="528" font-size="12" font-weight="700" letter-spacing="1.6" fill="#2A5C8A">FASE 2 · HARNESS — os documentos corretos não garantem que o agente vá lê-los</text>
+  <g font-size="12.5" fill="#5F5850">
+    <g transform="translate(60,542)">
+      <rect width="480" height="112" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="112" rx="2" fill="#2A5C8A"/>
+      <text x="22" y="34" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">CLAUDE.md</text>
+      <text x="22" y="62">Sempre/nunca, ~40 linhas: regra de ouro, ponteiros para os</text>
+      <text x="22" y="80">normativos e guardrails. Carregado inteiro em toda sessão.</text>
+      <text x="22" y="100" font-size="11.5" font-weight="600" fill="#2A5C8A">resolve P1 — contexto volátil</text>
+    </g>
+    <g transform="translate(560,542)">
+      <rect width="480" height="112" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="112" rx="2" fill="#2A5C8A"/>
+      <text x="22" y="34" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">.claude/commands/</text>
+      <text x="22" y="62">Quatro rituais que eu disparo: /escrever-spec · /entregar-spec ·</text>
+      <text x="22" y="80">/verificar-spec (em sessão nova) · /registrar-adr.</text>
+      <text x="22" y="100" font-size="11.5" font-weight="600" fill="#2A5C8A">autor ≠ revisor, virado em ferramenta</text>
+    </g>
+    <g transform="translate(1060,542)">
+      <rect width="480" height="112" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="112" rx="2" fill="#2A5C8A"/>
+      <text x="22" y="34" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">.claude/skills/</text>
+      <text x="22" y="62">23 skills vendorizadas com SHA fixado, mais a skill própria que</text>
+      <text x="22" y="80">declara a precedência: normativo do projeto &gt; skill de terceiro.</text>
+      <text x="22" y="100" font-size="11.5" font-weight="600" fill="#2A5C8A">quem clona recebe o harness junto</text>
+    </g>
+  </g>
+  <path d="M800 660 V682" stroke="#9A938A" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- ============ FASE 3 ============ -->
+  <text x="60" y="712" font-size="12" font-weight="700" letter-spacing="1.6" fill="#A03A3A">FASE 3 · PORTÕES — o CLAUDE.md pede; o CI impõe</text>
+  <g font-size="12" fill="#5F5850">
+    <g transform="translate(60,726)">
+      <rect width="280" height="104" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="104" rx="2" fill="#A03A3A"/>
+      <text x="20" y="32" font-size="12.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">.github/workflows/ci.yml</text>
+      <text x="20" y="58">commitlint · lint · typecheck ·</text>
+      <text x="20" y="76">test · evals · secrets · drift</text>
+      <text x="20" y="94" font-size="11" font-weight="600" fill="#A03A3A">validações que bloqueiam</text>
+    </g>
+    <g transform="translate(360,726)">
+      <rect width="280" height="104" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="104" rx="2" fill="#A03A3A"/>
+      <text x="20" y="32" font-size="12.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">PULL_REQUEST_TEMPLATE</text>
+      <text x="20" y="58">Evidência obrigatória:</text>
+      <text x="20" y="76">screenshot + link do trace.</text>
+      <text x="20" y="94" font-size="11" font-weight="600" fill="#A03A3A">PR que conta uma história</text>
+    </g>
+    <g transform="translate(660,726)">
+      <rect width="280" height="104" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="104" rx="2" fill="#A03A3A"/>
+      <text x="20" y="32" font-size="12.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">CODEOWNERS</text>
+      <text x="20" y="58">Protege evals/, docs/adr/,</text>
+      <text x="20" y="76">PRD.md e .claude/.</text>
+      <text x="20" y="94" font-size="11" font-weight="600" fill="#A03A3A">o gate não se edita sozinho</text>
+    </g>
+    <g transform="translate(960,726)">
+      <rect width="280" height="104" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="104" rx="2" fill="#A03A3A"/>
+      <text x="20" y="32" font-size="12.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">commitlint.config.js</text>
+      <text x="20" y="58">Escopo obrigatório: o log diz</text>
+      <text x="20" y="76">qual spec fez cada mudança.</text>
+      <text x="20" y="94" font-size="11" font-weight="600" fill="#A03A3A">histórico navegável</text>
+    </g>
+    <g transform="translate(1260,726)">
+      <rect width="280" height="104" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+      <rect width="4" height="104" rx="2" fill="#A03A3A"/>
+      <text x="20" y="32" font-size="12.5" font-weight="700" fill="#1A1714">main protegida</text>
+      <text x="20" y="58">PR obrigatório · checks</text>
+      <text x="20" y="76">obrigatórios · squash-only.</text>
+      <text x="20" y="94" font-size="11" font-weight="600" fill="#A03A3A">resolve P2 — sem portão</text>
+    </g>
+  </g>
+
+  <!-- ============ LINHA DO CÓDIGO ============ -->
+  <g transform="translate(0,872)">
+    <path d="M60 0 H1540" stroke="#A03A3A" stroke-width="2" stroke-dasharray="10 7"/>
+    <rect x="470" y="-15" width="660" height="30" rx="15" fill="#FAF8F5"/>
+    <text x="800" y="5" font-size="13.5" font-weight="700" fill="#A03A3A" text-anchor="middle">até aqui: ZERO linha de código de produto — só documento, harness e portão</text>
+  </g>
+
+  <!-- ============ FASE 4 ============ -->
+  <text x="60" y="922" font-size="12" font-weight="700" letter-spacing="1.6" fill="#6B4C9A">FASE 4 · EXECUÇÃO — agora sim, código</text>
+  <g transform="translate(60,936)">
+    <rect width="1480" height="90" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
+    <rect width="4" height="90" rx="2" fill="#6B4C9A"/>
+    <text x="22" y="32" font-size="13" font-weight="700" fill="#1A1714">S-00 fundação → S-01 discovery como código → S-02 agente observável → S-03 recomendação ancorada → S-04 pagamento → S-05 HITL/NF → S-06 evals como gate → S-07 frontend → S-08 produção → S-09 homologação</text>
+    <text x="22" y="60" font-size="12.5" fill="#5F5850">uma spec = uma branch = uma sessão  ·  cada task = um commit  ·  PR com evidência  ·  /verificar-spec em sessão NOVA  ·  merge por squash</text>
+    <text x="22" y="80" font-size="11.5" font-weight="600" fill="#6B4C9A">resolve P3 — o processo vira histórico navegável, não resultado sem raciocínio</text>
+  </g>
+</svg>
