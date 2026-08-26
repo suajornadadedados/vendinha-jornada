@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals hooks
+.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -43,9 +43,12 @@ typecheck:  ## mypy strict no backend E na suite de testes
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
 
+evals-groundedness:  ## Roda os 6 casos da S-03 contra o agente (precisa de `make up`, `db-setup` e `seed`)
+	cd backend && uv run python -m vendinha.evals.runner --spec S-03
+
 evals:  ## Executa a suíte de evals contra o agente (chega na S-06)
-	@echo "O runner de evals é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
-	@echo "Por enquanto use: make evals-check — valida os casos contra o schema."
+	@echo "A suíte completa é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
+	@echo "Por enquanto: make evals-check (schema, sem agente) e make evals-groundedness (S-03)."
 	@exit 1
 
 hooks:  ## Instala os portões locais (pre-commit, commit-msg, pre-push)

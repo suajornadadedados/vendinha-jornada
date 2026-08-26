@@ -327,6 +327,27 @@ class PostgresCatalogo:
             linha = await (await conn.execute("SELECT count(*) FROM produto")).fetchone()
         return int(linha[0]) if linha else 0
 
+    async def todos(self) -> tuple[Produto, ...]:
+        """O catálogo inteiro, do banco.
+
+        **Não faz parte do protocolo `Catalogo`, e isso é a decisão.** Quem recebe
+        um `Catalogo` são as tools do subagent, e "me dê o catálogo inteiro" não é
+        uma pergunta que a recomendação precise fazer — é despejo de vitrine, que
+        é justamente o que o RF-1.2 existe para não ser. Quem chama isto é o eval,
+        que tem a classe concreta e precisa comparar o que o agente disse contra a
+        fonte da verdade.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            cursor = await conn.execute(
+                sql.SQL("SELECT {campos} FROM produto ORDER BY id").format(
+                    campos=sql.SQL(", ").join(sql.Identifier(coluna) for coluna in COLUNAS)
+                )
+            )
+            linhas = await cursor.fetchall()
+        return tuple(
+            Produto.model_validate(dict(zip(COLUNAS, linha, strict=True))) for linha in linhas
+        )
+
     async def substituir_tudo(self, produtos: Sequence[Produto]) -> int:
         """Grava o seed inteiro e apaga o que saiu dele. Uma transação, tudo ou nada.
 

@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # discovered here.
     embedding_model: str = "openai:text-embedding-3-small"
 
+    # The model that judges the eval cases, `provedor:modelo`. Unset means the
+    # judge is the agent's own model, and the runner says so out loud: a model
+    # grading its own output is a known bias, and a ruler must not hide it from
+    # whoever reads the report (S-03, ADR-006).
+    evals_judge_model: str | None = None
+
     # `LANGFUSE_HOST` is the v3 name and `LANGFUSE_BASE_URL` is the current one.
     # Both are accepted so an existing `.env` keeps working; see D-1 in the spec.
     langfuse_base_url: str | None = Field(
