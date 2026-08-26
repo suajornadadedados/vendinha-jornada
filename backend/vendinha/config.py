@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
 
+    # Token, not currency — D-2 in the spec. A price table per model would be
+    # several tables now that the provider is configurable, all rotting quietly.
+    session_budget_tokens: int = 60_000
+
+    # Ceiling for one external call: a tool when they arrive in S-03, and today
+    # the wait for the model's first token.
+    tool_timeout_seconds: float = 20.0
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

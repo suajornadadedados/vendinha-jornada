@@ -12,17 +12,22 @@ conversation, the shape is `pedido_id: str` plus a read through a tool.
 **The model is injected, never constructed here.** `BaseChatModel` is the port
 (ADR-012), which is what lets this module know nothing about Anthropic, OpenAI or
 whatever comes third — and what lets the tests stand a fake in the same place.
+
+**The budget is checked before the call, not after.** A guard that refuses once the
+model has already answered protects nothing: the money is spent (RNF-3, R6).
 """
 
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AnyMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
+
+from vendinha.budget import LIMIT_REACHED_MESSAGE, within_budget
 
 # Deliberately short, and deliberately fenced. This agent has no catalogue, no
 # price and no tool until S-03/S-04 — so the one thing it must not do is sound
@@ -43,6 +48,11 @@ e-mail, endereço, horário de funcionamento nem canal alternativo para oferecer
 Não mande o cliente procurar a loja por um caminho que você inventou.
 
 Nunca repita em texto o CPF, o e-mail ou o endereço que o cliente informar."""
+
+# Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
+# settings, and the endpoint passes it in. It exists so a test — or a script — can
+# build a graph without assembling configuration first.
+DEFAULT_BUDGET_TOKENS = 60_000
 
 
 class ConversationState(TypedDict):
@@ -68,10 +78,17 @@ def session_config(session_id: str) -> RunnableConfig:
 def build_graph(
     model: BaseChatModel,
     checkpointer: BaseCheckpointSaver[Any],
+    budget_tokens: int = DEFAULT_BUDGET_TOKENS,
 ) -> CompiledStateGraph[ConversationState, Any, Any, Any]:
     """Compile the conversation graph against an injected model and checkpointer."""
 
     async def conversa(state: ConversationState) -> dict[str, list[AnyMessage]]:
+        if not within_budget(state["messages"], budget_tokens):
+            # No call, no cost, and an answer the customer can act on. The message
+            # says nothing about tokens, caps or configuration — adversarial-006
+            # fails a run that leaks any of it.
+            return {"messages": [AIMessage(content=LIMIT_REACHED_MESSAGE)]}
+
         # The system prompt is prepended for the call and never stored in state:
         # storing it would append a copy on every turn, and the checkpoint would
         # grow a prompt per message.

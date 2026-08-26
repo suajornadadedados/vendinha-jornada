@@ -26,6 +26,7 @@ from langchain_core.messages import HumanMessage
 from langfuse import propagate_attributes
 from sse_starlette.sse import EventSourceResponse
 
+from vendinha.budget import run_with_timeout
 from vendinha.config import get_settings
 from vendinha.db import open_checkpointer
 from vendinha.graph import build_graph, session_config
@@ -41,6 +42,35 @@ from vendinha.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> AsyncIterator[Any]:
+    """Yield the stream, bounding only the wait for the FIRST chunk.
+
+    Bounding the whole response would be wrong: a long answer is not a stalled one,
+    and a ceiling on total duration would cut exactly the replies worth reading.
+    What a hung provider looks like is silence before the first token — which is
+    also the number the spec puts a target on (p95 primeiro token ≤ 3s).
+    """
+    iterator = chunks.__aiter__()
+    try:
+        first: Any = await run_with_timeout(
+            iterator.__anext__(), seconds, "primeiro token do modelo"
+        )
+    except StopAsyncIteration:
+        return
+    except BaseException:
+        # The generator holds an open HTTP response; leaving it to the garbage
+        # collector is how a timeout turns into a leaked connection. Not every
+        # async iterator is closeable, so ask before assuming.
+        close = getattr(chunks, "aclose", None)
+        if close is not None:
+            await close()
+        raise
+
+    yield first
+    async for chunk in iterator:
+        yield chunk
 
 
 def create_app(graph: Any | None = None) -> FastAPI:
@@ -67,7 +97,11 @@ def create_app(graph: Any | None = None) -> FastAPI:
 
         settings = get_settings()
         async with open_checkpointer(settings.database_url) as checkpointer:
-            app.state.graph = build_graph(resolve_model(settings.llm_model), checkpointer)
+            app.state.graph = build_graph(
+                resolve_model(settings.llm_model),
+                checkpointer,
+                budget_tokens=settings.session_budget_tokens,
+            )
             yield
 
     app = FastAPI(
@@ -86,6 +120,7 @@ def create_app(graph: Any | None = None) -> FastAPI:
         session_id = payload.session_id or uuid.uuid4().hex
         graph = request.app.state.graph
 
+        timeout = get_settings().tool_timeout_seconds
         handler = getattr(request.app.state, "langfuse", None)
         config = session_config(session_id)
         if handler is not None:
@@ -102,14 +137,15 @@ def create_app(graph: Any | None = None) -> FastAPI:
                 # string the customer's client holds — and the same one the
                 # checkpointer uses as thread_id.
                 with propagate_attributes(session_id=session_id, trace_name="conversa"):
-                    async for chunk, _ in graph.astream(
+                    token_stream = graph.astream(
                         {
                             "session_id": session_id,
                             "messages": [HumanMessage(content=payload.message)],
                         },
                         config=config,
                         stream_mode="messages",
-                    ):
+                    )
+                    async for chunk, _ in _bounded_first_token(token_stream, timeout):
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.
