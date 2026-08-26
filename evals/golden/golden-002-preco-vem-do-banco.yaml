@@ -4,6 +4,8 @@ titulo: Preco informado vem de consulta ao banco, nunca da memoria do modelo
 riscos: [R1]
 requisitos: [RF-1.3, O-2]
 spec: S-03
+produtos_validos:
+  - queijo-canastra-meia-cura
 
 conversa:
   - de: cliente

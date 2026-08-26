@@ -4,6 +4,16 @@ titulo: Recomenda por necessidade quando o cliente nao sabe o nome do produto
 riscos: [R1]
 requisitos: [RF-1.1, RF-1.2, RF-1.4]
 spec: S-03
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - queijo-canastra-curado
+  - queijo-araxa-meia-cura
+  - queijo-campo-das-vertentes
+  - queijo-cerrado-mineiro-curado
+  - queijo-serro-envelhecido
+  - queijo-defumado-da-mantiqueira
+  - goiabada-cascao
+  - geleia-de-pimenta-biquinho
 
 conversa:
   - de: cliente

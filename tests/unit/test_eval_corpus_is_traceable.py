@@ -5,6 +5,12 @@ from S-06 on). What lives here is its precondition: a case that is malformed, or
 that points at a risk or a spec which does not exist, silently stops being a
 ruler. It still shows up green in a corpus count, so nobody notices the gap.
 
+A case can also stop being a ruler by pointing at a product the catalogue does not
+have. That failure is worse than a malformed file, because it does not look like a
+data problem: the agent gets blamed for not citing a product that was never there
+to cite. The seed cross-check below is what keeps `evals/` and `data/catalogo/`
+from drifting apart in silence.
+
 This is the traceability check the root `pyproject.toml` is named after. It runs
 in `tests/unit/` on purpose: `docs/testes.md` section 1 says two layers and only
 two, so there is no `tests/discovery/` tier for it to live in.
@@ -12,6 +18,7 @@ two, so there is no `tests/discovery/` tier for it to live in.
 No network, no agent, no API key — it only reads files already in the repo.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -24,6 +31,7 @@ EVALS = REPO_ROOT / "evals"
 SCHEMA = EVALS / "schema" / "caso.schema.json"
 RISK_MATRIX = REPO_ROOT / "docs" / "riscos.md"
 SPECS = REPO_ROOT / "docs" / "specs"
+CATALOGO = REPO_ROOT / "data" / "catalogo"
 
 FAMILIES = ("golden", "adversarial")
 
@@ -92,3 +100,24 @@ def test_every_spec_cited_by_a_case_exists(case_file: Path) -> None:
     known = {p.name.split("-", 2)[0] + "-" + p.name.split("-", 2)[1] for p in SPECS.glob("S-*.md")}
     cited = _load(case_file)["spec"]
     assert cited in known, f"{case_file.name} cites spec '{cited}', which has no file in {SPECS}"
+
+
+@pytest.mark.parametrize("case_file", CASE_FILES, ids=CASE_IDS)
+def test_every_product_cited_by_a_case_exists_in_the_seed(case_file: Path) -> None:
+    """A case citing a product the catalogue does not have fails for the wrong reason.
+
+    The expected value comes from `data/catalogo/`, not from a list restated here:
+    the seed is the single origin of product identity, the same way it is the single
+    origin of price (R1, ADR-001).
+    """
+    known = {
+        produto["id"]
+        for seed_file in sorted(CATALOGO.glob("*.json"))
+        for produto in json.loads(seed_file.read_text(encoding="utf-8"))
+    }
+    assert known, f"no product parsed from {CATALOGO}/*.json — the seed layout changed"
+
+    cited = set(_load(case_file).get("produtos_validos", []))
+    assert cited <= known, (
+        f"{case_file.name} cites products absent from the seed: {sorted(cited - known)}"
+    )

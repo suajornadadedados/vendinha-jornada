@@ -4,6 +4,9 @@ titulo: Conversa chega ate o link de pagamento com total calculado por codigo
 riscos: [R1, R2]
 requisitos: [RF-2.1, RF-2.2, RF-2.3, RF-2.4]
 spec: S-04
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
 
 conversa:
   - de: cliente
