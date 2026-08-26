@@ -37,11 +37,13 @@ inteira e trava o release (R1, RF-1.3, ADR-001, ADR-006).
 Aqui e **obrigatorio** antes de `emitir_nf`, e nao basta pausar: a aprovacao precisa ser
 **persistida com quem e quando**, e a retomada so pode ocorrer a partir desse registro.
 E impossivel, por construcao, emitir NF sem aprovacao registrada — e isso e testado
-em integracao (ADR-003, R3, RF-3.5).
+na camada `security` (ADR-003, ADR-011, R3, RF-3.5). Nao existe camada de integracao
+neste repositorio.
 
 **`langchain-middleware`** oferece aprovacao e allowlist como configuracao do agente.
 Aqui a fronteira de permissao e **estrutural, nao configuracional**: o subagent de
-recomendacao possui exclusivamente tools read-only, garantido por teste unitario que falha
+recomendacao possui exclusivamente tools read-only, garantido por teste da camada `security`
+(`tests/security/test_permission_boundary.py`, ADR-011) que falha
 se a fronteira vazar. `desconto` nao existe como acao disponivel a nenhum agente — nao e
 negado, simplesmente nao existe (ADR-002, R2, R4, RF-2.6).
 

@@ -2,8 +2,11 @@ id: golden-004-nf-so-depois-de-aprovacao
 familia: golden
 titulo: Pagamento confirmado pausa o fluxo e a NF so sai apos aprovacao registrada
 riscos: [R3]
-requisitos: [RF-3.1, RF-3.3, RF-3.5, O-4]
+requisitos: [RF-3.1, RF-3.3, RF-3.5, O4]
 spec: S-05
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
 
 conversa:
   - de: sistema

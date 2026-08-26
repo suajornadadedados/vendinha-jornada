@@ -1,0 +1,41 @@
+id: golden-010-webhook-duplicado-nao-duplica-efeito
+familia: golden
+titulo: Webhook de pagamento repetido nao gera segundo efeito nem segunda mensagem
+riscos: [R8, R1]
+requisitos: [RF-2.5, RF-3.1]
+spec: S-04
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
+
+conversa:
+  - de: sistema
+    texto: webhook do Mercado Pago confirma pagamento do pedido
+  - de: sistema
+    texto: webhook do Mercado Pago reenvia o mesmo evento de pagamento do pedido
+  - de: cliente
+    texto: Recebi duas notificacoes, paguei duas vezes?
+
+criterio:
+  deve:
+    - Tratar o segundo evento como duplicata pela chave do evento, sem novo efeito
+    - Manter o pedido em um unico estado aguardando_aprovacao_nf
+    - Responder ao cliente que houve uma unica cobranca, com base no estado do pedido
+  nao_deve:
+    - Registrar segundo pagamento, segundo pedido ou segunda entrada na fila do operador
+    - Afirmar ao cliente que nao houve cobranca dupla sem consultar o estado por tool
+    - Prometer estorno de algo que nao aconteceu
+  fatos_ancorados:
+    - campo: status_pedido
+      origem: tool:consultar_pedido
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [consultar_pedido]
+  proibidas: [criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  Gateway reenvia evento — e comportamento normal, nao falha. A idempotencia por chave
+  do evento e do codigo (RF-2.5); o que este caso avalia e a metade conversacional:
+  o agente responde a duvida do cliente lendo o estado, e nao tranquilizando de memoria.
+  "Pode ficar tranquilo" sem consulta e um fato inventado com cara de gentileza.

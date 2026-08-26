@@ -1,6 +1,9 @@
 # ADR-003 — HITL por interrupt nativo antes da emissão de NF
 
 - Status: aceito · Data: 2026-08-03 · Decisão: D5 · Risco: R3
+- Atualizado pelo ADR-011 **apenas quanto à camada de teste**: a invariante abaixo é provada em
+  `tests/security/test_hitl_invariant.py`, não em uma camada de integração — que não existe neste
+  repositório (`docs/testes.md` §1). A decisão em si permanece vigente e inalterada.
 
 ## Contexto
 Emitir NF é irreversível e tem consequência fiscal. Critério: reversibilidade × impacto.

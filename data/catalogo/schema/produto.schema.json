@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vendinha.local/catalogo/produto.schema.json",
+  "title": "Produto do catalogo da Vendinha",
+  "description": "Normativo. O seed e a UNICA origem de preco, atributo e disponibilidade — nenhum destes campos pode ser afirmado de memoria pelo modelo (ADR-001, R1).",
+  "type": "object",
+  "required": [
+    "id",
+    "nome",
+    "tipo",
+    "regiao",
+    "produtor",
+    "descricao",
+    "intensidade",
+    "harmonizacao",
+    "ocasiao",
+    "peso",
+    "preco",
+    "disponivel",
+    "prazo_estimado"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "Slug estavel. E por ele que os casos de eval citam o produto em produtos_validos.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "nome": { "type": "string", "minLength": 3 },
+    "tipo": { "enum": ["queijo", "cafe", "doce", "cachaca", "licor"] },
+    "regiao": { "type": "string", "minLength": 3 },
+    "produtor": {
+      "description": "Produtor ficticio. Nenhum nome, CNPJ ou endereco real entra no repositorio.",
+      "type": "string",
+      "minLength": 3
+    },
+    "descricao": {
+      "description": "Texto que a busca semantica indexa na S-03. E contexto de conversa, nunca fonte de preco.",
+      "type": "string",
+      "minLength": 40
+    },
+    "intensidade": { "enum": ["suave", "media", "marcante"] },
+    "harmonizacao": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "ocasiao": {
+      "description": "O que o cliente descreve quando nao sabe o nome do produto: presente, receber visita, cafe da manha.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "peso": { "type": "string", "pattern": "^[0-9]+ (g|kg|ml|l)$" },
+    "preco": {
+      "description": "Decimal como string, sempre com duas casas. JSON nao tem tipo decimal e numero vira float no parse — exatamente a classe de erro que R1 existe para impedir (docs/testes.md secao 4).",
+      "type": "string",
+      "pattern": "^[0-9]{1,6}\\.[0-9]{2}$"
+    },
+    "disponivel": { "type": "boolean" },
+    "prazo_estimado": { "type": "string", "minLength": 5 },
+    "maturacao": { "type": "string", "minLength": 3 },
+    "torra": { "type": "string", "minLength": 3 },
+    "notas_sensoriais": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 3 }
+    },
+    "teor_alcoolico": { "type": "string", "pattern": "^[0-9]{1,2}% vol\\.$" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "tipo": { "const": "cafe" } }, "required": ["tipo"] },
+      "then": { "required": ["torra", "notas_sensoriais"] }
+    },
+    {
+      "if": { "properties": { "tipo": { "const": "queijo" } }, "required": ["tipo"] },
+      "then": { "required": ["maturacao"] }
+    },
+    {
+      "if": {
+        "properties": { "tipo": { "enum": ["cachaca", "licor"] } },
+        "required": ["tipo"]
+      },
+      "then": { "required": ["teor_alcoolico", "maturacao"] }
+    }
+  ]
+}

@@ -15,10 +15,14 @@ ao lado do exemplo que o motivou — quem abre um caso entende por que ele falha
 
 ## As duas famílias
 
-| Pasta | O que cobre | Risco |
+| Pasta | O que cobre | Riscos citados pelos casos |
 |---|---|---|
-| `golden/` | O atendimento fazendo o que deveria: recomendar por necessidade, ancorar preço no banco, fechar a venda, pausar antes da nota | R1, R2, R3 |
-| `adversarial/` | O atendimento sob ataque: injeção de instrução, engenharia social contra o HITL, extração de PII | R3, R4, R5 |
+| `golden/` | O atendimento fazendo o que deveria: qualificar antes de recomendar, ancorar preço no banco, dizer o que está indisponível, recusar dado inválido, fechar a venda, pausar antes da nota, aceitar a rejeição do operador, ler o pós-venda sem escrever | R1, R2, R3, R8 |
+| `adversarial/` | O atendimento sob ataque: injeção pelo chat e pelo próprio catálogo, engenharia social contra o HITL e contra o preço, extração de PII, abuso de custo | R1, R2, R3, R4, R5, R6 |
+
+**R7 e R9 não têm caso, e não é lacuna.** R7 é a suíte inteira rodando — nenhum caso individual o
+cobre, por definição. R9 é estado corrompido em conversa longa, que exige reiniciar o processo:
+fica com `tests/unit/test_session_resume.py` e com a verificação manual (`docs/testes.md` §1).
 
 ## Aprovado ou reprovado — sem média
 
@@ -38,7 +42,7 @@ outros verdes. É deliberado: essas duas falhas não são questão de grau.
 
 `schema/caso.schema.json` é normativo — `make evals-check` e o teste `tests/unit/test_eval_corpus_is_traceable.py` validam
 todo YAML contra ele. Campos obrigatórios: `id`, `familia`, `titulo`, `riscos`, `spec`, `conversa`,
-`criterio`.
+`criterio`. Um caso `golden` exige também `produtos_validos` — ver abaixo.
 
 O bloco `tools.proibidas` merece atenção: ele lista tools que **não devem ser chamadas**, e algumas
 delas — `aplicar_desconto`, por exemplo — **não existem no registro de nenhum subagent**. Não estão
@@ -47,8 +51,28 @@ negadas por instrução; não estão lá. O caso serve para provar que continuam
 ## Dependência do seed
 
 Os casos citam produtos pelo nome exato do catálogo (Canastra meia-cura, doce de leite). O seed de
-~50 produtos entregue pela S-01 **precisa conter esses itens**, senão o caso reprova por motivo
-errado — falta de dado, não falha do agente. Ao mexer no seed, rode a suíte.
+50 produtos em `data/catalogo/` **precisa conter esses itens**, senão o caso reprova por motivo
+errado — falta de dado, não falha do agente. E essa é a pior reprovação possível, porque parece
+problema do modelo.
+
+Desde a S-01 essa dependência deixou de ser um acordo em prosa e virou um campo:
+
+```yaml
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
+```
+
+São **ids** do seed, não nomes — o id é estável, o nome de vitrine não. `tests/unit/test_eval_corpus_is_traceable.py`
+cruza os dois diretórios e falha se um caso citar id que o catálogo não tem.
+
+O campo é obrigatório em `golden/` e opcional em `adversarial/`. Não é assimetria por descuido: um
+caso golden é sobre o atendimento recomendando produtos reais, e ele precisa dizer quais; um caso
+adversarial é sobre a superfície de ataque, e nem sempre passa por produto — `adversarial-003`
+(extração de PII) não cita nenhum, e forçá-lo a citar seria inventar dado para satisfazer schema.
+
+**Ao mexer no seed, rode `make test`.** É o cruzamento que impede os dois diretórios de divergirem
+em silêncio.
 
 ## Como rodar
 

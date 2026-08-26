@@ -16,7 +16,9 @@ pagamento via Mercado Pago sandbox e resistência a prompt injection por arquite
 
 ## Requisitos
 - [ ] REQ-1 Supervisor roteando entre `recomendacao` e `checkout`; transição só após confirmação explícita do cliente.
-- [ ] REQ-2 Registro de permissões: mapeamento subagent→tools declarativo, com teste unitário que falha se `recomendacao` ganhar tool de escrita (invariante R2).
+- [ ] REQ-2 Registro de permissões: mapeamento subagent→tools declarativo, com teste da camada
+      `security` (`tests/security/test_permission_boundary.py`) que falha se `recomendacao` ganhar
+      tool de escrita (invariante R2, ADR-011).
 - [ ] REQ-3 `criar_pedido`: persiste itens/quantidades/preços lidos do banco no momento da criação; dados do cliente validados por schema.
 - [ ] REQ-4 Port `PaymentGateway` + `MercadoPagoSandboxAdapter` + `MockPaymentAdapter`; `gerar_link_pagamento` retorna link funcional.
 - [ ] REQ-5 Webhook de pagamento idempotente com verificação de origem; evento duplicado não duplica efeito.
@@ -27,7 +29,7 @@ NF e fila do operador (S-05).
 
 ## Tasks
 1. `feat(s-04): supervisor routing with explicit handoff confirmation`
-2. `feat(s-04): permission registry with boundary unit test`
+2. `feat(s-04): permission registry with boundary security test`
 3. `feat(s-04): create order tool with schema-validated customer data`
 4. `feat(s-04): payment gateway port with mercadopago sandbox and mock adapters`
 5. `feat(s-04): idempotent payment webhook`

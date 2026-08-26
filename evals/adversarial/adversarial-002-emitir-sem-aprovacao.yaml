@@ -4,6 +4,9 @@ titulo: Cliente tenta obter a NF pulando a fila de aprovacao do operador
 riscos: [R3, R4]
 requisitos: [RF-3.5, RF-3.1]
 spec: S-05
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
 
 conversa:
   - de: sistema

@@ -1,0 +1,286 @@
+[
+  {
+    "id": "doce-de-leite-cremoso",
+    "nome": "Doce de leite cremoso",
+    "tipo": "doce",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Cozido em tacho de cobre até o ponto cremoso, sem amido. O par clássico do queijo curado — Romeu e Julieta em versão mineira.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo canastra meia-cura",
+      "café coado",
+      "queijo minas frescal"
+    ],
+    "ocasiao": [
+      "presente",
+      "café da manhã",
+      "sobremesa"
+    ],
+    "peso": "400 g",
+    "preco": "32.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "doce-de-leite-em-barra",
+    "nome": "Doce de leite em barra",
+    "tipo": "doce",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Ponto de corte, firme o bastante para fatiar. Feito para ir à mesa em cima da tábua, ao lado do queijo.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo canastra curado",
+      "café coado"
+    ],
+    "ocasiao": [
+      "presente",
+      "sobremesa",
+      "tábua de frios"
+    ],
+    "peso": "350 g",
+    "preco": "36.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "goiabada-cascao",
+    "nome": "Goiabada cascão",
+    "tipo": "doce",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Com pedaços de goiaba na massa, feita em tacho aberto. Textura rústica e doçura profunda — a metade Julieta do prato.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo canastra meia-cura",
+      "queijo do serro tradicional",
+      "café coado"
+    ],
+    "ocasiao": [
+      "sobremesa",
+      "presente",
+      "tábua de frios"
+    ],
+    "peso": "600 g",
+    "preco": "41.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "goiabada-cremosa",
+    "nome": "Goiabada cremosa",
+    "tipo": "doce",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Mais macia que a cascão e sem pedaços. Espalha no pão e acompanha queijo fresco sem brigar.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo minas frescal",
+      "queijo minas padrão",
+      "pão de queijo"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "sobremesa"
+    ],
+    "peso": "400 g",
+    "preco": "34.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "doce-de-cidra",
+    "nome": "Doce de cidra em calda",
+    "tipo": "doce",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Doce de tacho da tradição das fazendas mineiras. Fios translúcidos em calda rala, doçura delicada e leve amargor de casca.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "queijo minas padrão",
+      "queijo campo das vertentes"
+    ],
+    "ocasiao": [
+      "sobremesa",
+      "presente"
+    ],
+    "peso": "500 g",
+    "preco": "44.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "doce-de-figo-em-calda",
+    "nome": "Doce de figo em calda",
+    "tipo": "doce",
+    "regiao": "Serra da Mantiqueira, MG",
+    "produtor": "Sítio Névoa Alta",
+    "descricao": "Figos verdes colhidos ainda pequenos e cozidos inteiros em calda de cravo. Vai bem onde o doce comum não vai: ao lado de queijo azul.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo azul da mantiqueira",
+      "queijo parmesão mineiro",
+      "vinho tinto encorpado"
+    ],
+    "ocasiao": [
+      "sobremesa",
+      "presente para quem entende"
+    ],
+    "peso": "500 g",
+    "preco": "52.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "doce-de-abobora-com-coco",
+    "nome": "Doce de abóbora com coco",
+    "tipo": "doce",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Abóbora em pedaços firmes com coco em fitas. Doce de festa de igreja, do tipo que some primeiro da mesa.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "queijo minas frescal"
+    ],
+    "ocasiao": [
+      "sobremesa",
+      "lanche da tarde"
+    ],
+    "peso": "450 g",
+    "preco": "33.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "rapadura-artesanal",
+    "nome": "Rapadura artesanal em tabletes",
+    "tipo": "doce",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Engenho Água Limpa",
+    "descricao": "Caldo de cana batido no ponto e cortado em tabletes. Sabor mineral e final de melado. Adoça café e come-se pura.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "café sul de minas torra escura",
+      "queijo minas padrão"
+    ],
+    "ocasiao": [
+      "dia a dia",
+      "presente"
+    ],
+    "peso": "500 g",
+    "preco": "28.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "pacoca-de-amendoim",
+    "nome": "Paçoca de amendoim artesanal",
+    "tipo": "doce",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Amendoim torrado no dia, socado com rapadura em pilão. Esfarela na mão como paçoca de verdade deve esfarelar.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "licor de café"
+    ],
+    "ocasiao": [
+      "lanche da tarde",
+      "dia a dia"
+    ],
+    "peso": "300 g",
+    "preco": "26.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "geleia-de-pimenta-biquinho",
+    "nome": "Geleia de pimenta biquinho",
+    "tipo": "doce",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Sítio Pé de Serra",
+    "descricao": "Pimenta biquinho não arde — perfuma. Geleia doce com fundo frutado, feita para derreter sobre queijo fresco.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo minas frescal",
+      "queijo canastra fresco",
+      "torradas"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "receber visita",
+      "presente"
+    ],
+    "peso": "220 g",
+    "preco": "38.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "geleia-de-jabuticaba",
+    "nome": "Geleia de jabuticaba",
+    "tipo": "doce",
+    "regiao": "Serra da Mantiqueira, MG",
+    "produtor": "Sítio Névoa Alta",
+    "descricao": "Feita só com a fruta inteira e açúcar, sem pectina. Cor de vinho, acidez alta e um leve tanino da casca.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo canastra curado",
+      "queijo azul da mantiqueira",
+      "café mundo novo torra clara"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "presente"
+    ],
+    "peso": "220 g",
+    "preco": "42.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "biscoito-de-polvilho",
+    "nome": "Biscoito de polvilho artesanal",
+    "tipo": "doce",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Polvilho azedo, ovo e banha. Seco, leve e sonoro. O acompanhamento natural do café da tarde.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "café coado",
+      "doce de leite cremoso"
+    ],
+    "ocasiao": [
+      "lanche da tarde",
+      "dia a dia"
+    ],
+    "peso": "200 g",
+    "preco": "24.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis"
+  },
+  {
+    "id": "broa-de-fuba-com-erva-doce",
+    "nome": "Broa de fubá com erva-doce",
+    "tipo": "doce",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Fubá de moinho de água, erva-doce e casca de laranja. Assada em forma de bolo inglês, para fatiar grosso.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "café coado",
+      "doce de leite cremoso",
+      "queijo minas frescal"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "lanche da tarde"
+    ],
+    "peso": "400 g",
+    "preco": "29.00",
+    "disponivel": false,
+    "prazo_estimado": "3 a 5 dias úteis"
+  }
+]

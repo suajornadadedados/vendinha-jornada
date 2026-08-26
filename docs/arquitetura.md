@@ -60,8 +60,8 @@ Um **supervisor** roteia a conversa e **dois subagents** executam. A divisão n�
 | `checkout` | `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
 
 `desconto` **não existe** como tool em nenhum registro. Não é uma ação negada por prompt: ela
-não está lá. Um teste unitário falha se qualquer tool de escrita vazar para o registro do
-subagent de recomendação (R2, R4).
+não está lá. Um teste da camada `security` falha se qualquer tool de escrita vazar para o
+registro do subagent de recomendação (R2, R4).
 
 ### 3.2 Onde entra o humano
 
@@ -73,8 +73,8 @@ Um ponto, e só um: **antes de `emitir_nf`**.
 3. O operador vê a fila com os dados completos da nota e aprova ou rejeita.
 4. A decisão é gravada com **quem e quando**; a retomada só existe a partir desse registro.
 
-É impossível, por construção, emitir NF sem aprovação registrada — e isso é testado em
-integração, não prometido em prosa (ADR-003, RF-3.5, R3).
+É impossível, por construção, emitir NF sem aprovação registrada — e isso é testado na camada
+`security`, não prometido em prosa (ADR-003, ADR-011, RF-3.5, R3).
 
 ### 3.3 Gestão de falhas
 
