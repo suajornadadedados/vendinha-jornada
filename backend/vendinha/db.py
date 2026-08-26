@@ -18,6 +18,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from vendinha import runtime
+from vendinha.catalogo import PostgresCatalogo
 from vendinha.config import get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
@@ -57,12 +58,13 @@ async def open_checkpointer(database_url: str | None = None) -> AsyncIterator[As
 async def setup() -> None:
     """Create every table the application owns. Idempotent — safe to run again."""
     settings = get_settings()
+    dsn = with_connect_timeout(settings.database_url)
     async with open_checkpointer() as saver:
         await saver.setup()
-    await PostgresConfigStore(
-        with_connect_timeout(settings.database_url),
-        Vault(settings.config_encryption_key),
-    ).setup()
+    await PostgresConfigStore(dsn, Vault(settings.config_encryption_key)).setup()
+    # The table only — filling it is `make seed`, because a schema migration and a
+    # data load fail for different reasons and are fixed by different people.
+    await PostgresCatalogo(dsn).setup()
 
 
 def main() -> int:
@@ -81,7 +83,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("checkpointer and instance_config ready.")
+    print("checkpointer, instance_config and produto ready. next: `make seed`.")
     return 0
 
 

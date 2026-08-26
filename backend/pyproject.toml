@@ -34,6 +34,12 @@ dependencies = [
     # Postgres: domínio, checkpointer do grafo e a configuração cifrada.
     "psycopg[binary,pool]>=3.2",
     "cryptography>=43",
+
+    # Qdrant: o índice semântico do catálogo (S-03). Cliente cru, e não
+    # `langchain-qdrant`: aqui o Qdrant ranqueia e devolve ids — quem afirma
+    # qualquer fato é o Postgres. Um VectorStore guardaria o texto do produto
+    # dentro do índice, criando uma segunda morada para o mesmo fato (S-03, D-5).
+    "qdrant-client>=1.13",
 ]
 
 [dependency-groups]
@@ -49,6 +55,9 @@ dev = [
     "jsonschema>=4.21",
     "types-jsonschema>=4.26.0.20260518",
     "ruff==0.16.4",
+    # O runner de evals (S-03) lê os casos de `evals/*.yaml`. Fica no grupo dev
+    # porque eval é portão de release, não caminho de atendimento.
+    "pyyaml>=6.0",
 ]
 
 [build-system]
