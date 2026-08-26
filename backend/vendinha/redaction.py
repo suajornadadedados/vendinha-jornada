@@ -68,7 +68,12 @@ CREDENTIAL = re.compile(
 # `@127.0.0.1` used to disappear by accident, because the e-mail pattern happened to
 # match it. `@postgres` and `@db` — the container forms S-08 will use — did not. An
 # accident that covers the local case and drops the deployed one is the worst kind.
-DSN_PASSWORD = re.compile(r"(?P<esquema>[a-z][a-z0-9+.-]*://)(?P<user>[^:/?#@\s]+):[^@/?#\s]+@")
+DSN_PASSWORD = re.compile(
+    r"(?P<esquema>[a-z][a-z0-9+.-]*://)"
+    r"(?P<user>[^:/?#@\s]+)"
+    r":[^\s]+?@"
+    r"(?=[\w.\-\[\]:]+(?:[/?#\s]|$))"
+)
 
 PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (DSN_PASSWORD, r"\g<esquema>\g<user>:[CREDENCIAL]@"),
@@ -143,8 +148,13 @@ def _known_values_pattern(known_values: frozenset[str]) -> re.Pattern[str] | Non
         return None
 
     ordered = sorted(pieces, key=len, reverse=True)
+    # Sem `\b`, de propósito. Para NOME a direção segura é mascarar demais: `\b`
+    # deixava de cobrir o nome grudado em outro texto, e um nome que escapa é
+    # vazamento de PII, enquanto um "Ribeiros" mascarado é só um log menos bonito.
+    # A terceira verificação pegou essa troca de semântica acontecendo em silêncio,
+    # dentro de uma reescrita que era só de desempenho.
     return re.compile(
-        r"\b(?:" + "|".join(re.escape(piece) for piece in ordered) + r")\b",
+        "(?:" + "|".join(re.escape(piece) for piece in ordered) + ")",
         flags=re.IGNORECASE,
     )
 
@@ -188,6 +198,10 @@ class KnownValues:
     def clear(self) -> None:
         with self._lock:
             self._values.clear()
+        # O `lru_cache` guarda o padrão compilado por conjunto de valores, então sem
+        # isto um `clear()` esvazia o registro e deixa os nomes vivos dentro do cache
+        # do módulo — um dos lugares onde a terceira verificação foi procurar.
+        _known_values_pattern.cache_clear()
 
 
 KNOWN_VALUES = KnownValues()

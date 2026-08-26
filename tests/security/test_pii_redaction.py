@@ -39,9 +39,12 @@ from langfuse.types import (
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
+from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph
 from vendinha.observability import (
+    client,
+    export_masking_is_installed,
     install_log_redaction,
     mask_otel_spans,
     redaction_is_installed,
@@ -385,6 +388,98 @@ def test_the_application_turns_redaction_on_when_it_starts() -> None:
 
 
 @pytest.mark.risco("R5")
+def test_the_langfuse_client_is_built_with_the_masking_hook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O gancho tem que estar NO CLIENTE, nao so existir como funcao.
+
+    Terceira verificacao independente, achado de gravidade Alta: apagar
+    `mask_otel_spans=mask_otel_spans` do construtor deixava a suite verde, e a
+    aplicacao exportava CPF, e-mail e telefone em claro para o Langfuse Cloud —
+    medido lendo o trace de volta pela API publica.
+
+    E a mesma pergunta das outras duas rodadas, uma casa adiante. Nao existe teste de
+    redacao que substitua este: a funcao pode estar perfeita e nunca ser chamada no
+    caminho de saida. Esta e a metade "trace" do REQ-4, que a spec chama de
+    invariante de release e sobre a qual o ADR-010 apoia a escolha de nuvem.
+    """
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-" + "a" * 20)
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-" + "b" * 20)
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "http://127.0.0.1:1")
+    get_settings.cache_clear()
+    client.cache_clear()
+
+    try:
+        construido = client()
+        assert construido is not None, "credencial presente e o cliente nao subiu"
+        assert export_masking_is_installed(construido), (
+            "o cliente Langfuse foi construido sem o gancho de redacao: "
+            "todo trace desta aplicacao sairia em claro"
+        )
+    finally:
+        client.cache_clear()
+        get_settings.cache_clear()
+
+
+@pytest.mark.risco("R5")
+def test_a_known_name_glued_to_other_text_is_masked_too(
+    pii_de_teste: dict[str, str],
+) -> None:
+    """Para NOME a direcao segura e mascarar demais, e isso e escolha registrada.
+
+    A reescrita de desempenho da rodada 2 trocou substring por `\\b` em silencio, e a
+    terceira verificacao pegou: um nome grudado em outro texto deixou de ser coberto.
+    Nome que escapa e vazamento de PII; palavra parecida mascarada a mais e so um log
+    menos bonito. Este teste fixa a escolha para ela nao mudar de novo sem alguem ver.
+    """
+    nome = pii_de_teste["nome"]
+    partes = nome.split()
+    redactor_com_nome = Redactor(known_values=frozenset({nome}))
+
+    for texto in (
+        f"usuario {nome}123",
+        f"arquivo-{nome}-final.txt",
+        f"{nome}s",
+        f"id:{partes[1]}99",
+    ):
+        redigido = redactor_com_nome.text(texto)
+        # Conferir TODAS as partes, e nao so a primeira: com `\b` o primeiro nome
+        # ainda casava (vem seguido de espaco) e o sobrenome grudado no numero
+        # escapava — a versao anterior deste teste passava com a implementacao
+        # quebrada exatamente por isso.
+        for parte in [nome, *partes]:
+            assert parte not in redigido, f"{parte!r} escapou em {texto!r}"
+
+
+@pytest.mark.risco("R5")
+def test_clearing_the_registry_also_clears_the_compiled_pattern(
+    pii_de_teste: dict[str, str],
+) -> None:
+    """`clear()` que nao alcanca o cache do modulo deixa os nomes vivos."""
+    from vendinha.redaction import _known_values_pattern, redactor
+
+    nome = pii_de_teste["nome"]
+    KNOWN_VALUES.clear()
+    try:
+        KNOWN_VALUES.remember(nome)
+        assert "[NOME]" in redactor().text(f"oi {nome}")
+
+        KNOWN_VALUES.clear()
+
+        # A afirmacao que importa e sobre RETENCAO, e ela vem ANTES de usar o redator
+        # de novo: comportamento sozinho nao pega nada aqui, porque depois do
+        # `clear()` o redator e consultado com o conjunto vazio e nao mascararia de
+        # todo jeito — enquanto o nome segue vivo dentro do `lru_cache`, que e o que a
+        # NC-O descreve. Um `clear()` que nao esquece nao e um `clear()`.
+        assert _known_values_pattern.cache_info().currsize == 0, (
+            "o padrao compilado ainda guarda os nomes depois do clear()"
+        )
+        assert redactor().text(f"oi {nome}") == f"oi {nome}"
+    finally:
+        KNOWN_VALUES.clear()
+
+
+@pytest.mark.risco("R5")
 def test_the_password_inside_a_connection_string_never_leaves() -> None:
     """O segredo que ninguem escolhe logar: toda excecao do psycopg carrega o DSN.
 
@@ -404,6 +499,15 @@ def test_the_password_inside_a_connection_string_never_leaves() -> None:
         assert host in redacted
         assert "vendinha:" in redacted
 
+    # Senha com `/`, `?`, `#` e `=`. Uma chave base64 tem barra e igual, e senha
+    # gerada por cofre tem os tres — o padrao da rodada 2 parava no primeiro deles e
+    # deixava o resto da senha na linha.
+    for senha in ("aGVsbG8vd29ybGQ=", "p/a?b#c", "S3nh4=com/barra"):
+        redacted = redact(f"connection to postgresql://vendinha:{senha}@postgres:5432/db failed")
+        assert senha not in redacted, f"a senha {senha!r} vazou"
+        assert "[CREDENCIAL]" in redacted
+        assert "postgres:5432" in redacted
+
 
 @pytest.mark.risco("R5")
 def test_a_plain_log_line_is_redacted_too(
@@ -417,3 +521,42 @@ def test_a_plain_log_line_is_redacted_too(
     escrito = logging_como_o_uvicorn_monta.getvalue()
     assert pii_de_teste["cpf"] not in escrito
     assert "[CPF]" in escrito
+
+
+# O CLI imprime com `print()`, que nao passa por `logging` — entao a redacao de log
+# nao o alcanca, e a spec afirmou por engano que a R-6 estava "mitigada pela NC-C".
+# A terceira verificacao mediu e desmentiu. Subprocesso porque e o unico jeito de ver
+# o que o processo realmente escreve no stderr.
+CLI_COM_DSN_RUIM = """
+import os, sys
+os.environ["DATABASE_URL"] = sys.argv[1]
+from vendinha.config import get_settings
+get_settings.cache_clear()
+from vendinha.db import main
+sys.exit(main())
+"""
+
+
+@pytest.mark.risco("R5")
+def test_the_setup_cli_never_prints_the_database_password() -> None:
+    """`make db-setup` falha com frequencia — e falhar imprimindo a senha e o padrao.
+
+    A mensagem existe para ajudar quem acabou de rodar o comando, e por isso ela
+    mostra o DSN. Mostrar o DSN nao e o problema; mostrar a senha e.
+    """
+    senha = "s3nh4-do-banco-secreta"
+    dsn = f"postgresql://vendinha:{senha}@127.0.0.1:1/vendinha"
+
+    resultado = subprocess.run(  # noqa: S603 - argv fixo, escrito neste arquivo
+        [sys.executable, "-c", CLI_COM_DSN_RUIM, dsn],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode != 0, "o teste depende do caminho de falha do CLI"
+    assert senha not in saida, "a senha do banco saiu no stderr"
+    assert "[CREDENCIAL]" in saida
+    # O resto do DSN continua: e o que faz a mensagem valer para quem esta depurando.
+    assert "127.0.0.1" in saida

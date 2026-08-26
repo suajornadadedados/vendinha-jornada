@@ -23,6 +23,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from vendinha.app import create_app
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
+from vendinha.providers import PROVIDERS, Provider
 
 
 @pytest.fixture
@@ -154,3 +155,28 @@ def test_a_failure_mid_stream_becomes_an_event_and_leaks_nothing() -> None:
 def test_health_says_the_service_is_up(client: TestClient) -> None:
     body = client.get("/health").json()
     assert body["status"] == "ok"
+
+
+def test_the_model_list_is_warmed_before_the_first_request(
+    graph: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cold, o primeiro pedido com `model` custava 4,0s contra um alvo de 3s.
+
+    A primeira mensagem e a que alguem esta olhando, e era a unica que pagava a
+    consulta aos fornecedores. O aquecimento no `lifespan` conserta isso — e este
+    teste existe porque a terceira verificacao apontou que aquele trecho vivia num
+    ramo do lifespan que nenhum teste percorria.
+    """
+    chamadas = [0]
+
+    def listar(_: str) -> list[str]:
+        chamadas[0] += 1
+        return ["claude-haiku-4-5"]
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-" + "z" * 20)
+    monkeypatch.setitem(PROVIDERS, "anthropic", Provider("anthropic", "ANTHROPIC_API_KEY", listar))
+
+    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())) as cliente:
+        assert chamadas[0] == 1, "a lista nao foi aquecida no boot"
+        cliente.get("/models")
+        assert chamadas[0] == 1, "o boot aqueceu mas a requisicao consultou de novo"

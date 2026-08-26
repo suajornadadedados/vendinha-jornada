@@ -131,6 +131,28 @@ def _every_handler() -> list[logging.Handler]:
     return handlers
 
 
+def export_masking_is_installed(langfuse_client: Langfuse) -> bool:
+    """Se ESTE cliente exporta através do nosso gancho de redação.
+
+    Existe por causa do achado Alta da terceira verificação: apagar
+    `mask_otel_spans=mask_otel_spans` do construtor deixava a suíte inteira verde, e
+    a aplicação mandava CPF, e-mail e telefone em claro para o Langfuse Cloud —
+    verificado lendo o trace de volta pela API pública.
+
+    É a mesma pergunta das duas rodadas anteriores, uma casa adiante: rodada 1, nada
+    provava que o filtro de log era instalado; rodada 2, nada provava que a aplicação
+    instalava; rodada 3, nada provava que o cliente foi construído com o gancho.
+    Testar a função que redige nunca prova que alguém a ligou no caminho de saída.
+
+    Lê um atributo privado do SDK de propósito. É acoplamento a terceiro e vai
+    quebrar numa atualização — que é exatamente o que se quer: uma atualização que
+    mova esse campo tem que reprovar a suíte, não passar em silêncio levando junto o
+    invariante de release do REQ-4.
+    """
+    recursos = getattr(langfuse_client, "_resources", None)
+    return getattr(recursos, "mask_otel_spans", None) is mask_otel_spans
+
+
 def redaction_is_installed() -> bool:
     """Whether any configured handler is currently redacting.
 
@@ -144,6 +166,11 @@ def redaction_is_installed() -> bool:
 
 def install_log_redaction() -> int:
     """Make every configured handler redact. Returns how many were wrapped.
+
+    **Side effect worth declaring (R-13):** when the root has no handlers, this adds
+    a `StreamHandler` to it. That changes where *any* third-party log in the process
+    lands — from `logging.lastResort` to this handler. It is the decision that makes
+    the redaction reach our own logger at all, and it is not free of surprise.
 
     Returning the count is not decoration: it is what lets a test fail when this
     function becomes a no-op. The previous version walked `logging.getLogger().handlers`

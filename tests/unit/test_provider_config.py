@@ -17,6 +17,7 @@ implementation of the same protocol Postgres implements.
 """
 
 import json
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -79,6 +80,19 @@ def offered_models(monkeypatch: pytest.MonkeyPatch) -> None:
         "anthropic",
         Provider("anthropic", "ANTHROPIC_API_KEY", lambda _: ["claude-haiku-4-5", "claude-opus-5"]),
     )
+
+
+class _RelogioFalso:
+    """Só o que `app.py` usa do módulo `time`, para o teste poder empurrar o relógio."""
+
+    def __init__(self, inicio: float) -> None:
+        self._agora = inicio
+
+    def avancar(self, segundos: float) -> None:
+        self._agora += segundos
+
+    def monotonic(self) -> float:
+        return self._agora
 
 
 @pytest.fixture
@@ -360,7 +374,13 @@ def test_the_model_cache_expires(
     antes = contador_de_chamadas[0]
     assert antes > 0, "sem credencial nenhum fornecedor e consultado, e o teste nao mede nada"
 
-    monkeypatch.setattr("vendinha.app.MODELS_CACHE_SECONDS", 0.0)
+    # O relogio avanca uma hora; o TTL NAO e tocado. A versao anterior deste teste
+    # trocava `MODELS_CACHE_SECONDS` por zero, e por isso nao enxergava o valor da
+    # constante: um TTL de 1e12 segundos passava. Uma hora e um numero fixo de
+    # proposito — qualquer TTL que sobreviva a ela ja nao e um TTL, e um restart.
+    relogio = _RelogioFalso(inicio=time.monotonic())
+    monkeypatch.setattr("vendinha.app.time", relogio)
+    relogio.avancar(3600)
     client.get("/models")
 
     assert contador_de_chamadas[0] > antes, "a lista nunca expira: so um restart a atualiza"

@@ -126,6 +126,10 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             app.state.checkpointer = None
             app.state.fixed_graph = graph
             await app.state.store.setup()
+            # Aquecer aqui também, e não só no ramo de produção: um trecho que só
+            # existe no caminho que nenhum teste percorre é um trecho que ninguém
+            # verifica. Sem credencial configurada isto é um no-op.
+            await _warm_models(app)
             yield
             return
 

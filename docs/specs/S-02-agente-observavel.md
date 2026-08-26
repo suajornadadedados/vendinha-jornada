@@ -85,7 +85,7 @@ Cenário: a credencial não volta pela porta da frente
 | Credencial em claro em traces/logs/respostas | 0 ocorrências | **0** — resposta da API e coluna `bytea` do Postgres inspecionadas |
 | p95 primeiro token, sem `model` | ≤ 3s | **1,109 s** (n=10, mediana 0,802 s) |
 | p95 primeiro token, com `model` | ≤ 3s | **1,072 s** (n=10, mediana 0,844 s) — era 3,331 s antes do cache. A frio o primeiro pedido custava 4,0 s; o cache agora é aquecido no boot. Ver D-13 e D-14 |
-| Suíte | verde | **365 passed**, inclusive em cópia limpa **sem `.env`**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
+| Suíte | verde | **370 passed**, inclusive em cópia limpa **sem `.env`**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
 
 Medições feitas nesta máquina contra o Postgres do compose, o Langfuse Cloud real e a API da
 Anthropic e da OpenAI reais. Os scripts de medição não entram no repositório: eles não são
@@ -105,11 +105,14 @@ entregável desta spec, e a verificação independente vai querer medir por cont
 | 6 | `feat(s-02): runtime provider config with encrypted credentials` | REQ-6 |
 | 7 | `ci(s-02): extend typecheck to the test suite` | Ressalva R-4 da verificação da S-01 |
 | — | `fix(s-02): apply the loopback rule per caller…` | D-12: a regra de host medida por quem disca, e o `API_HOST` que estava em `0.0.0.0` |
-| — | `fix(s-02): corrigir os achados da verificação independente` | D-13 |
+| — | `fix(s-02): address the findings of the independent verification` | D-13, rodada 1 |
+| — | `fix(s-02): address the second round of verification findings` | D-14, rodada 2 |
+| — | `fix(s-02): address the third round of verification findings` | D-15, rodada 3 |
 
-**11 commits para 7 tasks.** As quatro diferenças estão explicadas acima e nenhuma é escopo
+**13 commits para 7 tasks.** As seis diferenças estão explicadas acima e nenhuma é escopo
 novo: uma é governança que o PO mandou entrar isolada, uma é o autor consertando a própria
-derrapada de convenção, e duas são correção — de medição e da verificação independente.
+derrapada de convenção, uma é correção de medição, e três são as três rodadas de verificação
+independente.
 
 *Esta tabela já parou um commit antes do fim uma vez (NC-5 da verificação), pelo mesmo motivo
 que a NC-4 do relatório da S-01 descreve: ela é escrita antes do último commit existir. Enquanto
@@ -343,7 +346,7 @@ não que alguém a chama.
 | **NC-E** (Baixa) | Contagem de testes-âncora medida no fechamento em vez de escrita à mão |
 | **NC-F** (Baixa) | Mensagem de commit em português contra o `CLAUDE.md`. Reescrita |
 | **NC-G** (Baixa) | O resíduo do deny enumerado registrado abaixo |
-| **NC-H** (Baixa) | O custo do `RedactingFormatter` crescia com o registro de nomes: **0,0065 ms vazio → 17,28 ms cheio**, em toda linha de log e todo atributo exportado. Era `re.sub` por nome e por parte de nome. Virou uma alternação compilada e cacheada: medido de novo, **0,0081 ms vazio → 0,065 ms cheio** |
+| **NC-H** (Baixa) | O custo do `RedactingFormatter` crescia com o registro de nomes, em toda linha de log e todo atributo exportado. Era `re.sub` por nome e por parte de nome; virou alternação compilada e cacheada. *O número que esta linha publicou primeiro estava otimista — ver NC-H-r na D-15* |
 | **R-2b** (ressalva) | O primeiro pedido com `model` custava 4,0 s a frio — o cache só ajudava da segunda mensagem em diante, e a primeira é a que alguém está olhando. O `lifespan` aquece a lista no boot |
 
 **NC-D e NC-G, registrados aqui porque é onde eles têm que viver.** O relatório da rodada 1 pediu
@@ -356,6 +359,45 @@ porque o padrão amplo cobria também o `.env.example`, que é versionado e prec
 enumeração tem um resíduo conhecido e aceito: um `.env.staging` inventado amanhã não estaria na
 lista. O `.gitignore` continua sendo a garantia larga — ele ignora `.env.*` inteiro — então o
 resíduo é sobre leitura pelo agente, não sobre vazamento por commit.
+
+**D-15 — a terceira verificação reprovou, e o achado Alta é a terceira ocorrência do mesmo erro.**
+Veredito **REPROVADO**: 1 Alta, 4 Média, 3 Baixa, 18 falsificações com 4 sobreviventes.
+
+**NC-I.** Apagar `mask_otel_spans=mask_otel_spans` do construtor do cliente Langfuse deixava a
+suíte em 365 passed. O revisor subiu a aplicação assim, mandou uma conversa com PII e leu o trace
+de volta pela API pública do Langfuse Cloud: **CPF, e-mail e telefone em texto claro, zero
+placeholders**. É a metade "trace" do REQ-4 — o invariante de release, e a base sobre a qual o
+ADR-010 apoia a escolha de nuvem.
+
+A progressão, que é o que importa registrar:
+
+| Rodada | O que nada provava |
+|---|---|
+| 1 | que o filtro de log era **instalado** |
+| 2 | que a **aplicação** instalava |
+| 3 | que o **cliente** foi construído com o gancho |
+
+Mesma pergunta — *é alcançável?* — três casas adiante. E o pior detalhe é que a D-14 escreveu a
+frase certa (*"testo a função que faz e não que alguém a chama"*) e eu consertei, de novo, só a
+instância. Nomear a classe do erro não substitui varrer a classe do erro.
+
+| Achado | Correção |
+|---|---|
+| **NC-I** (Alta) | `export_masking_is_installed()` lê o gancho de dentro do cliente construído, e um teste sobe o cliente e pergunta. Lê atributo privado do SDK **de propósito**: uma atualização que mova esse campo tem que reprovar a suíte, não passar em silêncio levando junto o invariante de release |
+| **NC-J** (Média) | A D-14 afirmava "três quebras que reprovam" e um TTL de `1e12` continuava verde — o teste trocava a constante por zero e por isso não enxergava o valor dela. Agora o relógio é falso e avança uma hora, com o TTL intocado |
+| **NC-K** (Média) | A reescrita de desempenho da rodada 2 trocou substring por `\b` **em silêncio**, e nome grudado em outro texto deixou de ser coberto. Voltou a substring, com teste que confere **todas** as partes do nome — a versão anterior do teste passava com a implementação quebrada porque só conferia a primeira |
+| **NC-L / R-14** (Média) | `_warm_models` morava no ramo `graph is None` do lifespan, que nenhum teste alcança. Passou a rodar nos dois ramos e ganhou teste |
+| **NC-C-r** (Média) | Senha de DSN com `/`, `?` ou `#` — uma chave base64 tem os três — vazava a partir do primeiro deles. Padrão corrigido e testado com base64 |
+| **NC-M** (Média) | A spec afirmou que a R-6 estava "mitigada pela NC-C". Falso: `print()` não passa por `logging`. O CLI redige o DSN e um teste em subprocesso confere o stderr de verdade |
+| **NC-O** (Baixa) | `KNOWN_VALUES.clear()` não alcançava o `lru_cache` do padrão. O teste tinha que ser sobre **retenção**, não sobre comportamento: depois do `clear()` o redator é consultado com o conjunto vazio e não mascararia de todo jeito |
+| **NC-D** (parcial) | **R-12 e R-13 caíram na transcrição** — o mecanismo que a NC-D existe para consertar falhou dentro do commit que existia para consertá-lo. As duas estão na tabela abaixo, e a R-13 virou nota no docstring do módulo |
+| **NC-G** (parcial) | O cabeçalho do `.env.example` agora declara que o `.gitignore` e a regra de permissão **não cobrem o mesmo conjunto**, e por quê |
+| **NC-H-r** (Baixa) | O número que eu publiquei estava ~5× otimista. Medido agora com as duas implementações lado a lado, mesma máquina, mesmo instante: **18,62 ms → 0,377 ms** com 512 nomes (49×); 1,29 ms → 0,098 ms com 128; empate com o registro vazio |
+
+Sete quebras deliberadas contra estas correções. **Três passaram na primeira tentativa** — e as
+três eram teste fraco, não código errado: o de nome só conferia a primeira parte, o de `clear()`
+media comportamento onde a questão era retenção, e o do CLI não existia. Corrigidos, sete de sete
+reprovam.
 
 ### Ressalvas da verificação da S-02 que ficam para as specs seguintes
 
@@ -370,6 +412,9 @@ resíduo é sobre leitura pelo agente, não sobre vazamento por commit.
 | **R-8** | `GET /config` é aberto em qualquer ambiente e revela quais provedores estão configurados e se falta chave de criptografia. Expõe pouco, não nada | S-08 |
 | **R-10** | Quem esquecer `make db-setup` recebe erro de tabela inexistente na primeira mensagem, não no boot | S-03 |
 | **R-11** | O `.venv` local é Python 3.13 e o CI usa 3.12; os números desta spec vêm do 3.13 | registrada |
+| **R-12** | Over-masking latente: chave de acesso de NF-e escrita em grupos de quatro é parcialmente mascarada como `[TELEFONE]`. Inofensivo hoje | S-05, que é quem vai olhar chave de acesso em trace |
+| **R-13** | `install_log_redaction()` acrescenta um `StreamHandler` ao root quando ele está vazio, mudando o destino padrão de qualquer log de terceiro no processo. É o que fecha a NC-2 e é a decisão certa; o efeito colateral agora está declarado no docstring do módulo | registrada |
+| **R-14** | A cobertura do `lifespan` é assimétrica: o ramo `graph is None` não é alcançável por nenhum teste. É a raiz estrutural da NC-L — qualquer coisa que entrar ali (pool, migração, healthcheck) nasce sem defesa | S-03 |
 
 ## Ressalvas herdadas da verificação da S-01
 
@@ -380,14 +425,14 @@ foram fechadas; as outras três continuam abertas, e ficam registradas aqui para
 | Ressalva | Estado |
 |---|---|
 | **R-4** — `tests/` fora do `mypy` | **Fechada.** O `typecheck` cobre a suíte, no `make` e no CI. Não foi cosmético: o portão mais largo achou 35 erros reais, entre eles um `dict` sem parâmetro em `tests/security/conftest.py` e um `Returning Any` numa fixture. O pacote `vendinha` ganhou `py.typed` — sem o marcador, todo `import` do produto dentro de `tests/` virava `Any` e a suíte estaria dentro do portão sem aprender nada com isso |
-| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** `pytest tests -m risco` → **26 passed, 339 deselected** (R5: 15, R6: 7, R9: 4). O comando do `docs/testes.md` §6 deixou de ser decorativo. *Número medido no fechamento, não escrito à mão: ele já ficou desatualizado duas vezes nesta spec — NC-7 e NC-E* |
+| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** `pytest tests -m risco` → **30 passed, 340 deselected**. O comando do `docs/testes.md` §6 deixou de ser decorativo. *Número medido no fechamento, não escrito à mão: ele já ficou desatualizado duas vezes nesta spec — NC-7 e NC-E* |
 | **R-3** — fixture ↔ seed continua acordo humano | Aberta. A S-02 não toca no catálogo |
 | **R-5** — corpo do ADR-003 ainda diz "integração" | Aberta. É o preço da imutabilidade do ADR, e a nota de cabeçalho corrige |
 | **R-10** — seed malformado quebra a coleta do pytest com traceback | Aberta. Nenhum arquivo novo desta spec constrói dado no import de módulo, então a spec não piorou o caso |
 
 ## Definition of Done
 - [x] Todos os requisitos com evidência medida nesta spec (REQ-1 a REQ-6)
-- [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (365 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
+- [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (370 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
 - [x] Os três riscos declarados com teste-âncora verde e falsificado: R5, R6, R9
 - [x] Achados da verificação independente corrigidos (D-13); NC-4 adiada para o PR de harness, com o motivo registrado
 - [ ] CI verde no PR

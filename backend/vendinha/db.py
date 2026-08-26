@@ -21,6 +21,7 @@ from vendinha import runtime
 from vendinha.config import get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
+from vendinha.redaction import redact
 
 # Without it, libpq waits forever on a host that accepts the packet and never
 # answers. The classic one on Windows is `localhost` resolving to ::1 while the
@@ -72,7 +73,7 @@ def main() -> int:
         # and psycopg says which is which. Printing the exception beats a traceback
         # for the person who just ran `make db-setup` for the first time.
         print(f"failed to prepare Postgres: {error}", file=sys.stderr)
-        print(f"DSN in use: {get_settings().database_url}", file=sys.stderr)
+        print(f"DSN in use: {redact(get_settings().database_url)}", file=sys.stderr)
         print("is Postgres up? `make up` starts it and waits for healthy.", file=sys.stderr)
         print(
             "if the host is `localhost`, try 127.0.0.1 — on Windows the name "
