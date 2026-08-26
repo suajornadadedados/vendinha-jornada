@@ -31,9 +31,10 @@ import uuid
 from collections.abc import Iterable, Sequence
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 import psycopg
+from langchain_core.embeddings import Embeddings
 from psycopg import sql
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from qdrant_client import AsyncQdrantClient, models
@@ -261,8 +262,35 @@ def _upsert_sql() -> sql.Composed:
     )
 
 
+class Catalogo(Protocol):
+    """A fonte da verdade, como quem lê a enxerga.
+
+    Só leitura. Não é que a escrita esteja proibida nesta interface — é que ela
+    não existe nela: o único código que escreve no catálogo é `make seed`, e ele
+    fala com `PostgresCatalogo` diretamente. Um subagent que recebe um `Catalogo`
+    não tem o que chamar para mudar um preço (ADR-002, RF-1.5).
+    """
+
+    async def por_ids(self, ids: Sequence[str]) -> dict[str, Produto]: ...
+
+    async def quantos(self) -> int: ...
+
+
+class Busca(Protocol):
+    """O ranqueador. Devolve ids, e nada além de ids.
+
+    A assinatura é a fronteira: não há como esta interface devolver um preço, um
+    atributo ou um texto, então não há como um fato entrar na conversa por aqui.
+    Quem afirma é o `Catalogo`.
+    """
+
+    async def ids_similares(
+        self, necessidade: str, *, tipo: str | None, apenas_disponiveis: bool, limite: int
+    ) -> list[str]: ...
+
+
 class PostgresCatalogo:
-    """O catálogo no Postgres. Aqui, o lado da escrita — a leitura chega na task 2."""
+    """O catálogo no Postgres: a escrita do `make seed` e a leitura das tools."""
 
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
@@ -270,6 +298,34 @@ class PostgresCatalogo:
     async def setup(self) -> None:
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
             await conn.execute(SCHEMA)
+
+    async def por_ids(self, ids: Sequence[str]) -> dict[str, Produto]:
+        """Os produtos pedidos, por id. Id que não existe simplesmente não volta.
+
+        Devolver um mapa, e não uma lista, é o que faz "não achei este produto"
+        ser uma ausência que o chamador tem que tratar — em vez de uma lista mais
+        curta que ele pode não perceber que encurtou.
+        """
+        if not ids:
+            return {}
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            cursor = await conn.execute(
+                sql.SQL("SELECT {campos} FROM produto WHERE id = ANY(%s)").format(
+                    campos=sql.SQL(", ").join(sql.Identifier(coluna) for coluna in COLUNAS)
+                ),
+                (list(ids),),
+            )
+            linhas = await cursor.fetchall()
+        encontrados = (
+            Produto.model_validate(dict(zip(COLUNAS, linha, strict=True))) for linha in linhas
+        )
+        return {produto.id: produto for produto in encontrados}
+
+    async def quantos(self) -> int:
+        """Quantos produtos o catálogo tem. Zero é o sintoma de `make seed` esquecido."""
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linha = await (await conn.execute("SELECT count(*) FROM produto")).fetchone()
+        return int(linha[0]) if linha else 0
 
     async def substituir_tudo(self, produtos: Sequence[Produto]) -> int:
         """Grava o seed inteiro e apaga o que saiu dele. Uma transação, tudo ou nada.
@@ -380,3 +436,103 @@ class QdrantIndice:
 def documentos(produtos: Iterable[Produto]) -> list[str]:
     """Os textos a embedar, na mesma ordem dos produtos."""
     return [texto_para_embedding(produto) for produto in produtos]
+
+
+def _filtro(tipo: str | None, apenas_disponiveis: bool) -> models.Filter | None:
+    """O filtro estrutural do Qdrant. Nunca dinheiro — esse é do Postgres."""
+    condicoes: list[models.Condition] = []
+    if tipo is not None:
+        condicoes.append(
+            models.FieldCondition(key="tipo", match=models.MatchValue(value=tipo)),
+        )
+    if apenas_disponiveis:
+        condicoes.append(
+            models.FieldCondition(key="disponivel", match=models.MatchValue(value=True)),
+        )
+    return models.Filter(must=condicoes) if condicoes else None
+
+
+class QdrantBusca:
+    """A busca semântica de verdade. Embeda a necessidade e devolve ids ordenados."""
+
+    def __init__(self, url: str, colecao: str, embeddings: Embeddings) -> None:
+        self._colecao = colecao
+        self._embeddings = embeddings
+        # Um cliente por processo, não por chamada: o cliente carrega pool de
+        # conexão, e abrir um por consulta é o tipo de coisa que parece bem até a
+        # segunda pessoa conversar ao mesmo tempo.
+        self._client = AsyncQdrantClient(url=url)
+
+    async def ids_similares(
+        self, necessidade: str, *, tipo: str | None, apenas_disponiveis: bool, limite: int
+    ) -> list[str]:
+        vetor = await self._embeddings.aembed_query(necessidade)
+        resposta = await self._client.query_points(
+            collection_name=self._colecao,
+            query=vetor,
+            query_filter=_filtro(tipo, apenas_disponiveis),
+            limit=limite,
+            with_payload=True,
+        )
+        return [
+            str(ponto.payload["id"])
+            for ponto in resposta.points
+            if ponto.payload and "id" in ponto.payload
+        ]
+
+    async def aclose(self) -> None:
+        await self._client.close()
+
+
+class CatalogoEmMemoria:
+    """Um `Catalogo` de verdade, sem banco. Não é mock — é a segunda implementação.
+
+    `docs/testes.md` §4: mock só na fronteira de port. É exatamente o que
+    `InMemoryConfigStore` é para a configuração, e ele existe pelo mesmo motivo —
+    a suíte unitária não sobe contêiner.
+    """
+
+    def __init__(self, produtos: Iterable[Produto]) -> None:
+        self._produtos = {produto.id: produto for produto in produtos}
+
+    async def por_ids(self, ids: Sequence[str]) -> dict[str, Produto]:
+        return {pid: self._produtos[pid] for pid in ids if pid in self._produtos}
+
+    async def quantos(self) -> int:
+        return len(self._produtos)
+
+
+class BuscaEmMemoria:
+    """Ranqueia por sobreposição de palavras sobre o mesmo texto que seria embedado.
+
+    Não pretende ser um bom buscador — pretende ser *o mesmo contrato*: recebe uma
+    necessidade em português, aplica os mesmos filtros estruturais e devolve ids em
+    ordem. É o que permite testar a tool sem chave de API e sem Qdrant, sem mockar
+    nada que seja interno ao nosso código.
+    """
+
+    def __init__(self, produtos: Iterable[Produto]) -> None:
+        self._produtos = tuple(produtos)
+
+    async def ids_similares(
+        self, necessidade: str, *, tipo: str | None, apenas_disponiveis: bool, limite: int
+    ) -> list[str]:
+        termos = {palavra for palavra in _palavras(necessidade) if len(palavra) > 3}
+        candidatos = [
+            produto
+            for produto in self._produtos
+            if (tipo is None or produto.tipo == tipo)
+            and (not apenas_disponiveis or produto.disponivel)
+        ]
+        pontuados = sorted(
+            candidatos,
+            key=lambda produto: (
+                -len(termos & _palavras(texto_para_embedding(produto))),
+                produto.id,
+            ),
+        )
+        return [produto.id for produto in pontuados[:limite]]
+
+
+def _palavras(texto: str) -> set[str]:
+    return {palavra.strip(".,;:!?—-").lower() for palavra in texto.split()}
