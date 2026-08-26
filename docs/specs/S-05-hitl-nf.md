@@ -19,7 +19,8 @@ própria, e a emissão sai por port com mock fiel (DANFE/XML "SEM VALOR FISCAL")
 - [ ] REQ-2 API da fila do operador: listar pendentes com dados completos da nota; aprovar/rejeitar com registro (quem, quando, motivo na rejeição).
 - [ ] REQ-3 Aprovação retoma o grafo; rejeição comunica o motivo ao fluxo do cliente.
 - [ ] REQ-4 Port `NFEmitter` + `MockAdapter` (XML e DANFE PDF fiéis ao layout NF-e 55, tarja "SEM VALOR FISCAL"); `HomologacaoAdapter` fica na S-09.
-- [ ] REQ-5 Invariante testada em integração: nenhum caminho emite NF sem aprovação registrada.
+- [ ] REQ-5 Invariante testada na camada `security` (`tests/security/test_hitl_invariant.py`): nenhum
+      caminho emite NF sem aprovação registrada (ADR-011).
 - [ ] REQ-6 Cliente recebe confirmação no chat com acesso à DANFE/XML.
 
 ## Fora de escopo
@@ -48,8 +49,8 @@ Cenário: emissão sem aprovação é impossível
 ## Métricas de sucesso
 | Métrica | Alvo | Como medir |
 |---|---|---|
-| NFs emitidas sem aprovação registrada | 0 | teste de integração + auditoria |
-| Retomada pós-aprovação | 100% dos casos de teste | integração |
+| NFs emitidas sem aprovação registrada | 0 | `tests/security/test_hitl_invariant.py` + auditoria |
+| Retomada pós-aprovação | 100% dos casos de teste | `tests/unit/test_session_resume.py`; restart real à mão no `/verificar-spec` |
 
 ## Verificação independente
 - Percorrer o fluxo completo com Pix de teste; matar o processo durante o interrupt e

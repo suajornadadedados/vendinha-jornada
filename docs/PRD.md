@@ -89,7 +89,7 @@ Consequências diretas: preço e total nunca são gerados pelo modelo (sempre li
 - RF-3.2 A área do operador lista pedidos pendentes com os dados completos da nota.
 - RF-3.3 Aprovação e rejeição são registradas (quem, quando) e retomam o grafo.
 - RF-3.4 A emissão ocorre via port `NFEmitter` com dois adapters: `MockAdapter` (default; gera XML e DANFE em PDF fiéis ao layout NF-e modelo 55, com tarja "SEM VALOR FISCAL") e `HomologacaoAdapter` (ambiente de homologação SEFAZ via emissor com API; requer certificado digital e CNPJ; opcional).
-- RF-3.5 É impossível, por construção, emitir NF sem aprovação registrada (invariante testada em integração).
+- RF-3.5 É impossível, por construção, emitir NF sem aprovação registrada (invariante testada na camada `security`, `tests/security/test_hitl_invariant.py`).
 - RF-3.6 O cliente recebe no chat a confirmação com acesso à DANFE/XML.
 
 ### RF-4 Área do operador
