@@ -1,0 +1,15 @@
+# Fim de linha: LF no repositório E no checkout, em qualquer plataforma.
+#
+# Sem isto, um clone em Windows com core.autocrlf=true (o default do Git for
+# Windows) materializa Makefile e scripts/*.sh com CRLF. O resultado é um
+# shebang terminado em \r — "bad interpreter: /usr/bin/env bash^M" — e recipes
+# de Makefile que o make recusa. O BDD da S-00 fala em clone limpo; então é no
+# clone limpo que isso tem que funcionar.
+* text=auto eol=lf
+
+# Binários não passam por conversão nenhuma.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.p12 binary
+*.pfx binary
