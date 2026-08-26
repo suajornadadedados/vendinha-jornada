@@ -113,6 +113,12 @@ inventar um segundo executor de tarefas, cada alvo ficou sendo **uma linha de co
 README documenta o equivalente direto. O Makefile foi validado dentro de um contêiner Alpine,
 já que não dava para executá-lo aqui.
 
+**D-9 — clone limpo em Windows quebrava os scripts.** Sem `.gitattributes`, um clone com
+`core.autocrlf=true` (default do Git for Windows) materializa `Makefile` e `scripts/*.sh` com
+CRLF: shebang vira `bad interpreter: /usr/bin/env bash^M` e o `make` recusa as recipes. Como o
+BDD desta spec é justamente "clone limpo", entrou `.gitattributes` com `* text=auto eol=lf`.
+Verificado com um clone real forçando `autocrlf=true`.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)

@@ -3,7 +3,7 @@ id: S-09
 titulo: (Opcional) Homologação real de NF-e
 status: rascunho
 branch: spec/s-09-homologacao
-issue: 
+issue: #10
 adrs: [ADR-004]
 riscos_cobertos: [R8]
 ---

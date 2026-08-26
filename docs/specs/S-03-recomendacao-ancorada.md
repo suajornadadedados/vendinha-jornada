@@ -3,7 +3,7 @@ id: S-03
 titulo: Recomendação ancorada (RAG)
 status: aprovada
 branch: spec/s-03-recomendacao
-issue: 
+issue: #4
 adrs: [ADR-001, ADR-002]
 riscos_cobertos: [R1]
 ---

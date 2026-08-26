@@ -21,15 +21,19 @@ gh repo create vendinha-jornada --public --source=. --push
 Público desde o commit 1. O desafio cobra processo visível; esperar o repositório "ficar
 bonito" apaga justamente a parte que tem valor.
 
-## 2. Trocar o placeholder do CODEOWNERS
+## 2. Conferir o CODEOWNERS
 
-`.github/CODEOWNERS` vem com `@SEU-USUARIO-GITHUB`. **Troque antes do primeiro push.**
-Handle inexistente faz o GitHub ignorar a regra inteira sem avisar no PR — o portão fica
-decorativo e você não percebe.
+`.github/CODEOWNERS` aponta para `@caio-moliveira` (preenchido na S-00). Se você forkar ou
+reusar este repositório, **troque antes do primeiro push**: handle inexistente faz o GitHub
+ignorar a regra inteira sem avisar no PR — o portão fica decorativo e você não percebe.
 
 ```bash
-sed -i "s/@SEU-USUARIO-GITHUB/@seu-handle/g" .github/CODEOWNERS
+sed -i "s/@caio-moliveira/@seu-handle/g" .github/CODEOWNERS
+gh api "repos/{owner}/{repo}/collaborators/seu-handle/permission" --jq .permission  # write ou admin
 ```
+
+O dono precisa de permissão de **write** no repositório; num repo de organização, um handle
+sem acesso é ignorado do mesmo jeito que um inexistente.
 
 O que ele protege e por quê: `evals/`, `docs/adr/`, `docs/PRD.md`, `docs/testes.md` e
 `.claude/`. Sem isso, um PR com eval vermelho ficaria verde **editando o caso que reprovou**

@@ -3,7 +3,7 @@ id: S-08
 titulo: Produção (DEV/PROD na VPS)
 status: aprovada
 branch: spec/s-08-deploy
-issue: 
+issue: #9
 adrs: [ADR-008]
 riscos_cobertos: []
 ---

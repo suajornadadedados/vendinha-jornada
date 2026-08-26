@@ -1,28 +1,28 @@
 # CODEOWNERS — os arquivos que definem o gate não podem mudar em silêncio.
 #
-# ATENÇÃO: troque @SEU-USUARIO-GITHUB pelo handle real antes do primeiro push.
-# Handle inexistente faz o GitHub ignorar a regra sem avisar no PR.
+# Handle real, conferido com `gh auth status`. Handle inexistente faz o GitHub
+# ignorar a regra inteira sem avisar no PR — o portão fica decorativo.
 #
 # Por que isso existe: sem CODEOWNERS, um PR com eval vermelho fica verde
 # editando o caso que reprovou. O gate só é real se os arquivos que o definem
 # forem protegidos. (ADR-006)
 
 # A régua de qualidade do agente
-/evals/                     @SEU-USUARIO-GITHUB
+/evals/                     @caio-moliveira
 
 # Decisões aceitas — imutáveis; mudança gera ADR novo
-/docs/adr/                  @SEU-USUARIO-GITHUB
+/docs/adr/                  @caio-moliveira
 
 # O que o produto é, e o que se testa nele
-/docs/PRD.md                @SEU-USUARIO-GITHUB
-/docs/riscos.md             @SEU-USUARIO-GITHUB
-/docs/testes.md             @SEU-USUARIO-GITHUB
+/docs/PRD.md                @caio-moliveira
+/docs/riscos.md             @caio-moliveira
+/docs/testes.md             @caio-moliveira
 
 # O harness: contexto, rituais, skills e o lockfile que as governa
-/CLAUDE.md                  @SEU-USUARIO-GITHUB
-/.claude/                   @SEU-USUARIO-GITHUB
+/CLAUDE.md                  @caio-moliveira
+/.claude/                   @caio-moliveira
 
 # Os portões propriamente ditos
-/.github/                   @SEU-USUARIO-GITHUB
-/.pre-commit-config.yaml    @SEU-USUARIO-GITHUB
-/scripts/                   @SEU-USUARIO-GITHUB
+/.github/                   @caio-moliveira
+/.pre-commit-config.yaml    @caio-moliveira
+/scripts/                   @caio-moliveira

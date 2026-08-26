@@ -21,18 +21,23 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 - `docs/specs/S-XX-*.md` — a spec em execução é a fonte da verdade da sessão
 
 ## Fluxo de trabalho (SDD)
-1. Cada spec = uma branch `spec/s-XX-nome` a partir da `main` + uma sessão nova do Claude Code.
-2. Cada task da spec = um commit (Conventional Commits, em inglês).
-3. Ao final: PR para `main` usando o template, com evidência (screenshot + trace Langfuse).
-4. Verificação independente: sessão NOVA roda `/verificar-spec` antes do merge (ver comando).
-5. Merge por squash. A `main` é protegida; os checks do CI são obrigatórios.
+1. Cada spec tem uma issue no GitHub, linkada no frontmatter (`issue:`). A issue é **ponteiro**
+   para a spec, nunca cópia: requisito e task vivem só na spec. Se as duas discordarem, a spec
+   vence — duas fontes de verdade sobre "o que fazer agora" levam a escolher a errada.
+2. Cada spec = uma branch `spec/s-XX-nome` a partir da `main` + uma sessão nova do Claude Code.
+3. Cada task da spec = um commit (Conventional Commits, em inglês).
+4. Ao final: PR para `main` usando o template, com `Closes #N` e evidência (screenshot + trace
+   Langfuse). O squash merge fecha a issue.
+5. Verificação independente: sessão NOVA roda `/verificar-spec` antes do merge (ver comando).
+6. Merge por squash. A `main` é protegida; os checks do CI são obrigatórios.
 
 ## Convenções
 - Python 3.12, FastAPI, LangGraph, Qdrant, Postgres, Langfuse. Frontend React (Vite).
 - Código e comentários em inglês; documentação de produto em PT-BR.
 - Contratos Pydantic em toda fronteira (rotas, tools, webhooks). Tipos do frontend gerados do OpenAPI.
 - Estado do grafo: IDs, não payloads (pointer-not-payload).
-- Commits: `feat|fix|test|docs|spec|adr|eval|chore(escopo): mensagem`.
+- Commits: `feat|fix|test|docs|spec|adr|eval|ci|chore|refactor(escopo): mensagem`.
+  Escopo obrigatório (`s-04`, `harness`, `deploy`) — a lista de tipos é a de `commitlint.config.js`.
 
 ## Guardrails da sessão
 - NUNCA commitar secrets, certificados, CNPJ ou dados reais. `.env.example` é a referência.

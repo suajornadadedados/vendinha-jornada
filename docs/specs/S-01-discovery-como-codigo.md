@@ -3,7 +3,7 @@ id: S-01
 titulo: Discovery como código
 status: aprovada
 branch: spec/s-01-discovery
-issue: 
+issue: #2
 adrs: [ADR-001, ADR-006]
 riscos_cobertos: [R1, R7]
 ---
