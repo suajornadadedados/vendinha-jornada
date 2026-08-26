@@ -21,7 +21,11 @@ than in a file of its own — same seam, same boundary, and `docs/testes.md` §2
 already maps that seam to this file.
 """
 
+import io
 import logging
+import subprocess
+import sys
+from collections.abc import Iterator
 
 import pytest
 from langfuse.types import (
@@ -31,7 +35,7 @@ from langfuse.types import (
     OtelSpanIdentifier,
 )
 
-from vendinha.observability import RedactingLogFilter, mask_otel_spans
+from vendinha.observability import install_log_redaction, mask_otel_spans
 from vendinha.redaction import KNOWN_VALUES, Redactor, redact
 
 # Keys shaped like the real thing and belonging to nobody. The guardrail in
@@ -220,19 +224,133 @@ def test_a_price_is_not_mistaken_for_personal_data() -> None:
     assert redact(text) == text
 
 
+@pytest.fixture
+def logging_como_o_uvicorn_monta() -> Iterator[io.StringIO]:
+    """Reproduce the logging setup uvicorn actually creates, and restore it after.
+
+    This is the shape that made the previous implementation inert: uvicorn configures
+    its own `uvicorn.*` loggers and leaves the **root with no handlers at all**. A
+    test that attaches the redactor by hand never sees that, which is exactly why the
+    hole survived — the test proved the function worked and said nothing about
+    whether it was ever installed.
+    """
+    root = logging.getLogger()
+    handlers_do_root = root.handlers[:]
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    handlers_do_uvicorn = uvicorn_logger.handlers[:]
+    formatters = {h: h.formatter for h in handlers_do_root + handlers_do_uvicorn}
+
+    root.handlers = []
+    saida = io.StringIO()
+    handler = logging.StreamHandler(saida)
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    uvicorn_logger.handlers = [handler]
+    uvicorn_logger.setLevel(logging.INFO)
+
+    try:
+        yield saida
+    finally:
+        root.handlers = handlers_do_root
+        uvicorn_logger.handlers = handlers_do_uvicorn
+        for h, f in formatters.items():
+            h.setFormatter(f)
+
+
 @pytest.mark.risco("R5")
-def test_log_records_are_redacted_before_they_reach_a_handler(
-    pii_de_teste: dict[str, str], caplog: pytest.LogCaptureFixture
+@pytest.mark.usefixtures("logging_como_o_uvicorn_monta")
+def test_installing_log_redaction_actually_installs_something() -> None:
+    """The reachability half: a no-op installer has to fail this file.
+
+    `install_log_redaction()` returning zero means every log line in the process
+    leaves unredacted, with nothing else in the suite noticing. `docs/riscos.md` R5
+    says traces **and** logs.
+    """
+    assert install_log_redaction() > 0, "nenhum handler foi coberto — a instalacao e inerte"
+
+
+@pytest.mark.risco("R5")
+def test_a_traceback_never_carries_pii_or_credentials_out(
+    pii_de_teste: dict[str, str], logging_como_o_uvicorn_monta: io.StringIO
+) -> None:
+    """The leak nobody chooses: `logger.exception` renders whatever was raised.
+
+    The chat handler logs the exception from the provider SDK or from psycopg, and
+    those carry API keys and DSNs. A filter cannot reach this — the traceback is
+    rendered by the formatter, after every filter has run.
+    """
+    install_log_redaction()
+    cpf = pii_de_teste["cpf"]
+
+    try:
+        raise RuntimeError(f"falha ao autenticar com {FAKE_PROVIDER_KEY} para o cliente {cpf}")
+    except RuntimeError:
+        logging.getLogger("uvicorn.error").exception("falha na sessao %s", "sessao-9")
+
+    escrito = logging_como_o_uvicorn_monta.getvalue()
+    assert "Traceback" in escrito, "o teste precisa do traceback renderizado para valer"
+    assert cpf not in escrito
+    assert FAKE_PROVIDER_KEY not in escrito
+    assert "[CPF]" in escrito and "[CREDENCIAL]" in escrito
+
+
+# Runs in a subprocess on purpose. pytest's logging plugin swaps the root handlers
+# around every test call, so a test that asserts on what reaches stderr through the
+# root ends up measuring pytest instead of the application. A clean interpreter is
+# the only place this path looks like production.
+PROVA_EM_SUBPROCESSO = """
+import logging, sys
+from vendinha.observability import install_log_redaction
+
+# Exactly what uvicorn leaves behind: its own logger configured, root empty.
+logging.getLogger().handlers = []
+uvicorn = logging.getLogger("uvicorn.error")
+uvicorn.handlers = [logging.StreamHandler(sys.stderr)]
+
+install_log_redaction()
+
+try:
+    raise RuntimeError("deu ruim com " + sys.argv[1] + " e o cliente " + sys.argv[2])
+except RuntimeError:
+    logging.getLogger("vendinha.app").exception("falha na sessao %s", "sessao-7")
+"""
+
+
+@pytest.mark.risco("R5")
+def test_the_applications_own_logger_is_covered_too(pii_de_teste: dict[str, str]) -> None:
+    """`vendinha.app` has no handler anywhere, and it is the one that logs exceptions.
+
+    uvicorn configures `uvicorn.*` and nothing else, so a record from our own module
+    propagates to a root with no handlers and falls through to `logging.lastResort`,
+    which has no formatter to wrap. That is the production path of the
+    `logger.exception(...)` in the chat endpoint — the one that receives whatever the
+    provider SDK raised. Covering the named loggers and stopping there leaves exactly
+    this one open, and a falsification proved it: removing the root fallback left this
+    file green until this test existed.
+    """
+    cpf = pii_de_teste["cpf"]
+    resultado = subprocess.run(  # noqa: S603 - argv fixo, escrito neste arquivo
+        [sys.executable, "-c", PROVA_EM_SUBPROCESSO, FAKE_PROVIDER_KEY, cpf],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    escrito = resultado.stderr
+    assert "Traceback" in escrito, "sem traceback renderizado o teste nao prova nada"
+    assert cpf not in escrito
+    assert FAKE_PROVIDER_KEY not in escrito
+    assert "[CPF]" in escrito and "[CREDENCIAL]" in escrito
+
+
+@pytest.mark.risco("R5")
+def test_a_plain_log_line_is_redacted_too(
+    pii_de_teste: dict[str, str], logging_como_o_uvicorn_monta: io.StringIO
 ) -> None:
     """`docs/riscos.md` R5 says traces AND logs. A log file is an export too."""
-    logger = logging.getLogger("vendinha.teste-de-redacao")
-    logger.addFilter(RedactingLogFilter())
+    install_log_redaction()
 
-    with caplog.at_level(logging.INFO, logger=logger.name):
-        logger.info("cliente informou %s", pii_de_teste["cpf"])
-        logger.info("falha ao autenticar com %s", FAKE_PROVIDER_KEY)
+    logging.getLogger("uvicorn.error").info("cliente informou %s", pii_de_teste["cpf"])
 
-    written = "\n".join(record.getMessage() for record in caplog.records)
-    assert pii_de_teste["cpf"] not in written
-    assert FAKE_PROVIDER_KEY not in written
-    assert "[CPF]" in written and "[CREDENCIAL]" in written
+    escrito = logging_como_o_uvicorn_monta.getvalue()
+    assert pii_de_teste["cpf"] not in escrito
+    assert "[CPF]" in escrito

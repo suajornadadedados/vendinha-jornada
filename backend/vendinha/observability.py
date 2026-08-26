@@ -100,42 +100,61 @@ def callback_handler() -> CallbackHandler | None:
         return None
 
 
-class RedactingLogFilter(logging.Filter):
-    """Redaction for logs, because `docs/riscos.md` R5 says traces *and* logs.
+class RedactingFormatter(logging.Formatter):
+    """Wraps another formatter and redacts everything it produces.
 
-    A log file is an export like any other: it is shipped, rotated, and read by
-    people. This runs on the record before a handler formats it, so both the
-    message and its `%s` arguments are covered — an exception traceback carrying a
-    DSN is the usual way a secret reaches a log without anyone deciding to log it.
+    A *formatter* and not a filter, and that is the whole fix. A filter sees
+    `record.msg` and `record.args`; it never sees the traceback, because the
+    traceback is rendered later, by the formatter. And the traceback is the leak
+    that matters: `logger.exception(...)` in the chat handler receives whatever the
+    provider SDK or psycopg raised, and those exceptions carry API keys and DSNs
+    that nobody chose to log.
+
+    Wrapping instead of replacing keeps uvicorn's own format — colours, timestamps,
+    the access log shape — so turning redaction on does not change how the logs read.
     """
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        active = redactor()
+    def __init__(self, inner: logging.Formatter) -> None:
+        super().__init__()
+        self._inner = inner
 
-        if isinstance(record.msg, str):
-            record.msg = active.text(record.msg)
-
-        if isinstance(record.args, dict):
-            record.args = {
-                key: active.text(value) if isinstance(value, str) else value
-                for key, value in record.args.items()
-            }
-        elif record.args:
-            record.args = tuple(
-                active.text(value) if isinstance(value, str) else value for value in record.args
-            )
-
-        return True
+    def format(self, record: logging.LogRecord) -> str:
+        return redactor().text(self._inner.format(record))
 
 
-def install_log_redaction() -> None:
-    """Attach the filter to the root handlers, which is where records actually land.
+def _every_handler() -> list[logging.Handler]:
+    """Every handler currently configured, on the root and on every named logger."""
+    handlers = list(logging.getLogger().handlers)
+    for logger_or_placeholder in logging.Logger.manager.loggerDict.values():
+        if isinstance(logger_or_placeholder, logging.Logger):
+            handlers.extend(logger_or_placeholder.handlers)
+    return handlers
 
-    On the handler and not on a logger: a filter on a logger only sees records
-    logged directly to it, so every `logging.getLogger(__name__)` in a dependency
-    would slip past. Handlers see everything that propagates.
+
+def install_log_redaction() -> int:
+    """Make every configured handler redact. Returns how many were wrapped.
+
+    Returning the count is not decoration: it is what lets a test fail when this
+    function becomes a no-op. The previous version walked `logging.getLogger().handlers`
+    only, and under uvicorn the root logger has **no handlers at all** — uvicorn
+    configures `uvicorn.*` and leaves the root empty. So nothing was installed,
+    records fell through to `logging.lastResort`, and the whole thing was inert while
+    looking configured.
     """
-    log_filter = RedactingLogFilter()
-    for handler in logging.getLogger().handlers:
-        if not any(isinstance(existing, RedactingLogFilter) for existing in handler.filters):
-            handler.addFilter(log_filter)
+    handlers = _every_handler()
+
+    if not logging.getLogger().handlers:
+        # Nothing on the root means records reach `logging.lastResort`, which has no
+        # formatter to wrap. Give the root something that can be redacted, so a
+        # library logging through an unconfigured logger is covered too.
+        fallback = logging.StreamHandler()
+        logging.getLogger().addHandler(fallback)
+        handlers.append(fallback)
+
+    wrapped = 0
+    for handler in handlers:
+        if isinstance(handler.formatter, RedactingFormatter):
+            continue
+        handler.setFormatter(RedactingFormatter(handler.formatter or logging.Formatter()))
+        wrapped += 1
+    return wrapped

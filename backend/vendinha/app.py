@@ -23,6 +23,7 @@ never gets fixed. See D-8 in the spec.
 """
 
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -43,6 +44,7 @@ from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.providers import (
     PROVIDERS,
     credentials_from_environment,
+    effective_credentials,
     models_offered_by,
     resolve_model,
     split_model,
@@ -61,6 +63,10 @@ from vendinha.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Long enough that a conversation never pays for the lookup twice, short enough that
+# a key added straight into the environment shows up without a restart.
+MODELS_CACHE_SECONDS = 300.0
 
 
 async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> AsyncIterator[Any]:
@@ -110,6 +116,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         install_log_redaction()
         app.state.langfuse = callback_handler()
         app.state.graphs = {}
+        app.state.models_cache = None
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -137,15 +144,28 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
 
     async def _credentials(request: Request) -> dict[str, str]:
         """Environment first, stored configuration on top — stored always wins."""
-        merged = credentials_from_environment()
-        merged.update((await request.app.state.store.load()).credentials)
-        return merged
+        return effective_credentials((await request.app.state.store.load()).credentials)
 
     async def _selected_model(request: Request) -> str:
         stored = (await request.app.state.store.load()).selected_model
         return stored or settings.llm_model
 
     async def _allowed_models(request: Request) -> list[str]:
+        """The models this server accepts. Cached, because it is on the chat path.
+
+        Every `POST /chat` that carries a `model` — which is every message the S-07
+        UI will send — used to ask both providers over HTTP before answering. Measured
+        cost: p95 of the first token went from 1.0s to 3.3s, past the 3s target in the
+        spec, plus two vendor calls per conversation turn, which is rate limit and
+        cost surface inside the very risk this spec closes (R6).
+
+        Invalidated on `PUT /config`, so a newly configured provider shows up at once.
+        """
+        agora = time.monotonic()
+        cached = request.app.state.models_cache
+        if cached is not None and agora - cached[0] < MODELS_CACHE_SECONDS:
+            return list(cached[1])
+
         credentials = await _credentials(request)
         offered: list[str] = []
         for provider, api_key in credentials.items():
@@ -157,7 +177,10 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         selected = await _selected_model(request)
         if selected not in offered and selected.split(":")[0] in credentials:
             offered.append(selected)
-        return sorted(set(offered))
+
+        allowed = sorted(set(offered))
+        request.app.state.models_cache = (agora, allowed)
+        return list(allowed)
 
     async def _graph_for(request: Request, model_name: str) -> Any:
         if request.app.state.fixed_graph is not None:
@@ -273,6 +296,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         # a graph was built with. Dropping the cache is cheaper than reasoning about
         # which entries went stale.
         request.app.state.graphs.clear()
+        request.app.state.models_cache = None
         return await read_config(request)
 
     @app.post("/chat")

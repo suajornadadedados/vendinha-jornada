@@ -21,9 +21,14 @@ primeiro trace. Observabilidade no commit 1, não no incidente 1.
       `LANGFUSE_SECRET_KEY`): trace por sessão com tools, custo, latência. Indisponibilidade
       do Langfuse não pode propagar exceção para o atendimento (ADR-010).
       *O texto original dizia `LANGFUSE_HOST`, nome da v3 do SDK. Ver D-1.*
-- [x] REQ-4 Mascaramento de PII (CPF, e-mail, nome) na camada de instrumentação **antes** do envio.
+- [x] REQ-4 Mascaramento de PII na camada de instrumentação **antes** do envio, e em log.
       Com Langfuse Cloud o trace sai da infra, então este REQ é invariante de release: sem o
       teste de redação verde, a spec não fecha (ADR-010, R5).
+      *O texto original dizia "CPF, e-mail, nome" como uma garantia só. São duas, e elas não são
+      equivalentes: **CPF, CNPJ, e-mail, telefone e credencial** têm forma e são mascarados por
+      padrão, sempre; **nome** não tem forma e é mascarado por valor conhecido — o registro
+      existe, e **quem o alimenta é a S-04**, que é onde o nome passa a ser coletado. Até lá,
+      nome sai em claro no trace. Ver D-6.*
 - [x] REQ-5 Budget cap por sessão e timeout por tool via config; exceder = resposta honesta de limite.
       A unidade do cap é **token**, não USD — ver D-2.
 - [x] REQ-6 Provedor de LLM agnóstico com credencial configurável em runtime (ADR-012):
@@ -78,8 +83,9 @@ Cenário: a credencial não volta pela porta da frente
 | Sessões com trace completo | 100% | **13/13** consultadas de volta pela API do Langfuse Cloud |
 | PII em claro em traces/logs | 0 ocorrências | **0** — trace bruto da sessão `auditoria-pii-01` auditado campo a campo |
 | Credencial em claro em traces/logs/respostas | 0 ocorrências | **0** — resposta da API e coluna `bytea` do Postgres inspecionadas |
-| p95 primeiro token | ≤ 3s | **1,31 s** (n=10, mediana 0,95 s) |
-| Suíte | verde | **356 passed**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
+| p95 primeiro token, sem `model` | ≤ 3s | **1,109 s** (n=10, mediana 0,802 s) |
+| p95 primeiro token, com `model` | ≤ 3s | **1,072 s** (n=10, mediana 0,844 s) — era 3,331 s antes do cache; ver D-13 |
+| Suíte | verde | **360 passed**, inclusive em cópia limpa **sem `.env`**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
 
 Medições feitas nesta máquina contra o Postgres do compose, o Langfuse Cloud real e a API da
 Anthropic e da OpenAI reais. Os scripts de medição não entram no repositório: eles não são
@@ -98,10 +104,16 @@ entregável desta spec, e a verificação independente vai querer medir por cont
 | 5 | `feat(s-02): session budget cap and per-tool timeout` | R6, REQ-5 |
 | 6 | `feat(s-02): runtime provider config with encrypted credentials` | REQ-6 |
 | 7 | `ci(s-02): extend typecheck to the test suite` | Ressalva R-4 da verificação da S-01 |
+| — | `fix(s-02): apply the loopback rule per caller…` | D-12: a regra de host medida por quem disca, e o `API_HOST` que estava em `0.0.0.0` |
+| — | `fix(s-02): corrigir os achados da verificação independente` | D-13 |
 
-**9 commits para 7 tasks.** As duas diferenças estão explicadas acima e nenhuma é escopo novo:
-uma é governança que o PO mandou entrar isolada, a outra é o autor consertando a própria
-derrapada de convenção antes que ela virasse padrão.
+**11 commits para 7 tasks.** As quatro diferenças estão explicadas acima e nenhuma é escopo
+novo: uma é governança que o PO mandou entrar isolada, uma é o autor consertando a própria
+derrapada de convenção, e duas são correção — de medição e da verificação independente.
+
+*Esta tabela já parou um commit antes do fim uma vez (NC-5 da verificação), pelo mesmo motivo
+que a NC-4 do relatório da S-01 descreve: ela é escrita antes do último commit existir. Enquanto
+for assim, vai errar de novo — o conserto de verdade é gerá-la do `git log` no fechamento.*
 
 ## Verificação independente
 - Enviar CPF/e-mail de teste e auditar o trace bruto.
@@ -283,6 +295,36 @@ provedor** exposta a qualquer um na mesma rede. Café, coworking, wifi de evento
 Registrado como o que é: a D-8 restringiu por ambiente e eu não olhei por onde o processo
 escutava.
 
+**D-13 — a verificação independente reprovou, e achou dois buracos que eu não veria.**
+O relatório está em `docs/specs/relatorios/S-02-verificacao.md`: **REPROVADO**, 2 achados de
+gravidade Alta, 34 falsificações das quais 3 sobreviveram. Reproduzi os dois achados Alta por
+conta própria antes de aceitar; os dois se confirmam.
+
+| Achado | O que era | Correção |
+|---|---|---|
+| **NC-1** (Alta) | A suíte quebrava fora desta máquina: `4 failed` sem `.env`, que é a condição exata do job `test` do CI — **check obrigatório**. O PR nasceria vermelho. Pior: eu descrevi essa classe de bug num comentário do próprio arquivo e consertei só a instância que me incomodou | Fixture fixando `CONFIG_ENCRYPTION_KEY` para o arquivo todo. Aceite verificado do jeito que o revisor pediu: `git archive HEAD` para diretório sem `.env`, suíte verde lá |
+| **NC-2** (Alta) | **A metade "logs" do R5 nunca funcionou.** `install_log_redaction()` percorria `logging.getLogger().handlers`, e sob uvicorn o root **não tem handler nenhum** — zero filtro instalado. E filtro não alcança traceback, que é renderizado depois, pelo formatter: `logger.exception` no endpoint recebe exceção do SDK do fornecedor e do psycopg, que carregam chave e DSN. Medido: CPF e chave em claro | Virou `RedactingFormatter`, que embrulha o formatter de cada handler configurado — no root e em cada logger nomeado — e cobre o traceback. `install_log_redaction()` devolve quantos cobriu, para um teste reprovar quando ela virar no-op |
+| **NC-3** (Média) | REQ-4 dizia "nome" e ficava marcado `[x]` com nome saindo em claro | Texto emendado nomeando as duas garantias, como o REQ-3 foi |
+| **NC-5 / NC-7** (Baixa) | Tabela de commits um commit atrás; "treze testes-âncora" onde são 21 | Corrigidos |
+| **NC-6** (Média) | O commit `dca2419` tirou o deny de `.env.*` para liberar o `.env.example` — e liberou junto `.env.local`, `.env.prod`. O `.gitignore` ignora `.env.*` com exceção do exemplo; as duas garantias que o próprio `.env.example` descreve como pareadas deixaram de estar | Deny enumerado: `.env` e as variantes reais, sem cobrir o exemplo |
+| **R-1** (ressalva) | Inverter "banco vence ambiente" **não quebrava nenhum teste** — o teste com esse nome afirmava sobre o campo `source`, não sobre a chave entregue ao modelo | A precedência virou `effective_credentials()`, função pura, testada onde decide. Inverter agora reprova |
+| **R-2** (ressalva) | p95 do primeiro token **com** o campo `model` — o caminho que a S-07 vai usar — era **3,331 s**, acima do alvo. `_allowed_models()` consultava os fornecedores a cada requisição | Cache com TTL, invalidado no `PUT /config`. Medido depois: **1,072 s** com `model` e 1,109 s sem |
+
+**O que aprendi sobre o meu próprio método, e vale mais que os consertos.** Os dois achados Alta
+têm a mesma forma: eu escrevi o comentário que descreve o defeito e consertei só a instância na
+minha frente. Na NC-1 o aviso está no arquivo, em inglês, três linhas acima dos quatro testes que
+quebram. Na NC-2 o docstring nomeia o traceback como *o caso que o filtro existe para cobrir*, e
+o filtro nunca tocou em traceback. Não é falta de conhecimento — é o autor não voltando para
+varrer a própria classe de erro. É exatamente o que a D-5 da S-01 registrou (*"o autor não
+enxerga a segunda ocorrência do próprio achado"*) e eu repeti com o achado na mão.
+
+**NC-4 foi deliberadamente adiada.** Ela pede reconciliar `ADR-005`, o `.claude/commands/verificar-spec.md`
+e a issue #3 com o `CLAUDE.md` sobre quando a verificação acontece. O revisor tem razão no
+diagnóstico — esta sessão precisou de uma exceção escrita ao ritual para executá-lo. Mas a
+correção é governança e vai em **PR próprio de harness**, junto com o subagente `verificador-de-spec`
+versionado que o PO aprovou: enfiar mudança de ritual dentro do PR de uma spec é o padrão que
+virou a ressalva R-9 da S-01. Fica registrada aqui como aberta e endereçada.
+
 ## Ressalvas herdadas da verificação da S-01
 
 O relatório da S-01 deixou cinco ressalvas registradas sem correção. Duas caíam nesta spec e
@@ -292,15 +334,16 @@ foram fechadas; as outras três continuam abertas, e ficam registradas aqui para
 | Ressalva | Estado |
 |---|---|
 | **R-4** — `tests/` fora do `mypy` | **Fechada.** O `typecheck` cobre a suíte, no `make` e no CI. Não foi cosmético: o portão mais largo achou 35 erros reais, entre eles um `dict` sem parâmetro em `tests/security/conftest.py` e um `Returning Any` numa fixture. O pacote `vendinha` ganhou `py.typed` — sem o marcador, todo `import` do produto dentro de `tests/` virava `Any` e a suíte estaria dentro do portão sem aprender nada com isso |
-| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** Os treze testes-âncora da S-02 declaram o marker: `21 passed, 335 deselected`. O comando do `docs/testes.md` §6 deixou de ser decorativo |
+| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** Os testes-âncora da S-02 declaram o marker: **21** (R5: 10, R6: 7, R9: 4). O comando do `docs/testes.md` §6 deixou de ser decorativo |
 | **R-3** — fixture ↔ seed continua acordo humano | Aberta. A S-02 não toca no catálogo |
 | **R-5** — corpo do ADR-003 ainda diz "integração" | Aberta. É o preço da imutabilidade do ADR, e a nota de cabeçalho corrige |
 | **R-10** — seed malformado quebra a coleta do pytest com traceback | Aberta. Nenhum arquivo novo desta spec constrói dado no import de módulo, então a spec não piorou o caso |
 
 ## Definition of Done
 - [x] Todos os requisitos com evidência medida nesta spec (REQ-1 a REQ-6)
-- [x] Suíte local verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (356 passed)
+- [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (360 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
 - [x] Os três riscos declarados com teste-âncora verde e falsificado: R5, R6, R9
+- [x] Achados da verificação independente corrigidos (D-13); NC-4 adiada para o PR de harness, com o motivo registrado
 - [ ] CI verde no PR
 - [ ] PR com evidência (trace Langfuse) e `Closes #3`
 - [ ] Relatório /verificar-spec anexado com veredito APROVADO

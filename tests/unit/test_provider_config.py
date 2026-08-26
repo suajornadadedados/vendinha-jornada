@@ -32,7 +32,7 @@ from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
 from vendinha.graph import build_graph
-from vendinha.providers import PROVIDERS, Provider
+from vendinha.providers import PROVIDERS, Provider, effective_credentials
 
 FAKE_KEY = "sk-ant-api03-" + "Z" * 40
 
@@ -51,6 +51,24 @@ def no_ambient_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """The developer's real `.env` must not decide what these tests observe."""
     for provider in PROVIDERS.values():
         monkeypatch.delenv(provider.env_var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin an encryption key for the whole file, from the test and not from the machine.
+
+    Four tests here write a credential, and `PUT /config` refuses that with 503 when
+    `CONFIG_ENCRYPTION_KEY` is missing. Leaving it to the environment made them pass
+    on the author's machine and fail everywhere else — including the CI job, which
+    runs without a `.env` and is a required check.
+
+    Empty string rather than a real absence when the test wants "not configured":
+    `Settings` reads the repository `.env` as a second source, so deleting the
+    variable from the process environment does not make it absent, it makes the file
+    win. `test_the_config_response_says_whether_encryption_is_ready` overrides this
+    fixture on purpose, and is the only test here that may.
+    """
+    monkeypatch.setenv("CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 
 @pytest.fixture
@@ -162,6 +180,33 @@ def test_a_stored_credential_wins_over_the_environment(
     )
     assert depois["source"] == "banco"
     assert depois["hint"].endswith(FAKE_KEY[-4:])
+
+
+def test_the_stored_key_is_the_one_the_model_actually_gets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-012: o que está no banco vence o que está no ambiente — na chave, não na vitrine.
+
+    Testado na função que decide, e não pela resposta do `/config`. O teste anterior
+    afirmava sobre o campo `source`, que `read_config` calcula direto do store — então
+    inverter a precedência de verdade deixava a suíte verde. O modo de falha é o pior
+    possível: a UI diz `source: "banco"`, mostra a dica da chave nova, e o processo
+    continua gastando na chave velha do `.env`.
+    """
+    do_ambiente = "sk-ant-ambiente-" + "x" * 20
+    monkeypatch.setenv("ANTHROPIC_API_KEY", do_ambiente)
+
+    assert effective_credentials({})["anthropic"] == do_ambiente, (
+        "sem nada gravado, o ambiente vale"
+    )
+    assert effective_credentials({"anthropic": FAKE_KEY})["anthropic"] == FAKE_KEY
+
+    # Provedor que só existe no ambiente continua disponível: o ambiente é fallback,
+    # não é lista de exclusão.
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-" + "y" * 20)
+    resolvidas = effective_credentials({"anthropic": FAKE_KEY})
+    assert resolvidas["anthropic"] == FAKE_KEY
+    assert resolvidas["openai"].startswith("sk-openai-")
 
 
 def test_an_unknown_provider_and_a_malformed_model_are_refused(client: TestClient) -> None:

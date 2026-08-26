@@ -19,7 +19,7 @@ a declared model, not one chosen per request.
 import asyncio
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -75,6 +75,20 @@ def credentials_from_environment() -> dict[str, str]:
         if value:
             found[name] = value
     return found
+
+
+def effective_credentials(stored: Mapping[str, str]) -> dict[str, str]:
+    """A credencial que o processo vai usar de verdade: ambiente por baixo, banco por cima.
+
+    ADR-012 chama isso de invariante, e ele precisa morar numa função — não espalhado
+    dentro de um endpoint. Quando a decisão vive no meio de uma rota, o teste acaba
+    afirmando sobre o que a rota *mostra* (o campo `source`) em vez de sobre a chave
+    que o modelo recebe. Inverter os dois lados aqui reprova um teste; inverter no
+    endpoint não reprovava nenhum.
+    """
+    merged = credentials_from_environment()
+    merged.update(stored)
+    return merged
 
 
 def split_model(name: str) -> tuple[str, str]:
