@@ -1,7 +1,7 @@
 ---
 id: S-00
 titulo: Fundação do repositório
-status: em-execucao
+status: em-revisao
 branch: spec/s-00-fundacao
 issue: #1
 adrs: [ADR-005, ADR-008]
@@ -15,15 +15,15 @@ Nascer com o gate antes do conteúdo: repo protegido, harness, CI esqueleto e am
 que sobe em um comando.
 
 ## Requisitos
-- [ ] REQ-1 Harness completo versionado (CLAUDE.md, comandos, skills, templates, docs normativas).
-- [ ] REQ-2 `docker compose up` sobe Postgres e Qdrant com healthchecks verdes. Observabilidade
+- [x] REQ-1 Harness completo versionado (CLAUDE.md, comandos, skills, templates, docs normativas).
+- [x] REQ-2 `docker compose up` sobe Postgres e Qdrant com healthchecks verdes. Observabilidade
       é Langfuse Cloud (ADR-010): entra por variável de ambiente, não por contêiner.
-- [ ] REQ-3 CI com jobs `commitlint`, `lint`, `typecheck`, `test` (verdes mesmo com código mínimo).
-- [ ] REQ-4 `main` protegida: PR obrigatório, checks obrigatórios, squash-only (ver docs/workshop/github-setup.md).
-- [ ] REQ-5 `.env.example` exaustivo e comentado; `Makefile` com `up`, `test`, `lint`, `evals`.
-- [ ] REQ-6 Cada spec tem issue no GitHub, linkada no frontmatter (`issue:`); a issue é ponteiro
+- [x] REQ-3 CI com jobs `commitlint`, `lint`, `typecheck`, `test` (verdes mesmo com código mínimo).
+- [ ] REQ-4 (**pendente — ação do PO no GitHub, não do agente**) `main` protegida: PR obrigatório, checks obrigatórios, squash-only (ver docs/workshop/github-setup.md).
+- [x] REQ-5 `.env.example` exaustivo e comentado; `Makefile` com `up`, `test`, `lint`, `evals`.
+- [x] REQ-6 Cada spec tem issue no GitHub, linkada no frontmatter (`issue:`); a issue é ponteiro
       para a spec, nunca cópia dos requisitos. Convenção registrada no `CLAUDE.md`.
-- [ ] REQ-7 A suíte coleta ao menos um teste real a partir do momento em que `backend/` existe:
+- [x] REQ-7 A suíte coleta ao menos um teste real a partir do momento em que `backend/` existe:
       rastreabilidade dos casos de `evals/` contra `evals/schema/caso.schema.json`.
 
 ## Fora de escopo
@@ -48,10 +48,15 @@ Cenário: quickstart em máquina limpa
 ```
 
 ## Métricas de sucesso
-| Métrica | Alvo | Como medir |
-|---|---|---|
-| Tempo clone→serviços healthy | ≤ 10 min | Cronometrado em clone limpo |
-| CI do PR desta spec | verde | GitHub Actions |
+| Métrica | Alvo | Como medir | Medido |
+|---|---|---|---|
+| Tempo clone→serviços healthy | ≤ 10 min | Cronometrado em clone limpo | **7 s** |
+| CI do PR desta spec | verde | GitHub Actions | a confirmar no PR |
+
+Medição do clone limpo: `git clone` da branch em diretório novo, `cp .env.example .env`,
+`docker compose up -d --wait`. O `--wait` só retorna quando os healthchecks passam — é o que
+torna o número uma medição e não uma estimativa. As portas do host foram trocadas no `.env`
+por causa da D-6; nenhuma outra alteração.
 
 ## Verificação independente
 - Clonar em diretório limpo e executar o quickstart cronometrando.
