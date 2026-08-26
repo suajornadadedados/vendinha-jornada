@@ -1,7 +1,7 @@
 # Ambiente local da Vendinha: só o que guarda estado.
 #
 # Observabilidade NÃO está aqui. Desde o ADR-010 o Langfuse é Cloud: entra por
-# variável de ambiente (LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
+# variável de ambiente (LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
 # não por contêiner. Ver .env.example.
 #
 # O deploy de DEV/PROD na VPS é outra coisa e chega na S-08 (ADR-008), em
