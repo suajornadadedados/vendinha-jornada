@@ -110,8 +110,12 @@ infraestrutura de verdade é verificado à mão no `/verificar-spec`.
 
 | Secret | Para quê | Necessário a partir de |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | runner de evals | S-06 |
-| `LANGFUSE_HOST` · `LANGFUSE_PUBLIC_KEY` · `LANGFUSE_SECRET_KEY` | observabilidade em Langfuse Cloud (ADR-010) | S-02 |
+| `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` | runner de evals; ao menos uma, e a que existir define o provedor (ADR-012) | S-06 |
+| `LANGFUSE_BASE_URL` · `LANGFUSE_PUBLIC_KEY` · `LANGFUSE_SECRET_KEY` | observabilidade em Langfuse Cloud (ADR-010) | S-02 |
+
+> `LANGFUSE_BASE_URL` era `LANGFUSE_HOST` até a S-02: o SDK v4 do Langfuse renomeou a
+> variável. Quem já tinha o secret com o nome antigo precisa criá-lo com o novo — o job
+> `evals` fica pulado até a S-06, então nada quebra no intervalo.
 
 Nenhum deles entra no repositório. `.env` está no `.gitignore` e a leitura pelo agente está
 negada em `.claude/settings.json` — são garantias diferentes: o `.gitignore` impede o *commit*,

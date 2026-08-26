@@ -1,7 +1,7 @@
 ---
 id: S-00
 titulo: Fundação do repositório
-status: em-revisao
+status: concluida
 branch: spec/s-00-fundacao
 issue: #1
 adrs: [ADR-005, ADR-008, ADR-009, ADR-010]
@@ -19,7 +19,12 @@ que sobe em um comando.
 - [x] REQ-2 `docker compose up` sobe Postgres e Qdrant com healthchecks verdes. Observabilidade
       é Langfuse Cloud (ADR-010): entra por variável de ambiente, não por contêiner.
 - [x] REQ-3 CI com jobs `commitlint`, `lint`, `typecheck`, `test` (verdes mesmo com código mínimo).
-- [ ] REQ-4 (**pendente — ação do PO no GitHub, não do agente**) `main` protegida: PR obrigatório, checks obrigatórios, squash-only (ver docs/workshop/github-setup.md).
+- [x] REQ-4 `main` protegida: PR obrigatório, checks obrigatórios, squash-only
+      (ver docs/workshop/github-setup.md). Era ação do PO no GitHub, não do agente; medido
+      na abertura da S-02 (2026-08-26) via `gh api`: `protected: true`, `strict: true`,
+      review de PR exigido, force-push negado, sete checks obrigatórios (`commitlint`,
+      `detect`, `lint`, `test`, `secrets`, `skills-drift`, `typecheck`) e merge apenas por
+      squash (`allow_merge_commit: false`, `allow_rebase_merge: false`).
 - [x] REQ-5 `.env.example` exaustivo e comentado; `Makefile` com `up`, `test`, `lint`, `evals`.
 - [x] REQ-6 Cada spec tem issue no GitHub, linkada no frontmatter (`issue:`); a issue é ponteiro
       para a spec, nunca cópia dos requisitos. Convenção registrada no `CLAUDE.md`.
@@ -170,7 +175,8 @@ fora do caminho excluído, o scanner sai com exit 1. A versão do hook local foi
 para não divergirem as regras.
 
 ## Definition of Done
-- [ ] Todos os requisitos CONFORMES no relatório de verificação
+- [x] Todos os requisitos CONFORMES no relatório de verificação (REQ-4 fechado depois do
+      relatório, quando a proteção da `main` foi configurada — medida acima)
 - [x] CI verde: `commitlint`, `detect`, `lint`, `secrets`, `skills-drift`, `test`,
       `typecheck`. O job `evals` permanece *skipped* — o runner é entregável da S-06, e
       exigir verde de um job que não pode existir seria requisito insatisfazível.

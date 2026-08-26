@@ -12,6 +12,7 @@ ever be charged.
 """
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 @pytest.fixture
-def produto() -> dict:
+def produto() -> dict[str, Any]:
     """One catalogue row, shaped like what a read-only tool returns.
 
     Price is Decimal on purpose: money is never a float in this project, and a
@@ -40,7 +41,7 @@ def produto() -> dict:
 
 
 @pytest.fixture
-def catalogo(produto: dict) -> list[dict]:
+def catalogo(produto: dict[str, Any]) -> list[dict[str, Any]]:
     """A minimal catalogue: enough to test recommendation and totals, no more."""
     return [
         produto,
@@ -67,7 +68,7 @@ def catalogo(produto: dict) -> list[dict]:
 
 
 @pytest.fixture
-def cliente() -> dict:
+def cliente() -> dict[str, Any]:
     """Synthetic customer data. Never a real CPF, in any file, ever.
 
     123.456.789-09 is a well-known test number that passes the check digits, so

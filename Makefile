@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs test lint format typecheck evals-check evals hooks
+.PHONY: help up down logs db-setup api test lint format typecheck evals-check evals hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -17,18 +17,25 @@ down:  ## Derruba os serviços (volumes preservados)
 logs:  ## Segue o log dos serviços
 	docker compose logs -f
 
+db-setup:  ## Cria as tabelas do checkpointer do LangGraph (rode uma vez após `make up`)
+	cd backend && uv run python -m vendinha.db
+
+api:  ## Sobe a API (precisa de `make up` e `make db-setup` antes)
+	cd backend && uv run python -m vendinha
+
 test:  ## Suíte completa: unit + security
 	bash scripts/run-tests.sh
 
-lint:  ## Lint e checagem de formatação (uma régua só, na raiz)
-	ruff check .
-	ruff format --check .
+lint:  ## Lint e checagem de formatação (uma régua só, e a MESMA do CI)
+	uv run --project backend ruff check .
+	uv run --project backend ruff format --check .
 
 format:  ## Aplica a formatação
-	ruff format .
+	uv run --project backend ruff format .
 
-typecheck:  ## mypy strict no backend
+typecheck:  ## mypy strict no backend E na suite de testes
 	cd backend && uv run mypy .
+	uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q

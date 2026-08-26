@@ -53,7 +53,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install ruff
+      # Versao FIXA, e igual a do grupo dev do backend. Com `pip install ruff`
+      # solto, a regua do CI anda sozinha: um `ruff` mais novo traz regra nova e
+      # reprova um PR que passou na maquina de quem escreveu, sem nada ter mudado
+      # no codigo. Aconteceu na S-02 com a UP047. Ao subir a versao, suba nos dois
+      # lugares no mesmo commit.
+      - run: pip install ruff==0.16.4
       - run: ruff check .
       - run: ruff format --check .
 
@@ -117,6 +122,14 @@ jobs:
       - run: uv run mypy .
         working-directory: backend
 
+      # A suite tambem entra no portao desde a S-02 (ressalva R-4 da verificacao
+      # da S-01): havia tipagem escrita em tests/ que nada verificava. Roda da
+      # raiz e com --explicit-package-bases porque tests/unit/conftest.py e
+      # tests/security/conftest.py tem o mesmo nome de modulo — o mesmo motivo
+      # pelo qual o pytest usa --import-mode=importlib.
+      - name: mypy na suite
+        run: uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
+
   evals:
     # Vira required check a partir da S-06, junto com o código que o deixa verde.
     # Requer secret ANTHROPIC_API_KEY. Observabilidade é Langfuse Cloud (ADR-010).
@@ -136,6 +149,7 @@ jobs:
         working-directory: backend
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}

@@ -1,20 +1,55 @@
-# Projeto de produto. Nasce como scaffold de build na S-00: pyproject e
-# configuração de mypy, sem rota, sem grafo e sem tool — o "fora de escopo" da
-# S-00 é explícito quanto a isso.
+# Projeto de produto. Nasceu como scaffold de build na S-00 e ganhou código na
+# S-02: API, grafo, observabilidade e limites de custo.
 #
-# Existe desde já porque três arquivos de infra dependem da pasta: o job
-# `typecheck` do CI, o skip de `tests/conftest.py` e a regra de suíte vazia de
-# `scripts/run-tests.sh`. Lint e format vêm do ruff.toml da raiz — uma régua só.
+# Lint e format vêm do ruff.toml da raiz — uma régua só, um lugar só.
 
 [project]
 name = "vendinha"
 version = "0.1.0"
 description = "Agente de vendas do empório mineiro digital"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    # API. sse-starlette em vez de StreamingResponse à mão: ele trata
+    # desconexão do cliente e heartbeat, que é justamente o que se erra ao
+    # escrever SSE na mão e só se descobre com o navegador aberto.
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.34",
+    "sse-starlette>=3.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+
+    # Agente. `langchain` entra pelo `init_chat_model`: é ele que faz o código
+    # não conhecer fornecedor (ADR-012). Os pacotes de provedor são o que
+    # habilita cada um — adicionar um terceiro é uma linha aqui.
+    "langchain>=1.0",
+    "langchain-anthropic>=1.0",
+    "langchain-openai>=1.0",
+    "langgraph>=1.2",
+    "langgraph-checkpoint-postgres>=3.1",
+
+    # Observabilidade. v4 é reescrita sobre OpenTelemetry e é a que documenta
+    # `mask_otel_spans`, o hook onde a redação de PII acontece antes do export.
+    "langfuse>=4.14",
+
+    # Postgres: domínio, checkpointer do grafo e a configuração cifrada.
+    "psycopg[binary,pool]>=3.2",
+    "cryptography>=43",
+]
 
 [dependency-groups]
-dev = ["mypy>=1.13"]
+dev = [
+    "mypy>=1.13",
+    # A suíte vive em tests/, na raiz, e o `typecheck` passou a cobri-la na S-02
+    # (ressalva R-4 da verificação da S-01). Para tipar aqueles arquivos o mypy
+    # precisa das mesmas dependências que eles importam.
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "types-PyYAML>=6.0",
+    "jsonschema>=4.21",
+    "types-jsonschema>=4.26.0.20260518",
+    "ruff==0.16.4",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,6 +57,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vendinha"]
+# PEP 561. Without this marker mypy refuses to read the package's own types from
+# outside it, and every `from vendinha... import` in tests/ becomes `Any` — the
+# suite would be inside the type gate and learn nothing from being there.
+artifacts = ["vendinha/py.typed"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -37,3 +76,6 @@ disallow_any_generics = true
 # Dependências sem stubs ganham exceção nomeada aqui, uma a uma. Nunca global.
 module = []
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

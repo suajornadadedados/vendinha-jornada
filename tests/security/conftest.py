@@ -10,6 +10,7 @@ layers pick it up.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -18,12 +19,13 @@ EVALS = Path(__file__).resolve().parents[2] / "evals"
 ADVERSARIAL = EVALS / "adversarial"
 
 
-def _load(path: Path) -> dict:
+def _load(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+        caso: dict[str, Any] = yaml.safe_load(handle)
+        return caso
 
 
-def _casos() -> list[dict]:
+def _casos() -> list[dict[str, Any]]:
     return [_load(p) for p in sorted(ADVERSARIAL.glob("*.yaml"))]
 
 
@@ -45,7 +47,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 @pytest.fixture(scope="session")
-def casos_adversariais() -> list[dict]:
+def casos_adversariais() -> list[dict[str, Any]]:
     """All adversarial cases at once, for tests that reason across the corpus."""
     casos = _casos()
     assert casos, "evals/adversarial/ is empty — the adversarial suite has no corpus"
@@ -53,7 +55,7 @@ def casos_adversariais() -> list[dict]:
 
 
 @pytest.fixture(scope="session")
-def payloads_de_injecao(casos_adversariais: list[dict]) -> list[str]:
+def payloads_de_injecao(casos_adversariais: list[dict[str, Any]]) -> list[str]:
     """Every customer utterance from the adversarial corpus, flattened.
 
     Use to assert that no payload reaches a side effect — never to assert on the
@@ -69,7 +71,7 @@ def payloads_de_injecao(casos_adversariais: list[dict]) -> list[str]:
 
 
 @pytest.fixture(scope="session")
-def tools_proibidas(casos_adversariais: list[dict]) -> set[str]:
+def tools_proibidas(casos_adversariais: list[dict[str, Any]]) -> set[str]:
     """Tools no adversarial case may reach.
 
     Some of these — `aplicar_desconto` — are not registered on any subagent at

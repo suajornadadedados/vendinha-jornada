@@ -29,6 +29,12 @@ ignore = [
     "E501",  # comprimento de linha é do formatter, não do lint
 ]
 
+[lint.isort]
+# `vendinha` vive em backend/, e a suite vive em tests/ — sem esta linha o ruff
+# nao reconhece o pacote do projeto como primeira parte e reordena os imports de
+# um jeito que ele mesmo depois reprova.
+known-first-party = ["vendinha"]
+
 [lint.per-file-ignores]
 # Em teste, assert é a ferramenta, não um problema (S101).
 "tests/**" = ["S101"]

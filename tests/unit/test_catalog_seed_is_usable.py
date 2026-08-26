@@ -22,6 +22,7 @@ No network, no agent, no API key — it only reads files already in the repo.
 import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -53,12 +54,12 @@ def _seed_files() -> list[Path]:
     return sorted(CATALOGO.glob("*.json"))
 
 
-def _load(path: Path) -> object:
+def _load(path: Path) -> Any:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _all_products() -> list[tuple[Path, dict]]:
+def _all_products() -> list[tuple[Path, dict[str, Any]]]:
     return [(path, item) for path in _seed_files() for item in _load(path)]
 
 
@@ -82,7 +83,9 @@ def test_the_seed_has_enough_products() -> None:
 
 
 @pytest.mark.parametrize(("seed_file", "produto"), PRODUCTS, ids=PRODUCT_IDS)
-def test_every_product_matches_the_normative_schema(seed_file: Path, produto: dict) -> None:
+def test_every_product_matches_the_normative_schema(
+    seed_file: Path, produto: dict[str, Any]
+) -> None:
     """`data/catalogo/schema/produto.schema.json` is normative (data/catalogo/README.md)."""
     validator = Draft202012Validator(_load(SCHEMA))
     errors = sorted(validator.iter_errors(produto), key=lambda e: list(e.path))
@@ -107,7 +110,7 @@ def test_no_product_id_is_used_twice() -> None:
 
 
 @pytest.mark.parametrize("produto", PRODUCT_ROWS, ids=PRODUCT_IDS)
-def test_every_price_survives_decimal_without_a_float(produto: dict) -> None:
+def test_every_price_survives_decimal_without_a_float(produto: dict[str, Any]) -> None:
     """R1 — money is Decimal, never float (docs/testes.md section 4).
 
     The schema already pins the string format. This goes one step further and
@@ -130,7 +133,7 @@ def test_every_price_survives_decimal_without_a_float(produto: dict) -> None:
 
 
 @pytest.mark.parametrize("produto", PRODUCT_ROWS, ids=PRODUCT_IDS)
-def test_every_product_carries_enough_attributes_to_be_recommended(produto: dict) -> None:
+def test_every_product_carries_enough_attributes_to_be_recommended(produto: dict[str, Any]) -> None:
     """The S-01 success metric: 100% of products with price and >= 4 attributes.
 
     A product with a name and a price is an e-commerce row. What makes the agent
@@ -145,7 +148,9 @@ def test_every_product_carries_enough_attributes_to_be_recommended(produto: dict
 
 
 @pytest.mark.parametrize(("seed_file", "produto"), PRODUCTS, ids=PRODUCT_IDS)
-def test_product_type_matches_the_file_it_lives_in(seed_file: Path, produto: dict) -> None:
+def test_product_type_matches_the_file_it_lives_in(
+    seed_file: Path, produto: dict[str, Any]
+) -> None:
     """A cheese filed under cafes.json is found by the wrong search, or not at all."""
     esperado = {
         "queijos": {"queijo"},
