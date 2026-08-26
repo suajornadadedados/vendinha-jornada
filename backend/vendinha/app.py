@@ -31,7 +31,7 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, status
 from langchain.embeddings import init_embeddings
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
 from sse_starlette.sse import EventSourceResponse
 
@@ -448,6 +448,15 @@ def create_app(
                         stream_mode="messages",
                     )
                     async for chunk, _ in _bounded_first_token(token_stream, timeout):
+                        # Só o que o ATENDENTE diz. `stream_mode="messages"` emite
+                        # também os `ToolMessage`, e o retorno das tools desta spec
+                        # é JSON — sem este filtro o cliente recebia o payload
+                        # inteiro do catálogo no meio da frase, com nome de tool e
+                        # estrutura interna junto. `adversarial-004` e
+                        # `adversarial-006` reprovam uma execução que revela
+                        # qualquer um dos dois.
+                        if not isinstance(chunk, AIMessage | AIMessageChunk):
+                            continue
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.
