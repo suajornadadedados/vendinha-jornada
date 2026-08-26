@@ -151,6 +151,47 @@ com `warn_unreachable` ligado, um ramo diferente em cada plataforma vira erro.
 Verificado ponta a ponta contra o Postgres do compose: dois processos separados retomando o
 mesmo `session_id`, e a API real respondendo em SSE com o modelo real.
 
+**D-6 — o REQ-4 pede mascarar "nome", e não existe versão honesta disso por padrão.**
+CPF, CNPJ, e-mail, telefone e credencial têm forma, então um padrão os encontra em qualquer
+texto, de qualquer origem. **Nome não tem forma.** Não existe regex para "isto é nome de
+pessoa", e prometer detecção genérica seria vender um NER que este projeto não tem.
+
+O que foi entregue são duas garantias diferentes, e a spec passa a nomear as duas:
+
+| Mecanismo | Garantia | Alcance |
+|---|---|---|
+| Por padrão | absoluta, sem ninguém registrar nada | CPF, CNPJ, e-mail, telefone, credencial |
+| Por valor conhecido | a partir do momento em que a sessão coletou o dado | nome |
+
+O registro é **do processo, não da sessão** — e isso também é decisão. A redação que importa roda
+na thread de export do OpenTelemetry, que não tem contexto de requisição e nunca vai ter: um
+`contextvar` gravado na thread da requisição simplesmente não está lá quando o lote embarca. Um
+registro que o export consegue ler é a única coisa que faz a garantia valer **na fronteira**, que
+é o que um teste de `security` existe para provar. O preço é mascarar demais (um nome coletado
+numa sessão some das outras enquanto estiver lembrado) e é limitado por tamanho, para um processo
+longevo não virar vazamento de memória com uma lista de clientes dentro.
+
+Na S-02 nada é coletado, então o nome aparece em claro no trace — **verificado, e registrado
+aqui de propósito**. A auditoria do trace real da sessão `auditoria-pii-01` no Langfuse Cloud:
+CPF, CPF sem pontuação, e-mail e telefone **ausentes**, com `[CPF]`, `[EMAIL]` e `[TELEFONE]` no
+lugar; `Marta` presente. Quem coleta o nome é a S-04, e é ela que chama `KNOWN_VALUES.remember`.
+
+**D-7 — pendurar é pior que dar erro, e foi o que aconteceu.**
+O startup da API travou em *"Waiting for application startup"* com o Postgres saudável. Causa: o
+`DATABASE_URL` do `.env` usava `localhost`, que no Windows resolve para `::1` antes de
+`127.0.0.1` — e o compose publica só em IPv4. A libpq não recusa: ela **espera**, sem timeout
+default.
+
+Duas correções, e a segunda é a que importa:
+
+1. o `.env.example` passou a usar `127.0.0.1` (feito na task 1, antes de o bug aparecer);
+2. `open_checkpointer` agora injeta `connect_timeout=5` em qualquer DSN que não traga um.
+
+O detalhe que vale registrar: com o timeout, o `localhost` **passa a funcionar** — a libpq
+desiste do `::1` e cai para IPv4. O bound converteu um travamento infinito num sucesso lento, e
+sucesso lento é o bug mais difícil de notar: cinco segundos em toda conexão, sem nenhum erro
+para investigar. Por isso o `.env.example` fixa `127.0.0.1` em vez de confiar no fallback.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)

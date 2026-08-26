@@ -23,11 +23,13 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from langchain_core.messages import HumanMessage
+from langfuse import propagate_attributes
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.config import get_settings
 from vendinha.db import open_checkpointer
 from vendinha.graph import build_graph, session_config
+from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.providers import resolve_model
 from vendinha.schemas import (
     ChatRequest,
@@ -53,6 +55,11 @@ def create_app(graph: Any | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # After uvicorn has configured logging, never before: the filter attaches to
+        # the root handlers, and there are none until the server sets them up.
+        install_log_redaction()
+        app.state.langfuse = callback_handler()
+
         if graph is not None:
             app.state.graph = graph
             yield
@@ -79,25 +86,38 @@ def create_app(graph: Any | None = None) -> FastAPI:
         session_id = payload.session_id or uuid.uuid4().hex
         graph = request.app.state.graph
 
+        handler = getattr(request.app.state, "langfuse", None)
+        config = session_config(session_id)
+        if handler is not None:
+            config = {**config, "callbacks": [handler]}
+
         async def stream() -> AsyncIterator[dict[str, str]]:
             yield {
                 "event": "session",
                 "data": SessionEvent(session_id=session_id).model_dump_json(),
             }
             try:
-                async for chunk, _ in graph.astream(
-                    {"session_id": session_id, "messages": [HumanMessage(content=payload.message)]},
-                    config=session_config(session_id),
-                    stream_mode="messages",
-                ):
-                    # `.text` flattens content blocks: a provider that answers with
-                    # a list of typed blocks and one that answers with a plain
-                    # string have to look the same to the client.
-                    if chunk.text:
-                        yield {
-                            "event": "token",
-                            "data": TokenEvent(text=chunk.text).model_dump_json(),
-                        }
+                # `propagate_attributes` is what makes every observation under this
+                # turn carry the session id, so the trace is findable by the same
+                # string the customer's client holds — and the same one the
+                # checkpointer uses as thread_id.
+                with propagate_attributes(session_id=session_id, trace_name="conversa"):
+                    async for chunk, _ in graph.astream(
+                        {
+                            "session_id": session_id,
+                            "messages": [HumanMessage(content=payload.message)],
+                        },
+                        config=config,
+                        stream_mode="messages",
+                    ):
+                        # `.text` flattens content blocks: a provider answering
+                        # with a list of typed blocks and one answering with a
+                        # plain string have to look the same to the client.
+                        if chunk.text:
+                            yield {
+                                "event": "token",
+                                "data": TokenEvent(text=chunk.text).model_dump_json(),
+                            }
             except Exception:
                 # Loud on our side, vague on the customer's. The exception carries
                 # DSNs, model names and limits; `adversarial-006` fails a run that

@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +48,15 @@ class Settings(BaseSettings):
 
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
     llm_model: str = "anthropic:claude-haiku-4-5"
+
+    # `LANGFUSE_HOST` is the v3 name and `LANGFUSE_BASE_URL` is the current one.
+    # Both are accepted so an existing `.env` keeps working; see D-1 in the spec.
+    langfuse_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGFUSE_BASE_URL", "LANGFUSE_HOST"),
+    )
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
 
 
 @lru_cache(maxsize=1)
