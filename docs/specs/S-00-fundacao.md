@@ -106,6 +106,13 @@ para a forma `CMD` com `bash` explícito.
 mensagem explícita apontando para `make evals-check`. Alvo verde que não executou o agente
 seria check decorativo.
 
+**D-8 — `make` não existe na máquina do PO.** O REQ-5 pede Makefile, e é o certo: é o que
+roda no CI e em Linux/WSL. Mas o Git Bash do Windows não traz `make`, então o quickstart não
+executa nesta máquina sem instalar (`winget install ezwinports.make`) ou usar WSL. Em vez de
+inventar um segundo executor de tarefas, cada alvo ficou sendo **uma linha de comando real** e o
+README documenta o equivalente direto. O Makefile foi validado dentro de um contêiner Alpine,
+já que não dava para executá-lo aqui.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)

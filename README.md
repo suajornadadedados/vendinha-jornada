@@ -16,6 +16,30 @@ ADRs, specs, casos de eval e os portões de CI. Comece por:
 Rituais (comandos do Claude Code em `.claude/commands/`):
 `/escrever-spec` · `/entregar-spec` · `/verificar-spec` (sessão nova!) · `/registrar-adr`
 
+## Quickstart
+
+Pré-requisitos: Docker, Python 3.12 e [uv](https://docs.astral.sh/uv/). `make` é conveniência —
+cada alvo é uma linha de comando real, e o equivalente direto está ao lado.
+
+```bash
+cp .env.example .env       # nada precisa ser preenchido para subir a infra
+make up                    # docker compose up -d --wait
+make test                  # bash scripts/run-tests.sh
+make lint                  # ruff check . && ruff format --check .
+make hooks                 # instala os portões locais (pre-commit)
+```
+
+`make up` retorna quando Postgres e Qdrant estiverem **healthy** — é o `--wait` que faz isso,
+e é por isso que os dois serviços declaram healthcheck. Referência medida: 6 segundos.
+
+**Porta ocupada?** `POSTGRES_PORT`, `QDRANT_HTTP_PORT` e `QDRANT_GRPC_PORT` no `.env` mudam
+apenas a porta exposta no host; dentro da rede do compose nada muda. É o caso quando você já
+tem um Postgres nativo em 5432 ou outro projeto ocupando 6333.
+
+**Sem `make` no Windows?** O Git Bash não traz `make`. Instale com
+`winget install ezwinports.make` (ou use WSL) — ou simplesmente rode o comando que está dentro
+do alvo: `make help` lista todos, e `make -n <alvo>` mostra o que ele executaria.
+
 ## Verificações que já rodam, antes de existir código de produto
 
 ```bash
