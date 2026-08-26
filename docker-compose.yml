@@ -1,0 +1,69 @@
+# Ambiente local da Vendinha: só o que guarda estado.
+#
+# Observabilidade NÃO está aqui. Desde o ADR-010 o Langfuse é Cloud: entra por
+# variável de ambiente (LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
+# não por contêiner. Ver .env.example.
+#
+# O deploy de DEV/PROD na VPS é outra coisa e chega na S-08 (ADR-008), em
+# deploy/compose.dev.yml e deploy/compose.prod.yml. Este arquivo é a máquina do
+# desenvolvedor: portas expostas em localhost e senha default, ambos aceitáveis
+# aqui e inaceitáveis lá.
+
+name: vendinha
+
+services:
+  postgres:
+    # Guarda o domínio (pedido, aprovação) e o checkpointer do LangGraph (S-02).
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vendinha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vendinha}
+      POSTGRES_DB: ${POSTGRES_DB:-vendinha}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -U explícito: sem ele o pg_isready usa o usuário do SO (root) e responde
+      # "accepting connections" antes de o banco da aplicação existir.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vendinha} -d ${POSTGRES_DB:-vendinha}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  qdrant:
+    # Catálogo vetorizado para a recomendação ancorada (S-03).
+    image: qdrant/qdrant:v1.13.6
+    ports:
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # A imagem do Qdrant não traz curl nem wget — verificado, não presumido.
+      # Traz bash, então o /dev/tcp dele é o cliente HTTP disponível. Um teste de
+      # porta aberta (`:> /dev/tcp/...`) responderia verde antes de o serviço
+      # aceitar consulta; /readyz é o que significa "pronto".
+      #
+      # CMD + bash explícito, e não CMD-SHELL: CMD-SHELL roda /bin/sh, que aqui é
+      # dash — e /dev/tcp é bashism, não POSIX. Com sh o healthcheck falha com
+      # "Directory nonexistent" mesmo com o serviço perfeitamente no ar.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf 'GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  qdrant-data:

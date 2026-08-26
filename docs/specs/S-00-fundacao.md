@@ -89,6 +89,19 @@ CI vermelho por construção. Corrigido dentro do REQ-3 (o requisito é justamen
 verdes mesmo com código mínimo"): `evals` passa a observar `backend/evals/runner.py`. A
 intenção já estava escrita no próprio arquivo — "vira required check a partir da S-06".
 
+**D-6 — as portas default colidem na máquina do PO.** O BDD desta spec fala em "máquina
+limpa", e é para ela que o `.env.example` traz 5432 e 6333. Na máquina de desenvolvimento
+usada aqui as duas estão ocupadas — 5432 por um Postgres nativo do Windows (fora do Docker) e
+6333 pelo Qdrant de outro projeto. Por isso as portas do host são variáveis (`POSTGRES_PORT`,
+`QDRANT_HTTP_PORT`, `QDRANT_GRPC_PORT`): quem tiver colisão troca no `.env`, sem tocar no
+compose. Verificado com 5435/6335/6336: ambos os serviços `healthy` em 6 segundos.
+
+**D-7 — healthcheck do Qdrant não pode usar `CMD-SHELL`.** A imagem `qdrant/qdrant` não traz
+`curl` nem `wget` (verificado, não presumido) — traz `bash`, cujo `/dev/tcp` faz o papel de
+cliente HTTP. Mas `CMD-SHELL` executa `/bin/sh`, que ali é `dash`, e `/dev/tcp` é bashism: o
+healthcheck falhava com "Directory nonexistent" enquanto o `/readyz` respondia 200. Corrigido
+para a forma `CMD` com `bash` explícito.
+
 **D-4 — `make evals` não tem runner até a S-06.** Resolvido pelo PO: o alvo existe e falha com
 mensagem explícita apontando para `make evals-check`. Alvo verde que não executou o agente
 seria check decorativo.
