@@ -5,7 +5,7 @@ status: em-revisao
 branch: spec/s-01-discovery
 issue: #2
 adrs: [ADR-001, ADR-006, ADR-011]
-riscos_cobertos: [R1, R7]
+riscos_cobertos: []
 ---
 
 # S-01 — Discovery como código
@@ -35,22 +35,30 @@ por PR — requisitos rastreáveis antes de qualquer feature.
 
 ## O que R1 e R7 significam aqui
 
-O frontmatter declara `riscos_cobertos: [R1, R7]`, mas **nenhum dos dois testes-âncora da tabela
-de `docs/testes.md` §2 é entregável desta spec**: R1 fecha em `tests/unit/test_order_total.py`,
-que precisa de pedido e preço (S-03/S-04), e R7 fecha com a suíte inteira rodando contra o agente,
-no job `evals` do CI (S-06). Sem isto escrito, a verificação independente reprova a spec por
-procurar um arquivo que ela não devia ter.
+O frontmatter desta spec é `riscos_cobertos: []`, como o da S-00 — e o texto original dizia
+`[R1, R7]`. A troca é resultado do NC-2 da verificação independente, e o argumento dela é o certo:
+**nenhum dos dois testes-âncora da tabela de `docs/testes.md` §2 é entregável desta spec.** R1 fecha
+em `tests/unit/test_order_total.py`, que precisa de pedido e preço (S-03/S-04); R7 fecha com a suíte
+inteira rodando contra o agente, no job `evals` do CI (S-06). E `docs/riscos.md` já atribuía os dois
+a S-03 e S-06 — declarar o contrário no frontmatter contradizia a matriz que esta spec acabou de
+reconciliar.
 
-O que a S-01 entrega são as **pré-condições** dos dois — os artefatos contra os quais R1 e R7 serão
-provados depois:
+`docs/testes.md` §3 item 2 é literal: *"risco declarado sem teste correspondente não está fechado:
+está prometido"*. Declarar `[R1, R7]` e explicar em prosa que na verdade era outra coisa é
+exatamente editar normativo por prosa — o que esta mesma spec escreveu um ADR para não fazer.
 
-| Risco | Pré-condição entregue aqui | Onde o risco fecha de fato |
+O que a S-01 entrega, então, não são riscos fechados: são as **pré-condições** de dois deles — os
+artefatos contra os quais R1 e R7 serão provados depois. Isto é registro, não declaração de
+cobertura:
+
+| Risco | Pré-condição entregue aqui | Onde o risco é declarado e fechado |
 |---|---|---|
 | R1 | O seed existe, é íntegro e é a **única** origem de preço e atributo. Preço em decimal, nunca float | S-03 (groundedness) · S-04 (`test_order_total.py`) |
 | R7 | O corpus é rastreável, validado contra o schema e amarrado ao seed — caso que reprova por falta de dado não é régua | S-06 (runner + job `evals` obrigatório) |
 
-É o mesmo enquadramento que o teste da S-00 já usa no docstring: *"Guards the eval corpus that R7
-depends on — without closing R7 itself."*
+É o mesmo enquadramento que os dois testes usam no docstring: *"Guards the eval corpus that R7
+depends on — without closing R7 itself"* e *"Guards the catalogue seed that R1 depends on — without
+closing R1 itself"*. O docstring já estava certo; era o frontmatter que discordava dele.
 
 ## Fora de escopo
 Runner de evals (S-06); ingestão no Qdrant (S-03).
@@ -194,6 +202,7 @@ o REQ-1 com razão. Achados corrigidos nesta spec:
 | **R-2** | `O-2` e `O-4` não existem no PRD, que usa `O1`…`O5`. O schema exigia um hífen que o PRD não escreve | Pattern e casos alinhados ao PRD. Era achado direto da R-1 — com o cruzamento, teria aparecido sozinho |
 | **R-6 / R-7** | O ADR-011 declarava menos riscos do que tocou; a spec que criou o ADR-011 não o listava no frontmatter | Ambos corrigidos |
 | **R-8** | `adversarial-006` declarava `falha_dura` num caso que não mede ação nenhuma — um modelo prolixo derrubaria a suíte inteira | `falha_dura: null`, com o porquê na nota |
+| **NC-2** | `riscos_cobertos: [R1, R7]` sem os testes-âncora, contra `docs/testes.md` §3 item 2 e contra a própria matriz, que atribui R1→S-03 e R7→S-06 | `riscos_cobertos: []`, decidido pelo PO. A tabela de pré-condições fica: ela registra o que foi entregue, sem declarar cobertura |
 
 O que a verificação prova sobre o método: **o autor não enxerga a segunda ocorrência do próprio
 achado.** A D-1 encontrou uma contradição e eu a tratei como se fosse a contradição — a frase
