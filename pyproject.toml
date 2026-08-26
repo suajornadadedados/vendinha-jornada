@@ -15,6 +15,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
     "pyyaml>=6.0",
     "jsonschema>=4.21",
 ]
@@ -26,3 +27,6 @@ testpaths = ["tests"]
 # importação e a coleta falha inteira.
 # --strict-markers: marker não registrado vira erro, não typo silencioso.
 addopts = "-q --strict-markers --import-mode=importlib"
+# O grafo e a API sao async, e testa-los pelo caminho sincrono provaria outro
+# caminho que nao o de producao. `auto` evita ter que marcar cada coroutine.
+asyncio_mode = "auto"

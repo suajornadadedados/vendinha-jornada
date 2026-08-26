@@ -5,5 +5,11 @@
 #   pip install -r tests/requirements.txt
 
 pytest>=8.0
+pytest-asyncio>=0.24
 pyyaml>=6.0
 jsonschema>=4.21
+
+# Desde a S-02 a suite testa codigo de produto, entao ela precisa do pacote.
+# Caminho relativo ao diretorio de onde o pip roda — sempre a raiz do repo,
+# que e de onde `scripts/run-tests.sh` e o job `test` do CI executam.
+./backend

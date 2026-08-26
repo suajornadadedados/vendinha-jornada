@@ -41,12 +41,18 @@ primeiro trace. Observabilidade no commit 1, não no incidente 1.
 
 ## Tasks (cada uma vira um commit)
 1. `adr(s-02): provider-agnostic llm with runtime credentials` — ADR-012, D15 e a emenda da spec
-2. `feat(s-02): fastapi chat endpoint with sse and session handling`
-3. `feat(s-02): minimal langgraph graph with postgres checkpointer`
+2. `feat(s-02): minimal langgraph graph with postgres checkpointer`
+3. `feat(s-02): fastapi chat endpoint with sse and session handling`
 4. `feat(s-02): langfuse instrumentation with pii masking`
 5. `feat(s-02): session budget cap and per-tool timeout`
 6. `feat(s-02): runtime provider config with encrypted credentials`
 7. `ci(s-02): extend typecheck to the test suite` — ressalva R-4 da verificação da S-01
+
+> As duas primeiras tasks trocaram de ordem em relação ao texto original da spec (o endpoint
+> vinha antes do grafo). Construir o endpoint primeiro exigiria um motor de conversa
+> provisório só para ele ter o que transmitir — código descartável na `main` por uma task
+> inteira. Com o grafo primeiro, o teste do endpoint injeta o `BaseChatModel` falso na
+> fronteira que o ADR-012 já declara como porta, e nada provisório é escrito.
 
 ## BDD
 ```gherkin
@@ -121,6 +127,18 @@ processo* — e `docs/testes.md` §2 mapeia esse seam para aquele arquivo. Criar
 `test_credential_leak.py` seria inventar camada no meio da execução, que a §3 item 6 manda
 registrar em vez de improvisar. Registrado para o `/verificar-spec` não ler a ausência do
 arquivo como lacuna.
+
+**D-5 — `psycopg` async não roda no event loop default do Windows.**
+O `ProactorEventLoop`, default do asyncio no Windows desde o 3.8, é recusado pelo `psycopg`
+em modo async: *"Psycopg cannot use the 'ProactorEventLoop' to run in async mode"*. O erro
+chega na primeira chamada ao banco, não no startup, e fala de event loop para quem está
+pensando em Postgres.
+
+Importa mais do que parece: o desenvolvimento acontece no Windows e o deploy vai para uma VPS
+Linux (ADR-008) — a plataforma que quebra é justamente a que o CI nunca executa. Resolvido em
+`vendinha/runtime.py`, chamado de todo entrypoint, porque *"lembrar de configurar a policy"*
+não é mecanismo. Verificado depois em dois processos separados contra o Postgres do compose:
+o processo 2 leu o que o processo 1 gravou.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
