@@ -4,7 +4,7 @@ titulo: Fundação do repositório
 status: em-revisao
 branch: spec/s-00-fundacao
 issue: #1
-adrs: [ADR-005, ADR-008]
+adrs: [ADR-005, ADR-008, ADR-009, ADR-010]
 riscos_cobertos: []
 ---
 
@@ -38,6 +38,13 @@ Qualquer código de agente, API ou frontend. O `backend/` desta spec é scaffold
 5. `test(s-00): traceability test for eval cases against schema`
 6. `chore(s-00): backend scaffold with pyproject and mypy config`
 7. `docs(s-00): link specs to github issues`
+
+As tasks 1 e 3 já estavam na `main` antes desta branch (vieram no `first commit`), então não
+têm commit próprio aqui. Em compensação, cinco commits nasceram das descobertas e não da lista
+acima — `.gitattributes` (D-9), o gatilho do job `evals` (D-5), a correção do startup failure
+(D-10) e a dos portões `commitlint` e `secrets` (D-11, D-12). É o comportamento previsto pelo
+ADR-005: a branch conta a história em nível de task, e descoberta registrada vira commit.
+Entrega final: **12 commits**.
 
 ## BDD
 ```gherkin
@@ -139,6 +146,11 @@ foi clonado, então `hashFiles` responderia vazio de qualquer forma. Passou a ro
 no arquivo — a validação de YAML que já existia aceitava o arquivo sem reclamar, porque YAML
 válido não é o mesmo que schema de workflow válido.
 
+> Ressalva R-1 da verificação, e ela estava certa: à época deste texto o `actionlint` só tinha
+> sido rodado **à mão**, então a falha que apagou o CI seguia sem portão de regressão. Ele foi
+> promovido a passo do job `lint` e a hook de `pre-push` em `fix/s-00-verificacao`. A frase
+> acima só passou a ser verdade depois disso.
+
 **D-11 — `commitlint.config.js` era ilegível dentro da action.** O container da
 `wagoid/commitlint-github-action` tem `/package.json` com `"type": "module"`, então um
 `commitlint.config.js` com `module.exports` é interpretado como ESM e estoura
@@ -159,6 +171,11 @@ para não divergirem as regras.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
-- [ ] CI verde (lint, typecheck, testes, evals)
-- [ ] PR com evidência (screenshot + trace Langfuse)
-- [ ] Relatório /verificar-spec anexado com veredito APROVADO
+- [x] CI verde: `commitlint`, `detect`, `lint`, `secrets`, `skills-drift`, `test`,
+      `typecheck`. O job `evals` permanece *skipped* — o runner é entregável da S-06, e
+      exigir verde de um job que não pode existir seria requisito insatisfazível.
+- [x] PR com evidência (saída de terminal medida; não há trace Langfuse porque não há
+      agente até a S-02)
+- [x] Relatório `/verificar-spec` em `docs/specs/relatorios/S-00-verificacao.md`:
+      **APROVADO COM RESSALVAS**. As não-conformidades e ressalvas acionáveis foram
+      corrigidas na branch `fix/s-00-verificacao`.
