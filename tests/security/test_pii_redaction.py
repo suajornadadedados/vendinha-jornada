@@ -25,7 +25,8 @@ import io
 import logging
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -74,7 +75,7 @@ FAKE_PROVIDER_KEY = "sk-ant-api03-" + "A" * 40
 FAKE_LANGFUSE_KEY = "sk-lf-" + "b" * 32
 
 
-def _span(scope: str, **attributes: str) -> tuple[OtelSpanIdentifier, OtelSpanData]:
+def _span(scope: str, **attributes: Any) -> tuple[OtelSpanIdentifier, OtelSpanData]:
     identifier = OtelSpanIdentifier(trace_id=f"trace-{scope}", span_id=f"span-{scope}")
     data = OtelSpanData(
         trace_id=identifier.trace_id,
@@ -89,7 +90,7 @@ def _span(scope: str, **attributes: str) -> tuple[OtelSpanIdentifier, OtelSpanDa
     return identifier, data
 
 
-def _export(**spans: dict[str, str]) -> dict[str, dict[str, str]]:
+def _export(**spans: Mapping[str, Any]) -> dict[str, dict[str, str]]:
     """Run one batch through the hook and return the attributes as they would ship."""
     batch = dict(_span(scope, **attrs) for scope, attrs in spans.items())
     result = mask_otel_spans(params=MaskOtelSpansParams(spans=batch))
@@ -205,6 +206,58 @@ def test_the_export_hook_scrubs_every_string_attribute(pii_de_teste: dict[str, s
     # nothing, and the session id is what makes a trace findable at all.
     assert shipped["langfuse-sdk"]["langfuse.session.id"] == "sessao-42"
     assert shipped["langchain"]["gen_ai.request.model"] == "claude-haiku-4-5"
+
+
+@pytest.mark.risco("R5")
+def test_a_list_valued_attribute_is_scrubbed_like_a_string_one(
+    pii_de_teste: dict[str, str],
+) -> None:
+    """R5 — ressalva R-4 da verificação da S-02, fechada aqui.
+
+    Um atributo OTel é um escalar **ou uma sequência homogênea de escalares**, e
+    `Redactor.attributes` só olhava para `str`. Uma lista de strings atravessava
+    intocada: mascarada em lugar nenhum, exportada inteira.
+
+    Na S-02 isso era latente, porque nada no processo produzia uma. Na S-03
+    produz: as tools de catálogo devolvem `harmonizacao`, `ocasiao` e
+    `notas_sensoriais`, e as instrumentações que não são nossas põem atributo de
+    lista em span como coisa corriqueira — `gen_ai.prompt` é o exemplo óbvio.
+
+    O outro lado do teste é o de sempre: redação não é deleção. A lista continua
+    sendo uma lista, com o mesmo número de itens, e o que não é PII sobrevive.
+    """
+    cpf = pii_de_teste["cpf"]
+    email = pii_de_teste["email"]
+
+    batch = dict(
+        [
+            _span(
+                "langchain",
+                **{
+                    "gen_ai.prompt.contents": [f"cpf {cpf}", f"email {email}", "queijo canastra"],
+                    "vendinha.harmonizacao": ["vinho tinto encorpado", "café coado"],
+                },
+            )
+        ]
+    )
+    resultado = mask_otel_spans(params=MaskOtelSpansParams(spans=batch))
+
+    assert isinstance(resultado, MaskOtelSpansResult)
+    patch = next(iter(resultado.span_patches.values()))
+    assert patch is not None
+    bruto = patch.set_attributes["gen_ai.prompt.contents"]
+
+    assert isinstance(bruto, tuple)
+    conteudos = [str(item) for item in bruto]
+    assert len(conteudos) == 3, "redação não é deleção: a lista mantém o tamanho"
+    assert cpf not in " ".join(conteudos)
+    assert email not in " ".join(conteudos)
+    assert "[CPF]" in conteudos[0] and "[EMAIL]" in conteudos[1]
+    assert conteudos[2] == "queijo canastra", "o item sem PII atravessa intocado"
+
+    assert "vendinha.harmonizacao" not in patch.set_attributes, (
+        "uma lista sem nada a redigir não entra no patch — o patch é esparso"
+    )
 
 
 @pytest.mark.risco("R5")
