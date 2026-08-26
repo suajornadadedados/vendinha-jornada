@@ -44,7 +44,9 @@ jobs:
       - uses: wagoid/commitlint-github-action@v6
 
   # Uma régua de lint só, na raiz (ruff.toml), valendo para scripts/, tests/ e
-  # backend/ quando ele existir.
+  # backend/ quando ele existir. O actionlint entra aqui, e não como job próprio,
+  # porque `lint` já é check obrigatório — job novo exigiria mexer na proteção da
+  # branch para valer de alguma coisa.
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -54,6 +56,16 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
       - run: ruff format --check .
+
+      # Este passo é o portão de regressão da D-10. Uma expressão inválida num
+      # workflow não reprova um job: ela quebra o parse do arquivo inteiro, o
+      # workflow vira startup_failure e NENHUM check reporta — foi assim que o CI
+      # deste repositório passou seis dias sem executar, sem ninguém notar,
+      # justamente porque a ausência de check não parece um erro. Validar YAML não
+      # pega isso: YAML válido não é schema de workflow válido.
+      - name: actionlint
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.9 -color
 
   # unit + security. Nenhuma das duas camadas precisa de contêiner — é
   # consequência de não existir camada de integração (docs/testes.md §1).

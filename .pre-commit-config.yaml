@@ -60,6 +60,20 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # O mesmo portão da D-10, localmente. Fica no pre-push junto com os testes:
+      # sobe um contêiner, então é lento demais para o pre-commit — e hook lento
+      # treina a usar --no-verify.
+      - id: actionlint
+        name: actionlint (workflows do GitHub Actions)
+        entry: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.9 -color
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        # `files` sem `always_run`: roda só quando um workflow muda. Com
+        # `always_run: true` o `files` vira letra morta e o hook sobe contêiner a
+        # cada push.
+        files: '^\.github/workflows/'
+
       # docs/harness/skills.md se declara gerado — então tem que estar em dia.
       - id: skills-doc
         name: docs/harness/skills.md em dia com o lockfile
