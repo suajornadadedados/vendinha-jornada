@@ -99,4 +99,4 @@ escrita de uma delas — é por isso que este repositório começa por documenta
 | "PRD, SPECs e ADRs" | `docs/PRD.md` · `docs/specs/` · `docs/adr/` |
 | "Arquitetura explicada: quantos agentes, onde entra o humano, gestão de falhas" | `docs/arquitetura.md` §3 (com diagrama) · ADR-002 · ADR-003 · ADR-004 |
 | "Repositório preparado: com harness de agentes, contexto e processos visíveis" | `CLAUDE.md` · `.claude/` · `docs/harness/skills.md` |
-| "Processo de versionamento: branches, PRs, validações automáticas" | ADR-005 · `.github/` · `commitlint.config.js` |
+| "Processo de versionamento: branches, PRs, validações automáticas" | ADR-005 · `.github/` · `commitlint.config.cjs` |
