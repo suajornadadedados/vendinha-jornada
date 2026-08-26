@@ -1,7 +1,7 @@
 ---
 id: S-01
 titulo: Discovery como código
-status: aprovada
+status: em-revisao
 branch: spec/s-01-discovery
 issue: #2
 adrs: [ADR-001, ADR-006]
@@ -18,16 +18,16 @@ por PR — requisitos rastreáveis antes de qualquer feature.
 - [x] REQ-1 `docs/requisitos.md`, `docs/jornada.md`, `docs/riscos.md`, `docs/decisoes.md` e ADRs
       001-010 revisados e definitivos: sem referência morta e sem contradição entre normativos.
       O texto original dizia "001-008" — ADR-009 e ADR-010 nasceram das descobertas da S-00.
-- [ ] REQ-2 Schema dos casos de eval definido e validável por script (`make evals-check`): cada caso
+- [x] REQ-2 Schema dos casos de eval definido e validável por script (`make evals-check`): cada caso
       declara necessidade, critério de aprovação e produtos válidos. O schema, o alvo do Makefile e
       o teste de rastreabilidade chegaram na S-00 (REQ-7 de lá); a S-01 fecha o que faltava — o campo
       `produtos_validos` e o cruzamento contra o seed do catálogo.
-- [ ] REQ-3 Golden dataset inicial: 12 conversas de referência em `evals/golden/` — YAML validado
+- [x] REQ-3 Golden dataset inicial: 12 conversas de referência em `evals/golden/` — YAML validado
       contra `evals/schema/caso.schema.json`, com necessidade, resposta esperada em critérios e
       produtos válidos. (O texto original dizia JSON; o corpus nasceu em YAML na S-00 e o schema
       é JSON Schema, que valida YAML sem conversão.)
-- [ ] REQ-4 Suite adversarial inicial: 6 casos de injection/abuso em `evals/adversarial/`, no mesmo formato.
-- [ ] REQ-5 Catálogo seed: `data/catalogo/*.json` com ~50 produtos e atributos ricos (tipo, região,
+- [x] REQ-4 Suite adversarial inicial: 6 casos de injection/abuso em `evals/adversarial/`, no mesmo formato.
+- [x] REQ-5 Catálogo seed: `data/catalogo/*.json` com ~50 produtos e atributos ricos (tipo, região,
       maturação, intensidade, harmonização, preço). Somam-se `disponivel` e `prazo_estimado`, que a
       nota de escopo de `docs/requisitos.md` torna campos lidos do seed. Preço é **string decimal**
       (`"89.90"`): JSON não tem tipo decimal, e número vira `float` no parse — exatamente a classe
@@ -61,6 +61,19 @@ Runner de evals (S-06); ingestão no Qdrant (S-03).
 3. `eval(s-01): golden dataset (12 cases) and adversarial suite (6 cases)`
 4. `feat(s-01): catalog seed data (~50 products)`
 
+O que a execução entregou, e por que difere da lista:
+
+| # | Commit | Nota |
+|---|---|---|
+| 1 | `adr(s-01): record two test layers, no integration tier` | Nasceu da descoberta D-1. A task 1 era revisão; a revisão achou uma decisão faltando |
+| 1 | `docs(s-01): reconcile the normative docs with the test-layer decision` | A task 1 propriamente dita. Os documentos já existiam — o trabalho foi reconciliar, não escrever |
+| 4 | `feat(s-01): catalog seed data (50 products)` | Executada antes da task 2: o cruzamento da 2 precisa do seed para nascer verde |
+| 2 | `eval(s-01): bind eval cases to the seed with produtos_validos` | Só a metade que faltava — schema e validador vieram da S-00 |
+| 3 | `eval(s-01): golden dataset (12 cases) and adversarial suite (6 cases)` | +8 golden e +3 adversariais sobre os 7 casos que já existiam |
+
+Entrega final: **5 commits**. A ordem de execução (1 → 4 → 2 → 3) não é a da lista, para nenhum
+commit deixar a suíte vermelha atrás de si.
+
 ## BDD
 ```gherkin
 Cenário: rastreabilidade risco → verificação
@@ -74,14 +87,24 @@ Cenário: casos de eval válidos
 ```
 
 ## Métricas de sucesso
-| Métrica | Alvo | Como medir |
-|---|---|---|
-| Casos golden / adversariais | 12 / 6 | contagem em evals/ |
-| Produtos no seed | ≥ 50, 100% com preço e ≥4 atributos | script de validação do seed |
+| Métrica | Alvo | Como medir | Medido |
+|---|---|---|---|
+| Casos golden / adversariais | 12 / 6 | contagem em `evals/` | **12 / 6** |
+| Produtos no seed | ≥ 50, 100% com preço e ≥4 atributos | `tests/unit/test_catalog_seed_is_usable.py` | **50**, 100% / 100% |
+| Riscos com ao menos um caso | — | leitura do campo `riscos` do corpus | **R1-R6 e R8**; R7 é a própria suíte, R9 é restart de processo |
+| Suíte local | verde | `pytest tests` | **294 passed** |
 
 ## Verificação independente
-- Rodar `make evals-check` e o validador do seed.
-- Amostrar 3 casos golden e conferir que os produtos citados existem no seed.
+- Rodar `make evals-check` e o validador do seed (`pytest tests/unit`). Sem `make` na máquina,
+  a linha de dentro do alvo é equivalente — está no README, seção Quickstart.
+- Amostrar 3 casos golden e conferir que os produtos de `produtos_validos` existem em
+  `data/catalogo/`. O cruzamento é automatizado desde esta spec, mas a amostragem à mão continua
+  valendo: ela confere se o produto citado *faz sentido* para o caso, o que nenhum teste faz.
+- Falsificar os dois validadores: quebrar um caso e um produto do seed e conferir que reprovam de
+  forma independente. Feito durante a execução, com resultado nos commits — repetir vale como
+  verificação de que o gate não regrediu.
+- Ler `docs/riscos.md` e `docs/testes.md` §2 lado a lado: as duas tabelas precisam concordar em
+  camada e arquivo, linha a linha. Era exatamente aí que estava a divergência do D-1.
 
 ## Descobertas (preenchido durante a execução)
 
@@ -130,5 +153,33 @@ Uma ocorrência ficou de fora, deliberadamente: `docs/specs/S-04` §Métricas di
 integração"* — ali a palavra descreve um caso de eval ponta a ponta, não um tier de teste. Sentido
 diferente, ficou como está.
 
+**D-2 — a fixture da S-00 já apontava para este seed, com outros números.**
+`tests/unit/conftest.py` dizia, desde a S-00: *"quando o seed da S-01 chegar, estes nomes têm que
+existir nele"*. Quando o seed chegou, dois dos três não existiam (`doce-de-leite-vicosa`) ou tinham
+preço diferente (Canastra meia-cura a `78.90` na fixture, `89.90` no catálogo).
+
+Resolvido dentro do escopo, porque a própria fixture tinha previsto o acerto: os ids e os preços
+passaram a ser os do seed. Uma fixture que cita preço que o catálogo não tem deixaria um futuro
+`test_order_total.py` afirmar um total que nenhum cliente poderia ser cobrado — e ele passaria,
+porque teste e fixture concordariam entre si (`docs/testes.md` §4: *valor esperado vem de fonte
+independente*). A linha indisponível da fixture trocou de produto para uma que está de fato
+indisponível no seed, mantendo o caminho "não temos isso agora" exercitável.
+
+**D-3 — `make` não existe na máquina do PO.** Não é defeito: o `README` já previa
+(*"quem não tiver `make` roda a linha de dentro do alvo"*), e todos os alvos são de uma linha só
+justamente para isso. Registrado porque a Verificação independente cita `make evals-check`, e o
+verificador precisa saber que rodar `pytest tests/unit/test_eval_corpus_is_traceable.py -q` é
+a mesma coisa, não um atalho.
+
+**D-4 — R9 continua sem caso de eval, e é assim que deve ser.** O corpus fechou com R1-R6 e R8
+cobertos. R7 é a suíte inteira, por definição — nenhum caso individual o cobre. R9 (estado
+corrompido em conversa longa) exige reiniciar o processo, coisa que nenhum caso conversacional
+faz: fica com `tests/unit/test_session_resume.py` e com a verificação manual, exatamente como
+`docs/testes.md` §1 já declarava. Registrado para o `/verificar-spec` não ler a ausência como falha.
+
 ## Definition of Done
-- [ ] Checklist padrão do template
+- [x] Todos os requisitos com evidência nesta spec (REQ-1 a REQ-5)
+- [x] Suíte local verde: `ruff check` · `ruff format --check` · `pytest tests` (294 passed)
+- [ ] CI verde no PR
+- [ ] PR com evidência e `Closes #2`
+- [ ] Relatório `/verificar-spec` anexado com veredito APROVADO
