@@ -131,6 +131,17 @@ def _every_handler() -> list[logging.Handler]:
     return handlers
 
 
+def redaction_is_installed() -> bool:
+    """Whether any configured handler is currently redacting.
+
+    Exists so a test can ask about the *application*, not about the function. The
+    round-1 hole was a filter that never got installed; the round-2 hole was a test
+    that proved the installer works while nothing proved the app ever calls it.
+    Both are the same question — is it reachable? — asked one level apart.
+    """
+    return any(isinstance(handler.formatter, RedactingFormatter) for handler in _every_handler())
+
+
 def install_log_redaction() -> int:
     """Make every configured handler redact. Returns how many were wrapped.
 

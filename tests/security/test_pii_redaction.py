@@ -28,14 +28,24 @@ import sys
 from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langfuse.types import (
     MaskOtelSpansParams,
     MaskOtelSpansResult,
     OtelSpanData,
     OtelSpanIdentifier,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 
-from vendinha.observability import install_log_redaction, mask_otel_spans
+from vendinha.app import create_app
+from vendinha.config_store import InMemoryConfigStore
+from vendinha.graph import build_graph
+from vendinha.observability import (
+    install_log_redaction,
+    mask_otel_spans,
+    redaction_is_installed,
+)
 from vendinha.redaction import KNOWN_VALUES, Redactor, redact
 
 # Keys shaped like the real thing and belonging to nobody. The guardrail in
@@ -238,7 +248,19 @@ def logging_como_o_uvicorn_monta() -> Iterator[io.StringIO]:
     handlers_do_root = root.handlers[:]
     uvicorn_logger = logging.getLogger("uvicorn.error")
     handlers_do_uvicorn = uvicorn_logger.handlers[:]
-    formatters = {h: h.formatter for h in handlers_do_root + handlers_do_uvicorn}
+
+    # Snapshot de TODOS os handlers do processo, e nao so dos dois que esta fixture
+    # monta: `install_log_redaction()` cobre o processo inteiro, entao um teste que
+    # rodou antes deixa formatters embrulhados em loggers que esta fixture nunca viu.
+    # Sem restaurar todos, a afirmacao "ainda nao esta instalado" depende da ordem
+    # dos testes — que e a forma mais chata de teste instavel.
+    todos = list(root.handlers)
+    for objeto in logging.Logger.manager.loggerDict.values():
+        if isinstance(objeto, logging.Logger):
+            todos.extend(objeto.handlers)
+    formatters = {h: h.formatter for h in todos + handlers_do_root + handlers_do_uvicorn}
+    for handler in todos:
+        handler.setFormatter(None)
 
     root.handlers = []
     saida = io.StringIO()
@@ -340,6 +362,47 @@ def test_the_applications_own_logger_is_covered_too(pii_de_teste: dict[str, str]
     assert cpf not in escrito
     assert FAKE_PROVIDER_KEY not in escrito
     assert "[CPF]" in escrito and "[CREDENCIAL]" in escrito
+
+
+@pytest.mark.risco("R5")
+@pytest.mark.usefixtures("logging_como_o_uvicorn_monta")
+def test_the_application_turns_redaction_on_when_it_starts() -> None:
+    """A instalacao tem que ser provada na APLICACAO, nao na funcao.
+
+    Este teste existe por causa de um achado da segunda verificacao independente: os
+    testes provavam que `install_log_redaction()` cobre os handlers, e nenhum provava
+    que o `lifespan` chega a chama-la. Apagar a chamada do `app.py` deixava a suite
+    inteira verde — o mesmo buraco da rodada anterior, um nivel acima.
+
+    A licao, registrada porque ja aconteceu tres vezes nesta spec: testar a funcao
+    que faz nao e testar que alguem a chama.
+    """
+    assert not redaction_is_installed(), "a fixture deveria ter deixado o logging cru"
+
+    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver())
+    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())):
+        assert redaction_is_installed(), "a aplicacao subiu sem ligar a redacao de log"
+
+
+@pytest.mark.risco("R5")
+def test_the_password_inside_a_connection_string_never_leaves() -> None:
+    """O segredo que ninguem escolhe logar: toda excecao do psycopg carrega o DSN.
+
+    `db.py` imprime o DSN quando o setup falha, e o `logger.exception` do endpoint
+    recebe qualquer erro de conexao. A forma local (`@127.0.0.1`) sumia por acidente,
+    porque casava com o padrao de e-mail; `@postgres` e `@db`, que sao as formas de
+    conteiner da S-08, nao sumiam. Acidente que cobre o caso local e deixa passar o
+    caso implantado e a pior combinacao possivel.
+    """
+    for host in ("postgres", "db", "127.0.0.1", "vendinha-db.interno"):
+        dsn = f"postgresql://vendinha:s3nh4-secreta@{host}:5432/vendinha"
+        redacted = redact(f"connection to {dsn} failed")
+
+        assert "s3nh4-secreta" not in redacted, f"a senha vazou com host {host!r}"
+        assert "[CREDENCIAL]" in redacted
+        # Usuario, host e porta continuam: sao o que faz a linha valer a leitura.
+        assert host in redacted
+        assert "vendinha:" in redacted
 
 
 @pytest.mark.risco("R5")

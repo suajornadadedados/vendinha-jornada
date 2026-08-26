@@ -133,6 +133,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         async with open_checkpointer(settings.database_url) as checkpointer:
             app.state.checkpointer = checkpointer
             await app.state.store.setup()
+            await _warm_models(app)
             yield
 
     app = FastAPI(
@@ -142,15 +143,28 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         lifespan=lifespan,
     )
 
-    async def _credentials(request: Request) -> dict[str, str]:
-        """Environment first, stored configuration on top — stored always wins."""
-        return effective_credentials((await request.app.state.store.load()).credentials)
+    async def _warm_models(app: FastAPI) -> None:
+        """Pay the provider lookup at boot, so the first customer does not.
 
-    async def _selected_model(request: Request) -> str:
-        stored = (await request.app.state.store.load()).selected_model
+        Cold, the first `POST /chat` carrying a `model` measured 4,0 s against a 3 s
+        target: the cache only helped from the second message on, and the first
+        message is the one a person is watching. Failure here is not fatal — the
+        route rebuilds the list on demand.
+        """
+        try:
+            await _allowed_models(app)
+        except Exception:
+            logger.warning("nao consegui pre-carregar a lista de modelos", exc_info=True)
+
+    async def _credentials(app: FastAPI) -> dict[str, str]:
+        """Environment first, stored configuration on top — stored always wins."""
+        return effective_credentials((await app.state.store.load()).credentials)
+
+    async def _selected_model(app: FastAPI) -> str:
+        stored = (await app.state.store.load()).selected_model
         return stored or settings.llm_model
 
-    async def _allowed_models(request: Request) -> list[str]:
+    async def _allowed_models(app: FastAPI) -> list[str]:
         """The models this server accepts. Cached, because it is on the chat path.
 
         Every `POST /chat` that carries a `model` — which is every message the S-07
@@ -162,11 +176,11 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         Invalidated on `PUT /config`, so a newly configured provider shows up at once.
         """
         agora = time.monotonic()
-        cached = request.app.state.models_cache
+        cached = app.state.models_cache
         if cached is not None and agora - cached[0] < MODELS_CACHE_SECONDS:
             return list(cached[1])
 
-        credentials = await _credentials(request)
+        credentials = await _credentials(app)
         offered: list[str] = []
         for provider, api_key in credentials.items():
             offered.extend(await models_offered_by(provider, api_key))
@@ -174,30 +188,30 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         # The configured model belongs in the list even if the provider's endpoint
         # did not answer: it is what the server will actually use, and leaving it
         # out would make `POST /chat` refuse the very model it is running.
-        selected = await _selected_model(request)
+        selected = await _selected_model(app)
         if selected not in offered and selected.split(":")[0] in credentials:
             offered.append(selected)
 
         allowed = sorted(set(offered))
-        request.app.state.models_cache = (agora, allowed)
+        app.state.models_cache = (agora, allowed)
         return list(allowed)
 
-    async def _graph_for(request: Request, model_name: str) -> Any:
-        if request.app.state.fixed_graph is not None:
-            return request.app.state.fixed_graph
+    async def _graph_for(app: FastAPI, model_name: str) -> Any:
+        if app.state.fixed_graph is not None:
+            return app.state.fixed_graph
 
-        cached = request.app.state.graphs.get(model_name)
+        cached = app.state.graphs.get(model_name)
         if cached is not None:
             return cached
 
         provider, _ = split_model(model_name)
-        api_key = (await _credentials(request)).get(provider)
+        api_key = (await _credentials(app)).get(provider)
         built = build_graph(
             resolve_model(model_name, api_key),
-            request.app.state.checkpointer,
+            app.state.checkpointer,
             budget_tokens=settings.session_budget_tokens,
         )
-        request.app.state.graphs[model_name] = built
+        app.state.graphs[model_name] = built
         return built
 
     @app.get("/health", response_model=HealthResponse)
@@ -207,8 +221,8 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
     @app.get("/models", response_model=ModelsResponse)
     async def models(request: Request) -> ModelsResponse:
         return ModelsResponse(
-            models=await _allowed_models(request),
-            selected=await _selected_model(request),
+            models=await _allowed_models(request.app),
+            selected=await _selected_model(request.app),
         )
 
     @app.get("/config", response_model=ConfigResponse)
@@ -234,7 +248,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             )
 
         return ConfigResponse(
-            selected_model=await _selected_model(request),
+            selected_model=await _selected_model(request.app),
             providers=statuses,
             editable=settings.app_env == "local",
             encryption_ready=Vault(settings.config_encryption_key).usable,
@@ -302,15 +316,15 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
     @app.post("/chat")
     async def chat(payload: ChatRequest, request: Request) -> EventSourceResponse:
         session_id = payload.session_id or uuid.uuid4().hex
-        model_name = payload.model or await _selected_model(request)
+        model_name = payload.model or await _selected_model(request.app)
 
-        if payload.model is not None and payload.model not in await _allowed_models(request):
+        if payload.model is not None and payload.model not in await _allowed_models(request.app):
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "modelo fora da lista do servidor — consulte GET /models",
             )
 
-        graph_to_run = await _graph_for(request, model_name)
+        graph_to_run = await _graph_for(request.app, model_name)
         timeout = settings.tool_timeout_seconds
         handler = getattr(request.app.state, "langfuse", None)
         config = session_config(session_id)

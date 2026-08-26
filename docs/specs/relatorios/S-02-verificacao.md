@@ -1,447 +1,436 @@
 # Relatório de verificação independente — S-02 (Agente base observável)
 
+> **Segunda rodada.** A primeira reprovou a entrega (2 achados de gravidade Alta). O autor
+> corrigiu e a spec registra as correções na **D-13**. Este relatório **substitui** o anterior no
+> mesmo caminho e carrega a rastreabilidade das duas rodadas: o que era da rodada 1, o que foi
+> de fato corrigido (medido, não aceito), o que continua aberto e o que apareceu de novo.
+> Nada aqui foi herdado do texto anterior sem ser remedido nesta sessão.
+
 | | |
 |---|---|
 | **Spec** | `docs/specs/S-02-agente-observavel.md` (`status: em-revisao`) |
-| **Branch** | `spec/s-02-agente-observavel` @ `96ecfd6` |
-| **Base** | `origin/main` @ `cb51953` (PR #13, squash) |
-| **PR** | **não existe ainda.** É o comportamento correto sob o `CLAUDE.md` item 4: *"Verificação independente ANTES do PR, não antes do merge… Sem veredito, não existe PR."* Ver **NC-4** sobre os três normativos que ainda dizem o contrário |
-| **Issue** | [#3](https://github.com/suajornadadedados/vendinha-jornada/issues/3) — **OPEN**, corpo é ponteiro para a spec |
-| **Diff** | 10 commits · 40 arquivos · +5.461 / −233 |
-| **Sessão** | revisora, sem acesso ao histórico da sessão autora |
+| **Branch** | `spec/s-02-agente-observavel` @ `06d2fd8` (11 commits) |
+| **Base** | `origin/main` @ `cb51953` |
+| **PR** | **não existe.** Correto sob o `CLAUDE.md` item 4 (*"Verificação independente ANTES do PR… Sem veredito, não existe PR"*). O passo 6 do `.claude/commands/verificar-spec.md` manda comentar no PR; o `CLAUDE.md` tem precedência e a entrega é o arquivo. Ver **NC-4**, que continua aberta |
+| **Issue** | [#3](https://github.com/suajornadadedados/vendinha-jornada/issues/3) — **OPEN**, corpo é ponteiro; campo `ADRs` atualizado pelo autor (`updated_at` 2026-08-26T18:47Z) |
+| **Diff** | 11 commits · 41 arquivos · +6.178 / −233 |
+| **Rodada 1** | REPROVADO · 2 Alta · 34 falsificações, 3 sobreviveram |
+| **Rodada 2 (esta)** | 13 falsificações, **3 sobreviveram** · 1 Alta (sobre o teste) · 3 Média · 4 Baixa |
+| **Sessão** | revisora, independente, sem acesso ao histórico da sessão autora nem ao da sessão revisora anterior além do arquivo que ela deixou |
 | **Data** | 2026-08-26 |
-| **Ambiente** | Windows 11, Git 2.46.0, Docker 27.2.0, uv 0.6.9, Node v22.16.0, ruff 0.11.7, mypy 2.3.1. **`make` não existe nesta máquina** — rodei a linha de dentro de cada alvo. `backend/.venv` é **Python 3.13.2** (o projeto declara `>=3.12` e o CI usa 3.12; registro a diferença porque ela é minha, não do autor) |
-| **Infra** | `docker compose` já no ar: `vendinha-postgres-1` healthy em `127.0.0.1:5433`, `vendinha-qdrant-1` healthy em `6333/6334`. A 5432 do host está ocupada por um Postgres nativo — usei `DATABASE_URL` apontando para a 5433 |
-| **Veredito** | **REPROVADO** |
+| **Ambiente** | Windows 11 · Docker 27.x · `backend/.venv` = **Python 3.13.2** (o CI usa 3.12; registro porque a diferença é minha) · `make` **não existe** nesta máquina, rodei a linha de dentro de cada alvo |
+| **Infra** | `docker compose` no ar: `vendinha-postgres-1` healthy em `127.0.0.1:5433`, `vendinha-qdrant-1` em 6333/6334. A 5432 do host está ocupada por um Postgres nativo |
+| **Veredito** | **APROVADO COM RESSALVAS** |
 
 > **Nota de método sobre o `.env`.** A leitura do `.env` é negada ao agente por regra em
-> `.claude/settings.json`, e eu não a burlei: em nenhum momento li o arquivo, e nenhum valor
-> de credencial aparece neste relatório. Onde precisei de configuração, passei variáveis pelo
-> meu próprio shell (`DATABASE_URL`, `CONFIG_ENCRYPTION_KEY` gerada por mim, `API_PORT`,
-> `SESSION_BUDGET_TOKENS`, `LANGFUSE_BASE_URL`). Onde a medição exigia a credencial real —
-> consultar o trace de volta no Langfuse Cloud — usei `vendinha.config.get_settings()` de
-> dentro de um script e imprimi **só o resultado da consulta**, nunca a chave. As chamadas ao
-> Langfuse e aos fornecedores foram feitas contra a nuvem real, com custo real e pequeno
-> (soma de todos os traces desta sessão: **US$ 0,0082**).
+> `.claude/settings.json` e eu não a burlei: em nenhum momento li o arquivo e nenhum valor de
+> credencial aparece neste relatório. Onde precisei de configuração passei variáveis pelo meu
+> próprio shell (`DATABASE_URL`, `CONFIG_ENCRYPTION_KEY` gerada por mim, `API_PORT`, `API_HOST`,
+> `APP_ENV`, `SESSION_BUDGET_TOKENS`, `LANGFUSE_BASE_URL`). Onde a medição exigia a credencial
+> real — subir a API e consultar o trace de volta no Langfuse Cloud — usei
+> `vendinha.config.get_settings()` de dentro de um script e imprimi **só o resultado**. Chamadas
+> reais à Anthropic, à OpenAI e ao Langfuse Cloud, com custo real e pequeno.
 
-> **Nota sobre o banco.** Não escrevi no banco de trabalho do autor: criei um banco
-> `vendinha_verif` no mesmo Postgres para os testes de credencial e o **derrubei** ao final.
-> O `make db-setup` e o teste de retomada do R9 rodaram no banco `vendinha` (as tabelas do
-> checkpointer são idempotentes); as linhas de checkpoint que criei foram removidas (9 em
-> `checkpoints`, 30 no total entre as três tabelas).
+> **Nota sobre o banco.** Não deixei rastro no banco de trabalho do autor. Criei
+> `vendinha_verif2` e `vendinha_semtabela` para os testes de credencial e de falha, e **derrubei
+> os dois** ao final. As sessões de chat que rodei contra o banco `vendinha` foram removidas:
+> **27 threads · 62 checkpoints · 62 blobs · 90 writes**, identificadas por `checkpoint->>'ts'`
+> posterior ao início desta sessão. A `instance_config` do banco do autor não foi tocada
+> (`updated_at` continua anterior a esta sessão, `credentials` NULL). Sobraram 132 checkpoints,
+> que são os do autor.
 
 ---
 
 ## 1. Resumo
 
-A entrega é tecnicamente forte e a maior parte dela sobrevive à falsificação: rodei **34
-quebras deliberadas** na implementação e **31 reprovaram**, cada uma no teste certo e por
-motivo legível. Os invariantes centrais do ADR-012 se sustentam sob medição real: gravei uma
-chave falsa por `PUT /config` e ela **não** aparece em `/health`, `/config`, `/models`,
-`/openapi.json`, `/docs`, no log do processo nem na coluna `bytea` do Postgres — que veio como
-um blob Fernet de 184 bytes sem nenhum `sk-` dentro. O `GET /models` devolveu **119 modelos**
-lidos ao vivo dos dois fornecedores, exatamente o número que a D-9 afirma. A retomada de sessão
-do R9 foi verificada onde ela realmente importa: **dois processos distintos** (pid 36272 e pid
-7688) contra o Postgres do compose, o segundo lendo os turnos que o primeiro escreveu, e uma
-sessão diferente isolada. A degradação de budget foi forçada ponta a ponta e responde com
-honestidade sem citar token, limite ou configuração. E o ADR-010 foi verificado com o Langfuse
-apontado para uma porta morta: **3/3** chamadas a `POST /chat` responderam 200 em 0,97–1,94 s,
-com zero traceback no log.
+**Os dois achados de gravidade Alta que reprovaram a rodada 1 estão corrigidos, e eu medi os
+dois.** Não aceitei a afirmação do autor em nenhum: reproduzi a condição de falha original,
+verifiquei a correção e depois tentei quebrá-la.
 
-O que reprova a entrega são duas coisas, e a primeira é objetiva a ponto de não admitir
-discussão.
+**NC-1 (suíte vermelha fora da máquina do autor) — fechada.** `git archive HEAD` para um
+diretório sem `.env`, com `CONFIG_ENCRYPTION_KEY` fora do ambiente: **360 passed**. Confirmei que
+o `ENV_FILE` resolvido pelo `Settings` é o da cópia e que ele **não existe** — sem isso a medição
+não valeria nada. E confirmei que é a fixture nova que fecha o buraco: desativando o `autouse` do
+`encryption_key` na cópia limpa, voltam **exatamente os 4 testes** que a rodada 1 nomeou. O
+caminho "sem chave → 503" continua coberto por
+`test_the_config_response_says_whether_encryption_is_ready`, que sobrescreve a fixture de
+propósito — a correção não comprou verde tirando cobertura.
 
-**A suíte não é verde fora da máquina do autor.** Exportei o `HEAD` com `git archive` para um
-diretório limpo — sem `.env`, que é exatamente a condição do job `test` do CI — e rodei a mesma
-suíte: **4 failed, 352 passed**. Os quatro testes que quebram dependem de a máquina ter um
-`CONFIG_ENCRYPTION_KEY` no `.env` do autor, porque `PUT /config` responde `503` sem ela. O job
-`test` é *required check* da `main`. A métrica publicada na spec (*"356 passed"*) é verdadeira
-só onde ela foi medida. E o detalhe que transforma isso de descuido em achado: o próprio autor
-descreve essa classe de bug num comentário dentro do mesmo arquivo — *"a test whose answer
-depends on whether the developer happens to have a key in `.env` passes on one machine and
-fails on the next"* — e corrigiu **uma** instância, deixando quatro.
+**NC-2 (a metade "logs" do R5 era inerte) — fechada na aplicação que roda.** Verifiquei no
+caminho de produção, não no teste: `dictConfig(uvicorn.config.LOGGING_CONFIG)`, depois o
+`lifespan` real de `create_app()`. Antes do lifespan, `root handlers: []`; depois,
+`[<StreamHandler <stderr>>]` embrulhado. Um `logger.exception` com chave de provedor falsa e CPF
+de teste sai assim:
 
-**A metade "logs" do R5 não existe na aplicação que roda.** A `docs/riscos.md` R5 é *"vazamento
-de PII em traces **e logs**"*. A metade "traces" está provada e eu a auditei no trace bruto real
-do Langfuse Cloud: CPF com e sem pontuação, e-mail e telefone **ausentes**, com `[CPF]`,
-`[EMAIL]` e `[TELEFONE]` no lugar. A metade "logs" é inerte: `install_log_redaction()` anexa o
-filtro a `logging.getLogger().handlers`, e sob uvicorn — o único jeito suportado de rodar a API
-— **o root não tem handler nenhum**. Medi: `root handlers: []`. O registro emitido por
-`vendinha.app` cai no `logging.lastResort` e chega ao stderr **em claro**:
-`cliente informou 123.456.789-09`. Some-se que o filtro nunca toca em `record.exc_info`, então o
-traceback — o caso que o próprio docstring do módulo nomeia como *"a maneira usual de um segredo
-chegar ao log"* — sai inteiro: medi com uma chave de provedor falsa e um CPF de teste, e os dois
-aparecem no texto formatado. Apagar a chamada que instala o filtro **deixa a suíte verde**
-(falsificação **F14**): nada cobre o alcance, só a função.
+```
+RuntimeError: auth falhou com [CREDENCIAL] para o cpf [CPF] em postgresql://vendinha:[EMAIL]:5433/vendinha
+cliente informou [CPF] e email [EMAIL]
+```
 
-**5 CONFORME · 1 NÃO CONFORME · 0 NÃO VERIFICÁVEL** (requisitos), com 7 não-conformidades
-adicionais e 11 ressalvas.
+O traceback — o caso que a rodada 1 mostrou passando inteiro — é renderizado e redigido. Subi
+também o servidor de verdade (`python -m vendinha`) contra um banco sem tabelas para provocar o
+`logger.exception` do endpoint: o traceback aparece formatado no log do processo e o cliente
+recebe só `"não consegui responder agora"`. Quatro falsificações no módulo, **quatro
+reprovações**, mais uma quinta que reintroduz a regressão exata da NC-2 e também reprova.
+
+**O que impede o APROVADO limpo é uma coisa só, e ela tem a forma exata que a instrução desta
+rodada mandava procurar.** Apagar a chamada `install_log_redaction()` do `lifespan` do `app.py`
+deixa a suíte **verde: 360 passed**. O teste novo
+(`test_installing_log_redaction_actually_installs_something`) responde *"a função instala alguma
+coisa?"* — não *"a aplicação instala?"*. É o **F14 da rodada 1 movido um nível acima**: antes
+nada provava que a função cobria os handlers; agora nada prova que alguém a chama. O autor
+entregou literalmente o que a condição de aceite pedia — e a pergunta de alcance continua sem
+resposta. Ver **NC-A**.
+
+Além disso: a correção da ressalva **R-2** (cache da lista de modelos) entrou **sem nenhum
+teste** — remover a invalidação no `PUT /config` deixa a suíte verde, e tornar o TTL infinito
+também. E a redação de traceback **não cobre a senha do DSN**, que o próprio docstring do
+`RedactingFormatter` nomeia como alvo: ela só some hoje porque o host `127.0.0.1` casa por
+acidente com o regex de e-mail. Com `@postgres:5432` — a forma que a S-08 vai usar — a senha sai
+em claro.
+
+Fora isso, a entrega continua sólida sob medição adversarial: **10 de 13 falsificações reprovaram
+no teste certo**, os seis requisitos estão conformes contra serviços reais, o escopo foi
+respeitado ao pé da letra, `gitleaks` limpo em 41 commits e nenhum CPF, CNPJ, certificado ou
+credencial real no diff.
+
+**6 CONFORME · 0 NÃO CONFORME · 0 NÃO VERIFICÁVEL** (requisitos), com 1 achado Alta, 3 Média e 4
+Baixa fora da tabela de requisitos.
 
 ---
 
-## 2. Conformidade requisito a requisito
+## 2. Achados da rodada 1, um a um
 
-| # | Requisito | Status | Evidência que EU produzi |
+Cada linha foi remedida nesta sessão. "Fechada" significa que **eu** reproduzi o defeito original
+e depois provei que ele não existe mais.
+
+| # | Rodada 1 | Estado agora | Como eu medi |
 |---|---|---|---|
-| REQ-1 | FastAPI com `POST /chat` (SSE) e sessões; grafo LangGraph mínimo (um nó) | **CONFORME** | Subi a API de verdade (`python -m vendinha`, porta 8123) contra o Postgres do compose e o modelo real. `POST /chat` devolve `text/event-stream` com `session` primeiro, `token` no meio e `done` no fim; o `session_id` volta no primeiro evento e continua a conversa no turno seguinte. `graph.py` tem um nó (`conversa`), `START → conversa → END`. Falsifiquei 4 vezes (§5.4): as 4 reprovaram |
-| REQ-2 | Checkpointer em Postgres; estado carrega apenas IDs | **CONFORME** | A metade que a spec manda verificar à mão: `make db-setup` (linha de dentro do alvo), depois **dois processos Python separados** contra o Postgres do compose — pid 36272 gravou `['meu nome ficou registrado?', 'ok']`, pid 7688 (processo novo, nada compartilhado além do banco) leu de volta e fechou em 4 mensagens; uma terceira sessão com id diferente ficou isolada em 2. `ConversationState.__annotations__` == `{session_id, messages}`. Falsifiquei 3 vezes: as 3 reprovaram |
-| REQ-3 | Langfuse Cloud instrumentado: trace por sessão com tools, custo, latência; indisponibilidade não propaga | **CONFORME** | Consultei os traces de volta pela API pública: **11/11** sessões desta verificação têm trace com `latency` e `totalCost` preenchidos. Trace auditado: `name: conversa`, `sessionId` igual ao da API, 3 observações, `GENERATION ChatAnthropic` com `model: claude-haiku-4-5`, `latency: 2.068`, `cost: 0.000801`, `usage: {input 341, output 92, total 433}`. "Tools" não é exercitável na S-02 (não existem tools). A exigência do ADR-010 foi verificada **provocando a falha**, não esperando por ela: subi a API com `LANGFUSE_BASE_URL=http://127.0.0.1:9` (porta morta) e `POST /chat` respondeu **200 em 1940 / 1575 / 967 ms**, com `grep -ci traceback` = **0** no log |
-| REQ-4 | Mascaramento de PII (**CPF, e-mail, nome**) na camada de instrumentação **antes** do envio. *"invariante de release: sem o teste de redação verde, a spec não fecha"* | **NÃO CONFORME** | Duas metades, e as duas falham em pontos diferentes. **Traces:** mandei CPF, CPF sem pontuação, e-mail, telefone e nome numa conversa real e busquei o trace bruto no Langfuse Cloud. CPF `False`, CPF sem pontuação `False`, e-mail `False`, telefone `False` — com `[CPF]`, `[EMAIL]` e `[TELEFONE]` presentes. **`Marta Ribeiro` presente em claro, e `Marta` também.** O REQ-4 nomeia "nome" e o código não mascara nome por padrão; a D-6 explica por quê e o argumento é bom, mas **o texto do requisito não foi emendado** e continua marcado `[x]` — ver **NC-3**. **Logs:** inertes na aplicação real — ver **NC-2**, que é o achado grave |
-| REQ-5 | Budget cap por sessão e timeout por tool via config; exceder = resposta honesta | **CONFORME** | Subi a API com `SESSION_BUDGET_TOKENS=50` e conversei três turnos na mesma sessão: turno 1 respondeu normalmente; turnos 2 e 3 devolveram *"Essa nossa conversa já ficou bem longa e eu preciso parar por aqui…"*, sem citar token, budget, limite, número ou nome de configuração. A unidade é token (D-2) e `SESSION_BUDGET_USD` não existe mais no `.env.example`. Falsifiquei 6 vezes: as 6 reprovaram, incluindo mover o guarda para **depois** da chamada ao modelo |
-| REQ-6 | Provedor agnóstico; `GET /models`; `GET`/`PUT /config`; `model` validado contra allowlist; credencial cifrada, nunca de volta pela API, nunca em trace ou log | **CONFORME**, com duas ressalvas materiais | `GET /models` devolveu **119 modelos** (108 openai + 11 anthropic) lidos ao vivo dos SDKs — não há catálogo escrito neste repositório, confirmado por grep. Gravei `sk-ant-api03-VERIFICACAOFALSA…` por `PUT /config` e varri **cinco rotas**: nenhuma vazou. `bytea` no Postgres: 184 bytes começando em `gAAAAABq…` (Fernet), sem a chave e sem `sk-`. Log do processo: 0 ocorrências. Falsifiquei 7 vezes: **6 reprovaram, 1 passou** — a precedência banco > ambiente (ver **R-1**). E o campo `model`, que é o que este REQ acrescenta, custa 3,3 s de p95 (ver **R-2**) |
+| **NC-1** (Alta) | Suíte `4 failed` em cópia limpa sem `.env` — condição do job `test`, check obrigatório | **FECHADA** | `git archive HEAD` → diretório sem `.env`, `CONFIG_ENCRYPTION_KEY` fora do shell: **360 passed em 1,76 s**. Confirmei que `vendinha.config.ENV_FILE` aponta para a cópia e `exists() == False`. Falsificação **V10**: desativando o `autouse` da fixture nova, voltam os **mesmos 4 testes** nomeados na rodada 1 |
+| **NC-2** (Alta) | `install_log_redaction()` inerte sob uvicorn (root sem handler) e filtro sem alcance ao traceback | **FECHADA na aplicação** | Caminho de produção reproduzido (`LOGGING_CONFIG` + lifespan real): root ganha handler embrulhado, traceback sai com `[CREDENCIAL]` e `[CPF]`. Servidor real contra banco sem tabelas: `logger.exception` formatado, cliente sem vazamento. Falsificações **V1–V4** e **V11**: 5 quebras, 5 reprovações. **Mas ver NC-A** — o alcance da *chamada* continua sem teste |
+| **NC-3** (Média) | REQ-4 dizia "nome" e ficava `[x]` com nome saindo em claro | **FECHADA** | REQ-4 emendado inline, no mesmo padrão do REQ-3, nomeando as duas garantias (padrão / valor conhecido) e dizendo que a S-04 é quem alimenta o registro. Auditei o trace bruto: `Marta Ribeiro` continua em claro — e agora o texto do requisito diz isso |
+| **NC-4** (Média) | ADR-005, `.claude/commands/verificar-spec.md` e a issue #3 contradizem o `CLAUDE.md` sobre quando a verificação acontece | **ABERTA — adiada com motivo registrado** | Reconferi os três: `ADR-005` §Decisão continua *"relatório… anexado antes do **merge**"*, sem nota de cabeçalho; `verificar-spec.md` passo 6 continua *"Publicar o relatório como comentário no PR"*; o corpo da issue #3 continua com *"3. PR com evidência… 4. `/verificar-spec` → relatório anexado ao PR"*. **Esta sessão precisou da mesma exceção escrita ao ritual que a anterior.** O argumento do autor (governança vai em PR de harness próprio, não dentro do PR de uma spec) é o certo e é o mesmo que a R-9 da S-01 cobra — aceito o adiamento, registro que o custo já foi pago duas vezes |
+| **NC-5** (Baixa) | Tabela de execução com 9 commits, branch com 10 | **FECHADA** | `git rev-list --count origin/main..HEAD` = **11**; a tabela tem **11 linhas** e o texto diz "11 commits para 7 tasks". Bate hoje. A própria spec anota que vai errar de novo enquanto a tabela for escrita antes do último commit existir — e ela tem razão: ver **NC-E** |
+| **NC-6** (Média) | `dca2419` tirou o deny de `.env.*`, liberando `.env.local`/`.env.prod` enquanto o `.gitignore` os trata como segredo | **PARCIALMENTE FECHADA** | O deny agora enumera oito nomes (`.env`, `.env.local`, `.env.*.local`, `.env.dev`, `.env.development`, `.env.prod`, `.env.production`, `.env.test`). O `.gitignore` continua ignorando **`.env.*`** com `!.env.example`. Ver **NC-G**: a receita literal da rodada 1 (negar `.env.*` + permitir `.env.example`) **não é implementável** — no Claude Code o `deny` vence o `allow` —, então a enumeração é resposta defensável; o que sobra é o resíduo, e ele não está escrito em lugar nenhum |
+| **NC-7** (Baixa) | "treze testes-âncora" onde eram 21; issue #3 com `ADRs: ADR-007` | **METADE FECHADA, METADE REGREDIU** | Issue #3: campo `ADRs` agora é `ADR-001, ADR-007, ADR-010, ADR-012`, igual ao frontmatter — **fechada**. Marker: medi `pytest tests -m "risco"` → **24 passed**, 336 deselected (R5: **13** · R6: 7 · R9: 4). A spec diz **21 (R5: 10)**. O número ficou desatualizado **pelo próprio commit de correção**, que acrescentou 3 testes de R5. Ver **NC-E** |
+| **R-1** (ressalva) | Inverter "banco vence ambiente" não quebrava nenhum teste | **FECHADA** | `effective_credentials()` é função pura em `providers.py` e o `app.py` a usa em `_credentials`. Falsificação **V6** (inverter os dois lados) → reprova `test_the_stored_key_is_the_one_the_model_actually_gets`. Falsificação **V7** (`_credentials` passa a ignorar o banco) → reprova 2 testes. O portão que eu atravessei na rodada 1 está fechado |
+| **R-2** (ressalva) | p95 do 1º token **com** `model` era 3,331 s, acima do alvo | **FECHADA no regime quente; custo frio novo, não declarado** | Medi n=10 em cada caminho contra a API real: **com `model` p95 = 0,992 s** (mediana 0,873), **sem `model` p95 = 0,992 s** (mediana 0,902). Alvo ≤ 3 s: cumprido. **Mas o primeiro pedido depois do boot com `model` levou 4,043 s**, contra 1,197 s sem `model` no mesmo estado frio — a volta aos fornecedores ainda custa ~2,85 s, agora paga uma vez a cada 300 s por processo em vez de a cada requisição. O número publicado na spec (1,072 s) é de cache quente e não diz isso. Ver **NC-B** e **R-2b** |
+| **R-3 … R-11** (rodada 1) | Nove ressalvas que o relatório mandou tratar nas specs seguintes *"desde que registradas"* | **NÃO REGISTRADAS** | A seção "Ressalvas herdadas" da spec só cobre as da **S-01**. Nenhuma das nove da S-02 aparece na spec. E elas viviam só no arquivo que este relatório sobrescreve. Ver **NC-D** — e a §9, onde eu as remedi uma a uma e as carrego adiante |
 
 ---
 
-## 3. Cenários BDD
+## 3. Conformidade requisito a requisito
+
+| # | Requisito | Status | Evidência que EU produzi nesta rodada |
+|---|---|---|---|
+| REQ-1 | FastAPI com `POST /chat` (SSE) e sessões; grafo LangGraph mínimo | **CONFORME** | API real (`python -m vendinha`, portas 8123–8126) contra o Postgres do compose e o modelo real. SSE abre com `session`, fecha com `done`; o `session_id` do primeiro evento continua a conversa (turno 2 respondeu *"João, claro! A gente estava conversando agora mesmo"*). Mensagem em branco → **422** pelo contrato. Modelo fora da lista → 422 com *"consulte GET /models"*. Falsificação **V12** (tirar a allowlist) reprova |
+| REQ-2 | Checkpointer em Postgres; estado carrega só IDs | **CONFORME** | A metade que a spec manda fazer à mão, na versão forte: **três processos distintos** contra o Postgres do compose — `pid=38424` gravou 2 turnos, `pid=35324` (processo novo) leu de volta e fechou em 4, `pid=35012` com outro `session_id` ficou isolado em 2. `ConversationState` continua com `{session_id, messages}` |
+| REQ-3 | Langfuse Cloud instrumentado; indisponibilidade não propaga (ADR-010) | **CONFORME** | Consultei os traces de volta pela API pública: **263/263** traces da última hora com `sessionId`, `latency` e `totalCost` preenchidos, todos com `name: conversa`, zero sem `sessionId`. Trace auditado: `67cbe7359356bca5b0c8cc434b46ac73`, 11.568 bytes, 3 observações, `latency 1.32`, `totalCost 0.0006`. ADR-010 **provocado** (não esperado): subi a API com `LANGFUSE_BASE_URL=http://127.0.0.1:9` e `POST /chat` respondeu **200 em 2,118 / 1,195 / 1,199 s**, com `grep -ci traceback` = **0** no log |
+| REQ-4 | Mascaramento de PII antes do envio **e em log** — invariante de release | **CONFORME**, com uma ressalva material e um achado sobre o teste | **Traces:** conversa real com CPF pontuado, CPF sem pontuação, e-mail, telefone e nome; trace bruto do Langfuse Cloud auditado campo a campo — CPF `False`, CPF sem pontuação `False`, e-mail `False`, telefone `False`, com `[CPF]`, `[EMAIL]` e `[TELEFONE]` presentes; `Marta Ribeiro` presente, como o texto emendado do REQ-4 agora declara. **Logs:** funcionam no caminho real (§1). **Ressalva:** a senha do DSN escapa quando o host não tem ponto — **NC-C**. **Achado sobre o teste:** nada prova que a aplicação instala a redação — **NC-A** |
+| REQ-5 | Budget cap por sessão e timeout por tool; exceder = resposta honesta | **CONFORME** | API subida com `SESSION_BUDGET_TOKENS=50`, três turnos na mesma sessão: turno 1 respondeu normalmente; turnos 2 e 3 devolveram *"Essa nossa conversa já ficou bem longa e eu preciso parar por aqui…"*, **sem citar token, limite, número ou nome de configuração** (`adversarial-006`). Falsificação **V13** (`within_budget` sempre `True`) reprova 2 testes, um deles o que prova que o guarda roda **antes** da chamada ao modelo |
+| REQ-6 | Provedor agnóstico; `GET /models`; `GET`/`PUT /config`; allowlist; credencial cifrada e que nunca volta | **CONFORME** | Gravei `sk-ant-api03-VERIFICACAO2FALSA…` (54 chars) por `PUT /config` num banco meu e varri **cinco rotas** — `/health`, `/config`, `/models`, `/openapi.json`, `/docs`: **nenhuma** contém a chave nem o fragmento. Log do processo: **0** ocorrências. Repouso: `instance_config.credentials` é um `bytea` de **184 bytes** começando em `gAAAAABq…` (Fernet), com `position('sk-' …) = 0`. A resposta do próprio `PUT` traz `source:"banco"` e dica de 4 caracteres. Falsificações **V6**, **V7** e **V12** reprovam |
+
+---
+
+## 4. Cenários BDD
 
 ```gherkin
 Cenário: PII nunca aparece em trace
-  Dado uma conversa em que o cliente informa um CPF de teste
-  Quando inspeciono o trace da sessão no Langfuse
-  Então o CPF aparece mascarado e nunca em texto claro
 ```
 
-**CONFORME.** Sessão `verif-pii-1787768634`, trace `be0d0e12ec37…`, 12.145 bytes de JSON bruto
-auditados campo a campo. O `input` do trace veio literalmente assim:
+**CONFORME.** Sessão `verif2-pii-e1716a01`, trace `67cbe735…`, 11.568 bytes de JSON bruto lidos de
+volta da API pública do Langfuse. O `input` do trace veio literalmente assim:
 
 ```
 "content": "oi, aqui e Marta Ribeiro, meu cpf e [CPF] (ou [CPF]), meu email [EMAIL] e meu telefone [TELEFONE]. pode anotar?"
 ```
 
-CPF `123.456.789-09`, `12345678909`, e-mail e telefone: **ausentes**. Nenhum `sk-ant`, `sk-proj`,
-`sk-lf` nem `ANTHROPIC_API_KEY` no trace. O cenário como escrito fala de CPF, e o CPF passa. O
-**nome** não — está no trace em claro, e a spec declara isso de propósito na D-6.
+Nenhum `sk-ant`, `sk-lf`, `sk-proj`, `ANTHROPIC_API_KEY` nem a senha do DSN no trace. O nome está
+em claro — declarado na D-6 e agora também no texto do REQ-4.
 
 ```gherkin
 Cenário: retomada de sessão
-  Dado uma conversa interrompida após 3 turnos
-  Quando o cliente retorna com o mesmo session_id
-  Então o grafo retoma do checkpoint sem perda de contexto
 ```
 
-**CONFORME**, e verificado na versão forte: não um grafo novo no mesmo processo, mas **processos
-diferentes**. Rodei três invocações do mesmo script, cada uma abrindo seu próprio
-`AsyncPostgresSaver` contra o Postgres do compose:
+**CONFORME**, na versão forte (processos diferentes, não grafos diferentes no mesmo processo):
 
 ```
-pid=36272 turnos=2  ['meu nome ficou registrado?', 'ok']
-pid=7688  turnos=4  ['meu nome ficou registrado?', 'ok', 'e agora, lembra?', 'ok']   ← processo novo
-pid=36136 turnos=2  ['nada a ver', 'ok']                                            ← outra sessão
+pid=38424 sessao=r9-verif2 turnos=2  ['meu nome ficou registrado?', 'ok']
+pid=35324 sessao=r9-verif2 turnos=4  ['meu nome ficou registrado?', 'ok', 'e agora, lembra?', 'ok']
+pid=35012 sessao=r9-outra  turnos=2  ['nada a ver', 'ok']
 ```
-
-É a metade manual que `docs/testes.md` §1 e a própria spec mandam fazer aqui, e ela fecha.
 
 ```gherkin
 Cenário: a credencial não volta pela porta da frente
-  Dado que o operador gravou uma API key pela configuração
-  Quando qualquer rota da API é consultada, incluindo a de configuração
-  Então nenhuma resposta contém a chave — só `configured: true` e uma dica mascarada
 ```
 
-**CONFORME.** Gravei a chave falsa e varri `/health`, `/config`, `/models`, `/openapi.json` e
-`/docs`: **as cinco limpas**. A resposta do próprio `PUT` — o lugar mais fácil de errar — veio
-com `"configured":true,"source":"banco","hint":"…0000"`. Continuei além do cenário e fui ao
-repouso: a coluna `credentials` do Postgres é um blob Fernet opaco, e o log do processo tem
-**0** ocorrências da chave.
+**CONFORME.** Cinco rotas varridas contra uma chave gravada de verdade, mais o log do processo e o
+`bytea` do Postgres. Nada vazou. Detalhe: `GET /models` **mudou** depois do `PUT` (a chave falsa
+derrubou os modelos da Anthropic), o que é evidência de que a invalidação do cache funciona —
+embora nada a teste (**NC-B**).
 
 ---
 
-## 4. Métricas medidas vs alvo
+## 5. Métricas medidas vs alvo
 
-| Métrica | Alvo | Spec declara | **Eu medi** | Status |
+| Métrica | Alvo | Spec declara | **Eu medi (rodada 2)** | Status |
 |---|---|---|---|---|
-| Sessões com trace completo | 100% | 13/13 | **11/11** (as 11 sessões que eu criei), todas com `latency` e `totalCost` não nulos | CONFORME |
-| PII em claro em traces | 0 | 0 | **0 para CPF, e-mail e telefone**; **nome em claro**, como a D-6 declara | ver NC-3 |
-| PII em claro em **logs** | 0 (`docs/riscos.md` R5) | não medida | **PII e credencial em claro no stderr da aplicação real** | **NC-2** |
-| Credencial em claro em traces/logs/respostas | 0 | 0 | **0** — 5 rotas, log do processo, trace bruto e `bytea` do Postgres | CONFORME |
-| p95 primeiro token (sem `model`) | ≤ 3 s | 1,31 s (n=10) | **1,034 s** (n=10, mediana 0,874 s, min 0,591 s) | CONFORME |
-| p95 primeiro token (**com `model`**) | ≤ 3 s | não medida | **3,331 s** (n=10, mediana 2,621 s, min 1,843 s) | **estoura o alvo** — ver R-2 |
-| Suíte, nesta máquina | verde | 356 passed | **356 passed em 1,61 s** | CONFORME |
-| Suíte, em cópia limpa sem `.env` (= CI) | verde | — | **4 failed, 352 passed** | **NC-1** |
+| Suíte, nesta máquina | verde | 360 passed | **360 passed em 2,09 s** | CONFORME |
+| Suíte, cópia limpa sem `.env` (= CI) | verde | 360 passed | **360 passed em 1,76 s** (`git archive HEAD`; `ENV_FILE.exists() == False` confirmado) | **CONFORME — NC-1 fechada** |
 | `ruff check` / `ruff format --check` | limpo | limpo | **All checks passed** / **26 files already formatted** | CONFORME |
-| `mypy` strict no backend | limpo | limpo | **Success: no issues found in 14 source files** | CONFORME |
-| `mypy` strict na suíte | limpo | limpo | **Success: no issues found in 10 source files** | CONFORME (R-4 da S-01 fechada) |
-| `pytest tests -m "risco"` | coleta > 0 | "os treze testes-âncora… 21 passed" | **21 passed, 335 deselected** (R5: 10 · R6: 7 · R9: 4) | CONFORME; o "treze" está errado, ver NC-6 |
-| `commitlint` na branch | 0 problemas | — | **0 problems** em 10 commits (3 avisos `footer-leading-blank`) | CONFORME |
-| `gitleaks` no histórico | 0 leaks | — | **no leaks found**, 40 commits, 1,65 MB, exit 0 | CONFORME |
-| Commits entregues | 9 (tabela da spec) | 9 | **10** | ver NC-5 |
+| `mypy --strict` em `backend/` | limpo | limpo | **Success: no issues found in 14 source files** | CONFORME |
+| `mypy --strict` em `tests/` | limpo | limpo | **Success: no issues found in 10 source files** | CONFORME |
+| `pytest tests -m "risco"` | coleta > 0 | **21** (R5: 10 · R6: 7 · R9: 4) | **24 passed**, 336 deselected (R5: **13** · R6: 7 · R9: 4) | número da spec **desatualizado** — NC-E |
+| `commitlint` na branch | 0 problemas | — | **0 problems**, 3 avisos `footer-leading-blank`, 11 commits | CONFORME |
+| `gitleaks` no histórico | 0 leaks | — | **no leaks found**, 41 commits, 1,71 MB | CONFORME |
+| Sessões com trace completo | 100% | 13/13 | **263/263** traces da última hora com `sessionId`, `latency` e `totalCost` | CONFORME |
+| PII em claro em **traces** | 0 | 0 | **0** para CPF (duas formas), e-mail e telefone; **nome em claro**, declarado | CONFORME |
+| PII em claro em **logs da aplicação real** | 0 (R5) | — | **0** para CPF, e-mail, telefone e credencial, inclusive dentro do traceback | **CONFORME — NC-2 fechada** |
+| Senha do DSN em log | 0 (implícito no docstring do módulo) | — | **vaza** quando o host não tem ponto (`@postgres`, `@db`, `@localhost`) | **NC-C** |
+| Credencial em resposta / log / repouso | 0 | 0 | **0** — 5 rotas, log do processo, `bytea` de 184 B sem `sk-` | CONFORME |
+| p95 1º token, sem `model` (cache quente) | ≤ 3 s | 1,109 s | **0,992 s** (n=10, mediana 0,902, min 0,872, max 1,037) | CONFORME |
+| p95 1º token, com `model` (cache quente) | ≤ 3 s | 1,072 s | **0,992 s** (n=10, mediana 0,873, min 0,788, max 1,025) | CONFORME |
+| 1º token com `model`, **cache frio** | ≤ 3 s | não medida | **4,043 s** (contra 1,197 s sem `model` no mesmo estado frio) | **estoura o alvo** — R-2b |
+| Custo do `RedactingFormatter` por registro de log | — | não medida | 0 valores: **0,0065 ms** · 50: **0,30 ms** · 200: **1,42 ms** · 512: **17,28 ms** | **NC-H** |
 
-### 4.1 A medição que reprova: a suíte fora desta máquina
+### 5.1 O número que a spec ainda não conta: o primeiro pedido
 
-```
-$ git archive HEAD | tar -x -C <scratch>/ci-sim      # cópia limpa, sem .env
-$ cd <scratch>/ci-sim && PYTHONPATH=./backend python -m pytest tests
-...
-FAILED tests/unit/test_provider_config.py::test_writing_a_credential_stores_it_and_never_echoes_it
-FAILED tests/unit/test_provider_config.py::test_a_stored_credential_wins_over_the_environment
-FAILED tests/unit/test_provider_config.py::test_the_model_list_comes_from_the_provider
-FAILED tests/unit/test_provider_config.py::test_chat_refuses_a_model_outside_the_server_list
-4 failed, 352 passed in 1.78s
-```
-
-Confirmei que `ENV_FILE` apontava para a cópia e que ela não tem `.env`. A cadeia é curta:
-os quatro testes fazem `client.put("/config", …)`; `write_config` recusa com **503** quando
-`Vault(settings.config_encryption_key).usable` é falso; sem `.env` e sem variável no ambiente,
-`config_encryption_key` é `None`. O job `test` do CI faz `checkout` + `pip install` +
-`bash scripts/run-tests.sh` — nenhum `.env`, nenhum secret exportado. Reproduzi o mesmo
-resultado de um segundo jeito, no próprio repositório, com `CONFIG_ENCRYPTION_KEY=` no shell:
-os mesmos quatro.
-
-### 4.2 A medição que expõe o log
+O cache resolveu o regime permanente e não o primeiro pedido. Medido nesta máquina, contra a API
+real, com o processo recém-subido:
 
 ```
-$ python -c "cfg = uvicorn.Config('vendinha.app:app', …); cfg.configure_logging(); …"
-root handlers: []
-uvicorn.access handlers: [<StreamHandler <stdout>>] propagate: False
-depois de install_log_redaction, filtros no root: []
-saida do log: 'cliente informou 123.456.789-09\n'
+COLD com model:  4,043 s     <- estoura o alvo de 3 s
+COLD sem model:  1,197 s     <- mesmo estado frio, sem passar por _allowed_models
 ```
 
-E o caminho do traceback, com o filtro **corretamente** anexado à mão:
+A diferença (~2,85 s) é a ida aos dois fornecedores. Com `MODELS_CACHE_SECONDS = 300` e a
+expiração contada **a partir do preenchimento**, não do último acesso, esse pedágio reaparece a
+cada 5 minutos por processo, mesmo sob tráfego contínuo. Para uma instância com pouco tráfego —
+que é o caso da S-07 em demonstração — uma fração relevante das conversas começa pagando 4 s. A
+linha da spec (*"1,072 s (n=10)"*) é verdadeira e é de cache quente; ela não diz isso.
+
+### 5.2 O custo da redação de log cresce com o registro de nomes, e tem um degrau
+
+O `RedactingFormatter` chama `redactor()` **por registro de log**, e `Redactor.text` roda um
+`re.sub` para cada valor conhecido mais um por parte do nome. Medido:
 
 ```
-RuntimeError: auth failed with sk-ant-api03-QQQQ…QQQQ for cpf 123.456.789-09 at postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha
-KEY in log: True
-CPF in log: True
+   0 valores conhecidos ->   0,0065 ms por registro
+   1                    ->   0,0136 ms
+  10                    ->   0,0667 ms
+  50                    ->   0,3032 ms
+ 200                    ->   1,4203 ms
+ 512                    ->  17,2828 ms      <- 12x o de 200
 ```
+
+O degrau em 512 é o cache de padrões do módulo `re` (512 entradas) entrando em thrash: com 512
+nomes o redator monta ~1.500 padrões distintos por chamada. E **512 é exatamente o `maxsize`
+default de `KnownValues`**. Na S-02 nada alimenta o registro, então o custo real hoje é
+0,0065 ms; a partir da S-04, que é quem chama `remember` (D-6), um processo longevo aterrissa no
+degrau — e o log de acesso do uvicorn é escrito no event loop, uma linha por requisição. O mesmo
+custo vale por atributo de span no hook de export. Ver **NC-H**.
 
 ---
 
-## 5. As falsificações que executei
+## 6. As falsificações que executei nesta rodada
 
-**34 quebras, 31 reprovações, 3 passaram.** Em cada uma: quebrei o arquivo de produto, rodei o
-teste-alvo, restaurei com `git checkout --`. Nenhum arquivo de teste foi tocado — quebrar o
-teste para ver o teste falhar não prova nada.
+**13 quebras deliberadas, 10 reprovações, 3 sobreviveram.** Em cada uma quebrei o arquivo de
+**produto**, rodei a suíte inteira e restaurei com `git checkout --`. Nenhum arquivo de teste do
+repositório foi tocado — exceto na **V10**, que é sobre a fixture nova e por isso só faz sentido
+ali, e mesmo essa foi feita na cópia limpa fora do repositório.
 
-### 5.1 R5 — redação (`tests/security/test_pii_redaction.py`)
+### 6.1 As que reprovaram
 
 | # | O que quebrei | Reprovou em |
 |---|---|---|
-| F1 | removi `(CPF, "[CPF]")` de `PATTERNS` | `test_a_cpf_never_survives_redaction` |
-| F2 | removi `(EMAIL, "[EMAIL]")` | `test_an_email_never_survives_redaction` |
-| F3 | removi `(PHONE, "[TELEFONE]")` | `test_a_phone_number_never_survives_redaction` |
-| F4 | removi `(CREDENTIAL, "[CREDENCIAL]")` | `test_a_provider_credential_never_survives_redaction` |
-| F5 | apaguei o laço que mascara **o primeiro nome** isolado | `..._even_when_only_the_first_name_appears` **e** `..._does_not_reach_the_export_either` |
-| F6 | `redactor()` passa a ignorar `KNOWN_VALUES` | `test_a_remembered_name_does_not_reach_the_export_either` |
-| F7 | mascarei **demais**: `CPF` vira `\b[\d.]{5,}\b` | `..._a_price_is_not_mistaken_for_personal_data` (e o telefone junto) |
-| F8 | `mask_otel_spans` sempre devolve `None` ("batch inalterado") | `..._scrubs_every_string_attribute` **e** `..._does_not_reach_the_export_either` |
-| F9 | `attributes()` devolve todo atributo, não só os que mudaram | `..._leaves_a_clean_span_untouched` |
-| F10 | o hook só redige spans do **nosso** escopo, ignorando `langchain` | `..._scrubs_every_string_attribute` **e** `..._does_not_reach_the_export_either` |
-| F11 | `RedactingLogFilter.filter` vira `return True` seco | `test_log_records_are_redacted_before_they_reach_a_handler` |
-| F12 | desliguei **só** o caminho `record.args` | idem |
+| **V1** | `install_log_redaction()` não coleta handler nenhum e não cria o fallback | `..._installing_log_redaction_actually_installs_something`, `..._traceback_never_carries_pii…`, `..._applications_own_logger_is_covered_too`, `..._plain_log_line_is_redacted_too` (4) |
+| **V2** | tirei **só** o fallback do root, mantendo os loggers nomeados | `test_the_applications_own_logger_is_covered_too` — o teste em subprocesso, o único que enxerga o caminho do `vendinha.app` |
+| **V3** | `RedactingFormatter.format` devolve o texto do formatter interno sem redigir | 3 testes de log |
+| **V4** | `_every_handler()` passa a olhar só o root, ignorando os loggers nomeados | 2 testes de log |
+| **V6** | inverti `effective_credentials()`: o ambiente passa a vencer o banco | `test_the_stored_key_is_the_one_the_model_actually_gets` — **o portão que eu atravessei na rodada 1 agora fecha** |
+| **V7** | `_credentials()` do `app.py` passa a ignorar o banco | `..._model_list_comes_from_the_provider`, `..._chat_refuses_a_model_outside_the_server_list` |
+| **V10** | desativei o `autouse` da fixture `encryption_key`, **na cópia limpa sem `.env`** | os **mesmos 4** testes nomeados pela NC-1 da rodada 1 — prova de que é essa fixture que a fecha |
+| **V11** | o formatter redige **só** `record.msg`, deixando o traceback intocado (a regressão exata da NC-2) | 3 testes de log |
+| **V12** | removi a validação de allowlist do `POST /chat` | `test_chat_refuses_a_model_outside_the_server_list` |
+| **V13** | `within_budget` sempre `True` | `..._cap_allows_up_to_the_limit…`, `..._over_budget_answers_honestly_without_calling_the_model` |
 
-A F8 e a F10 são as que valem: elas atacam o **alcance**, não a função, e as duas foram pegas
-pelo teste que constrói um lote com um span de instrumentação de terceiro. Esse par é a melhor
-coisa do arquivo.
+A **V2** e a **V4** são as que valem: elas atacam **alcance**, não função, e as duas foram pegas
+pelos testes que o autor escreveu para isso — inclusive o que roda em subprocesso porque o plugin
+de logging do pytest troca os handlers do root em toda chamada. Esse par é a melhor coisa da
+correção.
 
-**As duas que passaram — e ambas são sobre log:**
+### 6.2 As três que sobreviveram
 
 | # | O que quebrei | Resultado |
 |---|---|---|
-| **F13** | desliguei a redação de `record.msg` (mantendo `record.args`) | **10 passed** — nada cobre esse ramo, porque os dois `logger.info` do teste passam a PII por `%s` |
-| **F14** | fiz `install_log_redaction()` **não anexar nada** | **10 passed** — o teste anexa o filtro à mão num logger que ele mesmo cria. Nada prova que a aplicação instala o filtro. Ver **NC-2** |
+| **V5** | apaguei `install_log_redaction()` do `lifespan` do `app.py` — a aplicação nunca instala a redação | **360 passed.** Nada na suíte prova que a aplicação chama a função. Ver **NC-A** |
+| **V8** | tirei `request.app.state.models_cache = None` do `PUT /config` — o cache nunca é invalidado | **360 passed.** Ver **NC-B** |
+| **V9** | `MODELS_CACHE_SECONDS = 1e12` — o cache nunca expira | **360 passed.** Ver **NC-B** |
 
-### 5.2 R6 — custo e latência (`tests/unit/test_budget_guard.py`)
-
-| # | O que quebrei | Reprovou em |
-|---|---|---|
-| F15 | `within_budget` sempre `True` | `..._cap_allows_up_to_the_limit…` **e** `..._over_budget_answers_honestly…` |
-| F16 | `<=` vira `<` (gastar exatamente o teto passa a ser estouro) | `..._cap_allows_up_to_the_limit_and_refuses_past_it` |
-| F17 | `tokens_spent` conta só `output_tokens` | `..._spending_is_read_back_from_the_conversation` |
-| F18 | movi o guarda para **depois** da chamada ao modelo | `..._over_budget_answers_honestly_without_calling_the_model` |
-| F19 | mensagem de limite passa a dizer *"budget de 60000 token"* | `..._limit_message_never_leaks_configuration` |
-| F20 | `TimedOut` perde o nome do que estourou | `..._a_slow_call_is_cut_off_and_a_fast_one_is_not` |
-
-A F18 é a que importa: um guarda que recusa depois de gastar não é guarda, e o teste o pega
-porque o modelo falso levanta se for tocado. Isso é asserção sobre **alcance**, do jeito certo.
-
-### 5.3 R9 — retomada e pointer-not-payload (`tests/unit/test_session_resume.py`)
-
-| # | O que quebrei | Reprovou em |
-|---|---|---|
-| F21 | `builder.compile()` sem checkpointer | `..._resumes_with_the_same_session_id` **e** `..._new_graph_reads_what_the_previous_one_wrote` |
-| F22 | `thread_id` fixo em `"unica"` | `test_two_sessions_do_not_share_state` |
-| F23 | acrescentei `pedido: dict` ao `ConversationState` | `test_graph_state_carries_identifiers_not_payloads` |
-
-### 5.4 Endpoint e configuração (feature tests)
-
-| # | O que quebrei | Reprovou em |
-|---|---|---|
-| F24 | evento `session` deixa de ser o primeiro | 5 testes de `test_chat_endpoint.py` |
-| F25 | o evento `error` passa a carregar o texto da exceção (com DSN) | `..._becomes_an_event_and_leaks_nothing` |
-| F26 | `NonEmptyText` vira `str` puro | `..._empty_message_is_refused_by_the_contract` |
-| F27 | `session_id` do cliente é ignorado (id novo a cada turno) | `..._same_session_id_continues_the_same_conversation` |
-| F28 | `/config` devolve a chave inteira no lugar da dica | `..._never_returns_the_key` **e** `..._never_echoes_it` |
-| F29 | removi a validação de allowlist do `POST /chat` | `test_chat_refuses_a_model_outside_the_server_list` |
-| F30 | `models_offered_by` passa a devolver uma lista escrita à mão | `..._model_list_comes_from_the_provider` (e o de allowlist junto) |
-| F31 | removi o guarda `APP_ENV != "local"` do `PUT /config` | `..._cannot_be_written_outside_local` |
-| F32 | `Vault.seal` grava em claro quando não há chave | `..._writing_is_refused_not_downgraded` |
-| F33 | `Vault.hint` devolve o segredo inteiro | 3 testes ao mesmo tempo |
-
-**A que passou:**
-
-| # | O que quebrei | Resultado |
-|---|---|---|
-| **F34** | inverti a precedência em `_credentials()`: **o ambiente passa a vencer o banco** | **16 passed.** Existe um teste chamado `test_a_stored_credential_wins_over_the_environment` e ele continua verde, porque ele afirma sobre o campo `source` do `/config` — que `read_config` calcula direto de `stored.credentials` — e não sobre a função que decide **qual chave o grafo usa**. Ver **R-1** |
+Verifiquei à mão que os dois comportamentos da V8/V9 **funcionam** hoje: com o seam de fornecedor
+substituído, `GET /models` chamou o fornecedor 1× antes do `PUT`, 2× depois do `PUT` (invalidou) e
+continuou em 2× na chamada seguinte (cacheou). O achado é a ausência de teste, não um defeito de
+comportamento.
 
 ---
 
-## 6. Invariantes globais
+## 7. Invariantes globais
 
 | Invariante | Verificação | Resultado |
 |---|---|---|
-| Ausência de segredo no diff | `gitleaks v8.29.0` no histórico completo com o `.gitleaks.toml` do repo | **OK.** `no leaks found`, 40 commits, 1,65 MB |
-| Ausência de CPF/CNPJ/certificado/dado real no diff | grep por CPF e CNPJ formatados, `sk-`/`ghp_`/`APP_USR-`/`BEGIN PRIVATE KEY`, e `*_KEY=`/`*_TOKEN=`/`*_SECRET=` com valor, em todas as linhas `+` | **OK.** Zero CPF, zero CNPJ, zero certificado. Os únicos "segredos" são três constantes obviamente sintéticas: `"sk-ant-api03-" + "A"*40`, `"sk-lf-" + "b"*32`, `"sk-ant-api03-" + "Z"*40` |
+| Ausência de segredo no histórico | `gitleaks v8.29.0` com o `.gitleaks.toml` do repo | **OK.** `no leaks found`, 41 commits, 1,71 MB |
+| Ausência de CPF/CNPJ/certificado/dado real no diff | grep por CPF e CNPJ formatados, `sk-…`, `ghp_`, `APP_USR-`, `BEGIN PRIVATE KEY` em todas as linhas `+` de `origin/main...HEAD` | **OK.** As únicas ocorrências são o CPF de teste `123.456.789-09` (número público de validação, documentado como sintético em `tests/unit/conftest.py`) dentro dos testes e do relatório, e três constantes obviamente falsas (`"sk-ant-api03-" + "Z"*40`, `"sk-ant-ambiente-" + "x"*20`, `"sk-openai-" + "y"*20`) |
 | Credencial nunca volta pela API | 5 rotas varridas contra uma chave gravada de verdade | **OK** |
-| Credencial cifrada em repouso | `bytea` lido direto do Postgres: 184 bytes, prefixo Fernet, sem `sk-` | **OK** |
-| PII mascarada em **traces** | trace bruto real do Langfuse Cloud, 12 KB, campo a campo | **OK** para CPF/e-mail/telefone; **nome em claro** (declarado na D-6) |
-| PII mascarada em **logs** | introspecção do logging sob uvicorn + teste de traceback | **FALHA** — ver NC-2 |
-| Escopo respeitado ("Fora de escopo: RAG, subagents, tools de negócio; a tela de configuração; credencial por usuário") | `find backend -name "*.py"` + grep por `qdrant`/`embedding`/`retriev`/`subagent`/`@tool`/`StructuredTool`/`StaticFiles`/`HTMLResponse`/`user_id`/`auth` | **OK.** 14 módulos, nenhum cliente Qdrant, nenhuma tool, nenhum subagent, nenhum diretório `frontend/`, nenhuma rota que sirva HTML, nenhuma coluna de usuário. `instance_config` é literalmente uma linha só (`CHECK (id = 1)`) |
+| Credencial cifrada em repouso | `bytea` lido direto do Postgres: 184 B, prefixo Fernet, `position('sk-') = 0` | **OK** |
+| PII mascarada em **traces** | trace bruto real do Langfuse Cloud, 11,5 KB, campo a campo | **OK** para CPF/e-mail/telefone; nome em claro, declarado |
+| PII mascarada em **logs** | `LOGGING_CONFIG` do uvicorn + lifespan real + servidor real | **OK**, exceto a senha do DSN — **NC-C** |
+| Escopo respeitado | grep por `qdrant`/`embedding`/`retriev`/`subagent`/`@tool`/`StructuredTool`/`StaticFiles`/`HTMLResponse`/`user_id`/`auth` em `backend/vendinha/` | **OK.** Só comentários casam. Nenhum diretório `frontend/`, nenhuma tool, nenhum subagent, nenhuma coluna de usuário. `instance_config` tem `CHECK (id = 1)` |
 | Fronteira de permissões de subagents | não aplicável (o primeiro subagent chega na S-04) | **N/A** |
-| Suíte restaurada após as falsificações | `git status --short` ao fim | **OK.** Única entrada é `?? docs/workshop/apresentacao.html`, não rastreado, que já existia antes desta sessão |
-| Banco de trabalho do autor restaurado | `DROP DATABASE vendinha_verif`; 30 linhas de checkpoint de teste removidas de `vendinha` | **OK** |
-
----
-
-## 7. Avaliação das "Descobertas"
-
-Lidas como *alterações de escopo a justificar*, não como fatos aceitos.
-
-| # | Veredito | Comentário |
-|---|---|---|
-| **D-1** (`LANGFUSE_BASE_URL`) | **Legítima e no escopo** | O código lê `AliasChoices("LANGFUSE_BASE_URL", "LANGFUSE_HOST")` — confirmei que os dois nomes funcionam. A decisão de **não** emendar o ADR-010 é a certa e é consistente com o mecanismo que a S-01 construiu: nome de variável de terceiro é consequência, não decisão. O `.env.example`, o `docker-compose.yml`, o `github-setup.md` e o job `evals` do CI foram todos atualizados junto — varri e não achou sobra |
-| **D-2** (cap em token) | **Legítima, decidida pelo PO, e melhor que a alternativa** | `SESSION_BUDGET_USD` não existe mais em lugar nenhum (grep limpo). O argumento — tabela de preço por fornecedor apodrece em silêncio — é reforçado pelo ADR-012, e o teste fica determinístico sem rede. Verifiquei o outro lado da conta: o custo em R$ **está** no Langfuse (`totalCost: 0.000801` no trace que auditei), que é onde o R6 já o colocava |
-| **D-3** (ADR-012) | **Legítima, e tratada do jeito certo** | Pedido novo do PO, fora dos cinco requisitos originais, virou ADR + REQ-6 + três invariantes provados por código em vez de implementação silenciosa. Conferi que o ADR-012 não substitui nem reescreve nenhum ADR aceito, e que `docs/decisoes.md` ganhou a linha D15. A frase *"protege contra dump do banco; não protege contra quem já tem o `.env`"* está no ADR e no `.env.example` — é o tipo de honestidade que faz o documento valer |
-| **D-4** (sem seam novo para credencial) | **Legítima** | `docs/testes.md` §2 mapeia *"o que atravessa a fronteira do processo"* para `tests/security/test_pii_redaction.py`, e a credencial é exatamente isso. Confirmei que o arquivo tem o caso (`test_a_provider_credential_never_survives_redaction`) e que criar `test_credential_leak.py` seria camada nova. A §3 item 6 manda registrar em vez de improvisar, e foi o que aconteceu |
-| **D-5** (`ProactorEventLoop`) | **Legítima e verificável** | `runtime.loop_factory()` usa `os.name == "nt"` e o motivo dado (mypy apaga um ramo de `sys.platform` com `warn_unreachable`) é real. A consequência prática — `python -m vendinha` em vez de `uvicorn vendinha.app:app` — está documentada no `__main__.py`, no `Makefile` e no README do alvo. Usei `runtime.run()` nos meus próprios scripts e o `psycopg` async funcionou; é a prova pela via de uso |
-| **D-6** (nome não tem forma) | **Argumento correto, resolução incompleta** | A distinção entre "por padrão" e "por valor conhecido" é honesta e a tabela que a spec acrescenta é o jeito certo de descrever. E o registro ser **do processo** em vez da sessão é decisão bem fundamentada: confirmei que a redação roda na thread de export do OTel, onde um `contextvar` da thread da requisição não estaria. **O que falta é fechar o laço no REQ-4**, que continua dizendo "nome" e continua `[x]`. Ver NC-3. Nota adicional: `KNOWN_VALUES.remember` não tem **nenhum** chamador em produção (grep), então na S-02 o mecanismo é código morto — a spec diz isso, mas vale registrar que a metade testada do REQ-4 é a que nada exercita |
-| **D-7** (`localhost` → `::1` pendura) | **Legítima, e corrigida pela própria D-12** | `with_connect_timeout` injeta `connect_timeout=5` sem sobrescrever quem já traz um — li a função e ela faz exatamente isso. A auto-correção na D-12 é o comportamento certo (medir em vez de generalizar) |
-| **D-8** (`PUT /config` só em `APP_ENV=local`) | **Legítima, e é a melhor decisão da spec** | Restrição em vez de promessa. Falsifiquei (F31): remover o guarda reprova. `GET /config` continua liberado e devolve `editable: false` fora de local. A consequência para a S-07/S-08 está escrita como consequência, não escondida |
-| **D-9** (sem catálogo de modelos) | **Legítima, e o número confere** | **119 modelos** na minha execução, exatamente o que a spec afirma. O argumento (ADR-001 aplicado ao próprio código-fonte) é o melhor raciocínio do documento. Confirmei o fallback: com uma chave inválida o `models.list()` levantou `AuthenticationError`, `models_offered_by` devolveu lista vazia e `GET /models` respondeu 200 com o resto |
-| **D-10** (recusa subiu para o endpoint) | **Legítima** | `write_config` checa `Vault(...).usable` antes de chamar o store, e o store mantém a sua como defesa em profundidade. `503` e não `500` está certo. Falsifiquei nos dois níveis (F32) |
-| **D-11** (Langfuse caiu no meio da medição) | **Legítima como observação, insuficiente como verificação** | A nota de método — *"esperar a falha acontecer sozinha"* — é boa, mas ela dispensa a verificação em vez de fazê-la, e a exigência do ADR-010 fica dependendo de a nuvem ter uma tarde ruim no dia certo. Eu **provoquei** a falha (`LANGFUSE_BASE_URL` numa porta morta) e o resultado bate: 200 em 0,97–1,94 s, zero traceback. A conclusão do autor está certa; o método de chegar nela não é repetível, e essa é justamente a diferença que a spec cobra dos outros |
-| **D-12** (`127.0.0.1` por quem disca + `API_HOST`) | **Legítima, e o achado embutido é o melhor da spec** | A regra "quem disca" está no `.env.example` com o raciocínio de origem/CORS, que é certo. O `API_HOST=0.0.0.0` combinado com a D-8 era de fato uma rota de gravação de credencial exposta na rede local, e o autor registrou como o que é. Confirmei que `Settings.api_host` tem default `127.0.0.1` **no código também**, não só no exemplo — que é o que faz a correção valer para quem não copiou o `.env.example` |
-
-**Descoberta que eu esperaria e não encontrei registrada:** que quatro testes da suíte precisam
-de uma variável de ambiente que o CI não tem. É o tipo de coisa que aparece na primeira execução
-fora da máquina, e a spec fecha declarando *"Suíte local verde"* — a palavra "local" está lá, e
-é exatamente o problema.
+| Repositório restaurado após as falsificações | `git status --short` e `git diff --stat` ao fim | **OK.** Diff vazio; única entrada é `?? docs/workshop/apresentacao.html`, não rastreado, que já existia antes desta sessão |
+| Banco do autor restaurado | 27 threads / 214 linhas removidas; `vendinha_verif2` e `vendinha_semtabela` derrubados; `instance_config` intocada | **OK** |
 
 ---
 
 ## 8. Não-conformidades (fora da tabela de requisitos)
 
+### 8.1 Novas desta rodada
+
 | # | Achado | Gravidade |
 |---|---|---|
-| **NC-1** | **A suíte não passa fora da máquina do autor, e o job que ela quebra é check obrigatório.** Em cópia limpa do `HEAD` sem `.env` — a condição exata do job `test` do CI — dá **4 failed, 352 passed**. Os quatro fazem `PUT /config`, que responde `503` sem `CONFIG_ENCRYPTION_KEY`. Reproduzi por dois caminhos independentes (cópia limpa; e `CONFIG_ENCRYPTION_KEY=` no shell do próprio repo), com o mesmo resultado. Duas coisas agravam. Primeira: o autor **descreve essa classe de bug** num comentário dentro do mesmo arquivo (*"a test whose answer depends on whether the developer happens to have a key in `.env` passes on one machine and fails on the next, and the failure looks like a bug in the code"*) e corrigiu só a instância que o incomodou. Segunda: o `.env.example` distribui `CONFIG_ENCRYPTION_KEY=` **vazio**, então nem quem seguir o quickstart à risca terá a suíte verde. O conserto é uma fixture de três linhas fixando a chave, no mesmo padrão que `test_the_config_response_says_whether_encryption_is_ready` já usa | **Alta** |
-| **NC-2** | **A metade "logs" do R5 é inerte na aplicação real, e nada testa isso.** `docs/riscos.md` R5 é *"vazamento de PII em traces **e logs**"*; o REQ-4 é declarado invariante de release. Dois defeitos independentes, e cada um sozinho já basta: **(a)** `install_log_redaction()` percorre `logging.getLogger().handlers`, que sob uvicorn está **vazio** — medi `root handlers: []` — então zero filtro é instalado; o registro cai no `logging.lastResort` e sai em claro (`cliente informou 123.456.789-09`). **(b)** o filtro nunca toca `record.exc_info`, então o traceback sai inteiro — e é o `logger.exception("failed to generate an answer for session %s", …)` do `app.py` que recebe qualquer exceção do SDK do fornecedor ou do psycopg; medi com uma chave falsa e um CPF, os dois presentes na saída formatada. O docstring do módulo nomeia **exatamente** esse caso como o que ele existe para cobrir. A falsificação **F14** (apagar a instalação do filtro) deixa a suíte **verde**, o que é o achado dentro do achado: o teste está no diretório `security`, cuja definição em `docs/testes.md` §1 é *"a ação proibida é alcançável?"*, e ele responde a pergunta da camada `unit` | **Alta** |
-| **NC-3** | **REQ-4 diz "nome", o código não mascara nome, e o requisito continua marcado `[x]`.** Medi no trace bruto: `Marta Ribeiro` e `Marta` presentes em claro. A D-6 explica por quê, o argumento está certo e a solução entregue é honesta — mas a resolução parou antes de tocar o texto do requisito. E o próprio autor mostra, na mesma spec, que sabe fazer isso: o REQ-3 recebeu a emenda inline *"O texto original dizia `LANGFUSE_HOST`… Ver D-1."*. O REQ-4 não recebeu nada. Sob o `CLAUDE.md`, a spec é a fonte da verdade da sessão; a sessão da S-04 vai ler *"Mascaramento de PII (CPF, e-mail, nome)"* marcado como entregue e concluir que nome já está coberto — quando o que existe é um registro que **ninguém em produção alimenta** (`KNOWN_VALUES.remember` não tem chamador). É o mesmo dano que a NC-1 do relatório da S-01 descreve: texto de requisito apontando a próxima sessão para a conclusão errada | **Média** |
-| **NC-4** | **Três normativos contradizem o `CLAUDE.md` sobre quando a verificação acontece.** O `CLAUDE.md` item 4 (precedência **1**) diz *"Verificação independente ANTES do PR… Sem veredito, não existe PR"*. Continuam dizendo o contrário: `docs/adr/ADR-005-…:16` (*"relatório de verificação independente anexado antes do **merge**"*, precedência **5**), `.claude/commands/verificar-spec.md:27` (passo 6: *"Publicar o relatório como comentário no PR"*, e o arquivo de comando não está na lista de precedência) e o corpo da **issue #3** (*"3. PR com evidência… 4. `/verificar-spec` em sessão nova → relatório anexado ao PR"*). É contradição herdada do commit `ce8b46f` da S-01 — a R-9 daquele relatório sinalizou o commit e **não** a contradição que ele criou. Mas a S-02 é a primeira spec executada sob a ordem nova e não reconciliou, e o efeito é concreto: **esta sessão teve que receber uma exceção escrita ao ritual para poder executá-lo**. Pelo mecanismo do próprio repositório, o ADR-005 pede nota de cabeçalho (como o ADR-003 e o ADR-002 receberam), e o arquivo de comando pede uma edição de uma linha | **Média** |
-| **NC-5** | **A tabela de execução declara 9 commits; a branch tem 10.** Falta `96ecfd6 fix(s-02): apply the loopback rule per caller…`, que é justamente o commit da D-12 — a descoberta está escrita, a linha da tabela não. A spec ainda afirma **"9 commits para 7 tasks"** e explica as duas diferenças; são três. É a repetição literal da **NC-4 do relatório da S-01** (*"a tabela parou um commit antes do fim"*), no mesmo artefato e pelo mesmo motivo | **Baixa** |
-| **NC-6** | **`.claude/settings.json` perdeu o deny de `.env.*`, e o `.gitignore` discorda dele.** O commit `dca2419` remove `"Read(./.env.*)"` com a justificativa de que a regra cobria o `.env.example` versionado — o que é verdade. Mas o efeito colateral é liberar a leitura de `.env.local`, `.env.dev`, `.env.production`: e o `.gitignore` deste repositório ignora **`.env.*`** com `!.env.example`, ou seja, o repositório já declara que qualquer `.env.*` que não seja o exemplo é segredo. O cabeçalho do próprio `.env.example` descreve as duas garantias como pareadas (*"o `.gitignore` impede o commit, a regra de permissão impede a leitura"*), e elas deixaram de estar pareadas. O conserto é o mesmo movimento, feito na direção certa: negar `.env.*` e permitir `.env.example` | **Média** |
-| **NC-7** | **"Os treze testes-âncora da S-02 declaram o marker: 21 passed".** São **21** testes com `@pytest.mark.risco` (R5: 10, R6: 7, R9: 4), não treze — a frase se contradiz dentro dela mesma. Somando: a **issue #3** declara `ADRs: ADR-007` enquanto o frontmatter da spec declara `[ADR-001, ADR-007, ADR-010, ADR-012]`; a issue é ponteiro e a spec vence, mas o ponteiro está desatualizado justamente no campo que a S-02 mais mexeu | **Baixa** |
+| **NC-A** | **Nada prova que a aplicação instala a redação de log.** Apagar `install_log_redaction()` do `lifespan` do `app.py` deixa a suíte **verde: 360 passed**. Os cinco testes de log do arquivo de `security` chamam a função **eles mesmos** — inclusive o de subprocesso, que a executa no script em vez de deixá-la vir pela `create_app`. É o **F14 da rodada 1 movido um nível acima**: antes nada provava que a função cobria os handlers, agora nada prova que alguém a chama. O `docs/testes.md` §1 define a camada `security` como *"a ação proibida é alcançável?"*, e a resposta continua vindo da camada `unit`. O agravante é que a linha apagada é exatamente a que a NC-2 existiu para acrescentar: uma refatoração que a remova reabre o achado Alta da rodada 1 com a suíte verde. O conserto é barato — `tests/unit/test_chat_endpoint.py` já sobe `TestClient(create_app(...))`, que roda o lifespan; basta esvaziar o root, subir a app e afirmar que os handlers ficaram embrulhados | **Alta** (sobre o teste) |
+| **NC-B** | **A correção da R-2 entrou sem nenhum teste.** O cache de `_allowed_models` é comportamento novo em `app.py` e **duas falsificações independentes sobrevivem**: remover `request.app.state.models_cache = None` do `PUT /config` (**V8**) e tornar o TTL infinito (**V9**) deixam a suíte verde. Verifiquei à mão que os dois funcionam hoje, então não é defeito — é comportamento não sancionado. E o modo de falha da invalidação é literalmente o da **R-1** que esta mesma rodada fechou: o operador grava a chave nova, o `/config` responde `source: "banco"` com a dica da chave nova, e por até 5 minutos o `GET /models` e o `POST /chat` continuam recusando os modelos do provedor recém-configurado. Uma spec que acabou de aprender que "a vitrine concorda e o processo discorda" é o pior modo de falha não devia fechar reintroduzindo a forma dele | **Média** |
+| **NC-C** | **A redação de traceback não cobre a senha do DSN, que o próprio docstring nomeia como alvo.** `RedactingFormatter` diz: *"the provider SDK or psycopg… carry API keys **and DSNs** that nobody chose to log"*. Medi `redact()` em quatro formas de DSN: `postgresql://u:s3nh4@127.0.0.1:5432/db` → mascarado; `…@localhost:5432/…`, `…@db:5432/…`, `…@postgres/…` → **senha em claro**. O único caso que funciona funciona **por acidente**: `s3nh4@127.0.0.1` casa com o regex de `EMAIL` e vira `[EMAIL]`. Host sem ponto é justamente a forma dentro de uma rede Docker, que é o que a S-08 vai usar (ADR-008), e é a forma que aparece em exceção de `psycopg`. Nenhum dos testes de log usa um DSN — os dois afirmam sobre CPF e chave de provedor. Um padrão para `://usuario:senha@` custa uma linha em `PATTERNS` e um caso no arquivo de `security` | **Média** |
+| **NC-D** | **As nove ressalvas da rodada 1 (R-3 a R-11) não foram registradas em lugar nenhum.** O relatório anterior condicionou o adiamento delas: *"podem ser tratadas nas specs seguintes, **desde que registradas**"*. A seção "Ressalvas herdadas" da spec cobre só as da S-01. O único lugar onde elas existiam é **este arquivo**, que esta rodada sobrescreve — ou seja, sem a §9 abaixo, o ritual apagaria as próprias descobertas. Não é detalhe de arquivo: é o mecanismo pelo qual o repositório não perde achado, e ele falhou em silêncio. Remedi as nove nesta sessão e as carrego na **§9**, mas o lugar delas é a spec | **Média** |
+| **NC-E** | **O número de testes-âncora ficou desatualizado pelo próprio commit de correção.** A spec afirma **"21 (R5: 10, R6: 7, R9: 4)"**; medi **24 (R5: 13, R6: 7, R9: 4)**. O commit `06d2fd8` acrescentou 3 testes de R5 e não mexeu no número que ele mesmo estava consertando. É a repetição da NC-7 dentro da correção da NC-7 — e a própria spec prevê essa classe (*"ela é escrita antes do último commit existir"*), o que reforça que o conserto de verdade é derivar esses números de comando (`pytest -m risco`, `git log`) em vez de escrevê-los à mão | **Baixa** |
+| **NC-F** | **A mensagem do commit `06d2fd8` está em português.** O `CLAUDE.md` §Fluxo item 3 e §Convenções mandam *Conventional Commits, **em inglês***. Há precedente na `main` (`7bbfa86 fix(s-00): corrigir os achados da verificação independente`), e o próprio autor tem nesta branch um `refactor(s-02): put the code back in english` corrigindo exatamente essa classe de derrapada — o que torna a reincidência mais visível, não menos. Ou a regra vale e este commit precisa de mensagem em inglês, ou o `CLAUDE.md` abre a exceção por escrito para commits de resposta a verificação | **Baixa** |
+| **NC-G** | **O deny de `.env.*` foi fechado por enumeração, e o resíduo não está escrito.** Oito nomes cobertos; o `.gitignore` continua tratando **qualquer** `.env.*` como segredo. `.env.staging`, `.env.hml`, `.env.ci`, `.env.vps` seguem git-ignorados e legíveis pelo agente. Registro em favor do autor que a receita literal da rodada 1 — *"negar `.env.*` e permitir `.env.example`"* — **não funciona**: no Claude Code o `deny` vence o `allow`, então essa combinação bloquearia o próprio exemplo. A enumeração é resposta defensável; o que falta é (a) dizer isso em algum lugar e (b) o cabeçalho do `.env.example` parar de descrever as duas garantias como pareadas quando elas são pareadas só para oito nomes | **Baixa** |
+| **NC-H** | **O custo da redação de log cresce com o registro de nomes e tem um degrau em 512, que é o `maxsize` do registro.** Medido (§5.2): 0,0065 ms com o registro vazio, 1,42 ms com 200 valores, **17,28 ms com 512**. A causa do degrau é o cache de padrões do módulo `re`, de 512 entradas, entrando em thrash. Hoje é inofensivo porque `KNOWN_VALUES.remember` não tem chamador em produção — mas a D-6 diz que **a S-04 é quem passa a chamar**, e o `RedactingFormatter` roda em **todo** registro de log, incluindo o de acesso do uvicorn, escrito no event loop. Não é defeito desta spec: é uma conta que a S-04 vai herdar sem saber, e ela precisa estar escrita antes de alguém a descobrir com um p95 estranho | **Baixa** (latente; vira Média na S-04) |
 
----
+### 8.2 Herdada e ainda aberta
 
-## 9. Riscos observados e ressalvas
-
-| # | Ressalva | Por que importa |
+| # | Achado | Estado |
 |---|---|---|
-| **R-1** | **A precedência "banco vence ambiente" não é testada onde ela decide.** Inverti `_credentials()` para o ambiente ganhar (F34) e a suíte ficou **verde**, incluindo o teste chamado `test_a_stored_credential_wins_over_the_environment` — porque ele afirma sobre o campo `source` do `/config`, que `read_config` calcula direto de `stored.credentials`, e não sobre a função que escolhe a chave entregue ao `resolve_model`. | O ADR-012 chama isso de invariante (*"o que está no banco vence o que está no ambiente"*), e o modo de falha é o pior possível: a UI diz `source: "banco"`, a dica mostra os quatro caracteres da chave nova, e o processo continua gastando na chave velha do `.env`. Um teste que asserte sobre a chave que `_graph_for` recebe fecha isso. |
-| **R-2** | **`_allowed_models()` chama os fornecedores em toda requisição de chat que traga `model`.** Medi os dois caminhos na mesma máquina, mesmo modelo, n=10 cada: **sem `model`, p95 = 1,034 s**; **com `model`, p95 = 3,331 s** (mediana 2,621 s). O alvo da spec é ≤ 3 s. | O campo `model` é o que o REQ-6 acrescenta, e a tela da S-07 vai mandá-lo em toda mensagem — o caminho medido pela spec é o que a UI **não** vai usar. Além da latência, são duas chamadas HTTP a fornecedores por turno de conversa, que é superfície de rate limit e de custo dentro do risco R6, que esta mesma spec fecha. Um cache com TTL na lista de modelos resolve os dois de uma vez. |
-| **R-3** | **`redact()` — a função pattern-only — não tem consumidor em produção.** Só `Redactor.text` via `redactor()` é chamado pelo código real. Seis das dez asserções do arquivo de `security` exercitam `redact()`. | Não é defeito: as duas de export e a de log cobrem o caminho verdadeiro, e é por isso que F8/F10 foram pegas. Mas vale saber que a maioria do arquivo testa uma função que a aplicação não chama, o que explica por que F13/F14 escaparam. |
-| **R-4** | **`Redactor.attributes` só redige valores `str`.** Atributos de OpenTelemetry podem ser sequências de strings, e uma `tuple[str, …]` atravessa o hook intocada. | Hoje não vi nenhum atributo assim nos traces que auditei, então é risco latente e não vazamento observado. Mas o hook é a fronteira, e "hoje o LangChain não emite listas" é uma garantia de terceiro, não nossa. |
-| **R-5** | **`LOG_LEVEL` está no `.env.example` marcado `(S-02)` e nenhum código o lê.** `Settings` não tem o campo; grep em `backend/`, `scripts/` e `Makefile` não acha consumidor. | Variável documentada e inerte é pior que variável ausente: quem for depurar vai colocar `LOG_LEVEL=DEBUG` e concluir que não há o que ver. Combina mal com a NC-2, onde justamente o log é o problema. |
-| **R-6** | **`vendinha/db.py:main()` imprime o `DATABASE_URL` inteiro no stderr quando falha**, senha incluída. | É CLI local e a intenção (ajudar quem acabou de rodar `make db-setup`) é boa. Mas é o mesmo canal que a NC-2 mostra estar sem redação, e a S-08 vai levar este módulo para uma VPS. Imprimir o DSN com a senha mascarada custa uma linha. |
-| **R-7** | **`resolve_model` tem `lru_cache(maxsize=8)` com a `api_key` na chave do cache.** Correto para invalidar em rotação, e significa que a credencial fica num cache de módulo pelo tempo de vida do processo. | Não é vazamento — o segredo já está em memória de qualquer jeito. Registro porque a S-08 vai discutir dump de memória e core dump, e este é o lugar onde a chave persiste mais do que se espera. |
-| **R-8** | **`GET /config` é aberto e diz `encryption_ready`, `editable`, os provedores configurados e a dica de 4 caracteres — sem autenticação, em qualquer ambiente.** | A D-8 fechou a escrita e argumenta que a leitura *"não expõe nada"*. Expõe pouco, não nada: para quem faz reconhecimento, a resposta diz que provedor está configurado, se a instância aceita escrita e se falta chave de criptografia. Provavelmente aceitável até a S-08; merece uma linha explícita lá em vez de ser redescoberto. |
-| **R-9** | **Ressalvas herdadas da S-01 que continuam abertas: R-3 (fixture ↔ seed é acordo humano), R-5 (corpo do ADR-003 diz "integração"), R-10 (seed malformado quebra a coleta).** Confirmei as três: continuam válidas e a S-02 não piorou nenhuma. | A spec as registra com honestidade e o diagnóstico dela bate com o meu. Nenhum arquivo novo desta spec constrói dado no import de módulo, como ela afirma — verifiquei. |
-| **R-10** | **O `README` do quickstart e o `Makefile` mandam `make db-setup` antes de `make api`, e nada sanciona o esquecimento.** `open_checkpointer` não roda `setup()`, por decisão explícita e correta (migração não pertence ao startup). | A decisão está certa; o custo é que quem pular o passo recebe um erro de tabela inexistente na primeira mensagem, não no boot. Uma mensagem de erro que diga *"rode `make db-setup`"* transformaria isso num desvio de trinta segundos. |
-| **R-11** | **O `.venv` desta máquina é Python 3.13.2 e o CI usa 3.12.** Todos os meus números vêm do 3.13. | Nada no diff depende de versão menor, e `mypy` está fixado em `python_version = "3.12"` de qualquer jeito. Registro para que ninguém leia "356 passed" como medido no mesmo interpretador do CI. |
+| **NC-4** | ADR-005, `.claude/commands/verificar-spec.md` e o corpo da issue #3 continuam contradizendo o `CLAUDE.md` sobre quando a verificação acontece | **Aberta, adiamento aceito.** O motivo registrado na spec é correto: mudança de ritual dentro do PR de uma spec é o padrão que virou a R-9 da S-01. Mas o custo já foi pago duas vezes — esta sessão também precisou de exceção escrita para executar o próprio ritual |
 
 ---
 
-## 10. Veredito
+## 9. Ressalvas — carregadas da rodada 1 e remedidas nesta sessão
 
-# REPROVADO
+A NC-D explica por que esta seção existe: sem ela, sobrescrever o arquivo apagaria os achados.
+**Cada linha foi reconferida agora**, não copiada.
 
-**Por que não APROVADO COM RESSALVAS.** Duas coisas independentes reprovam, e nenhuma delas é
-questão de julgamento.
+| # | Ressalva | Reconferida em 2026-08-26 (rodada 2) |
+|---|---|---|
+| **R-2b** | **O primeiro pedido com `model` continua acima do alvo**: 4,043 s frio contra 1,197 s sem `model` | **Nova/derivada da R-2.** O cache resolveu o regime quente e deslocou o custo, não o eliminou. Com TTL contado do preenchimento, reaparece a cada 5 min por processo. Um refresh assíncrono, ou preencher o cache no `lifespan`, tira o pedágio do caminho do cliente |
+| **R-3** | `redact()` — a função pattern-only — não tem consumidor em produção | **Continua.** `grep` em `backend/vendinha/`: os únicos chamadores reais são `redactor()` em `mask_otel_spans` e no `RedactingFormatter`. `redact()` só é chamada por testes. Não é defeito; explica por que quebrar `redact` sozinha não diria nada sobre a aplicação |
+| **R-4** | `Redactor.attributes` só redige valores `str` | **Continua.** `if isinstance(value, str)` inalterado. Atributo de OTel pode ser sequência de strings, e uma `tuple[str, …]` atravessa o hook intocada. Risco latente, não vazamento observado |
+| **R-5** | `LOG_LEVEL` está no `.env.example` marcado `(S-02)` e nada o lê | **Continua.** `grep` em `backend/vendinha/`, `scripts/` e `Makefile`: **nenhum** consumidor; `Settings` não tem o campo. Combina especialmente mal com a NC-2, que era sobre log: quem for depurar redação vai pôr `LOG_LEVEL=DEBUG` e concluir que não há o que ver |
+| **R-6** | `vendinha/db.py:main()` imprime o `DATABASE_URL` inteiro no stderr quando falha, senha incluída | **Continua**, e agora conversa com a **NC-C**: é o mesmo segredo, no mesmo canal, e o `print` do `db.py` nem passa pelo `logging`, então nenhuma redação o alcança |
+| **R-7** | `resolve_model` tem `lru_cache(maxsize=8)` com a `api_key` na chave do cache | **Continua.** Correto para invalidar em rotação; registro porque a S-08 vai discutir dump de memória |
+| **R-8** | `GET /config` é aberto e informa `encryption_ready`, `editable`, provedores configurados e dica de 4 caracteres, sem autenticação, em qualquer ambiente | **Continua.** Aceitável até a S-08; merece uma linha explícita lá em vez de ser redescoberto |
+| **R-9** | Ressalvas herdadas da **S-01** ainda abertas: R-3 (fixture ↔ seed), R-5 (corpo do ADR-003), R-10 (seed malformado) | **Continuam**, e a spec as registra com honestidade na seção própria. Reconferi que nenhum arquivo novo desta spec constrói dado no import de módulo |
+| **R-10** | `README`/`Makefile` mandam `make db-setup` antes de `make api` e nada sanciona o esquecimento | **Continua**, e eu topei com ele de propósito: apontei a API para um banco sem tabelas e o resultado foi `psycopg.errors.UndefinedTable: relation "checkpoints" does not exist` na primeira mensagem, não no boot. A decisão de não migrar no startup está certa; a mensagem é que podia dizer `rode make db-setup` |
+| **R-11** | O `.venv` desta máquina é Python 3.13.2 e o CI usa 3.12 | **Continua**, e vale para os meus números também. `mypy` está fixado em `python_version = "3.12"` de qualquer jeito |
+| **R-12** | **Nova.** Over-masking latente para a S-05: uma chave de acesso de NF-e escrita em grupos de quatro (`35 2408 1234 5678`) é parcialmente mascarada como `[TELEFONE]` | Medido. Hoje é inofensivo; a S-05 é a spec que vai olhar chave de acesso em trace e log |
+| **R-13** | **Nova.** `install_log_redaction()` **acrescenta um `StreamHandler` ao root** quando ele está vazio. É o que fecha a NC-2 e é a decisão certa — mas muda o destino padrão de qualquer log de terceiro no processo (de `logging.lastResort` para stderr, no nível do root). Verifiquei que **não** duplica saída sob uvicorn (`uvicorn` e `uvicorn.access` têm `propagate: False`) | Efeito colateral correto e não declarado. Uma linha no docstring do módulo ou no `.env.example` evita a surpresa |
 
-A primeira é a **NC-1**: a suíte não passa numa cópia limpa do repositório. Não é uma previsão
-— é uma medição, feita por dois caminhos independentes, com o mesmo resultado: **4 failed, 352
-passed**. O job `test` é *required check* da `main`, o `Definition of Done` da própria spec tem
-"CI verde no PR" como item, e a métrica publicada — *"356 passed"* — só é verdadeira na máquina
-onde foi medida. Uma spec cujo tema é observabilidade e reprodutibilidade não pode fechar com a
-suíte dependendo de um arquivo que o `.gitignore` proíbe de existir em qualquer outro lugar. E o
-que faz disso reprovação em vez de ressalva é que o autor **já tinha identificado essa classe de
-falha por escrito, no mesmo arquivo**, e a corrigiu numa instância enquanto deixava quatro.
+---
 
-A segunda é a **NC-2**, e ela é mais séria do que o número de linhas necessárias para consertá-la.
-O REQ-4 é declarado *"invariante de release"* e a `docs/riscos.md` R5 diz *traces **e** logs*. A
-metade "traces" é excelente e eu a auditei no serviço real: CPF nas duas formas, e-mail e
-telefone saem mascarados de um lote que inclui span de instrumentação de terceiro. A metade
-"logs" **não roda**: sob uvicorn o root logger não tem handler, `install_log_redaction()` instala
-zero filtros, e o registro sai em claro pelo `lastResort` — medido, não inferido. Mesmo se
-instalasse, o traceback continuaria passando, porque `record.exc_info` nunca é tocado — e é o
-`logger.exception` do `app.py` que recebe qualquer exceção do SDK do fornecedor ou do psycopg,
-isto é, exatamente as que carregam credencial e DSN. E o teste que deveria pegar isso está no
-diretório `security`, cuja definição normativa é *"a ação proibida é alcançável?"*: apagar a
-instalação inteira do filtro **deixa esse teste verde**. Um invariante de release cuja
-verificação não distingue "o código foi escrito" de "o código está no caminho" não é um
-invariante.
+## 10. Avaliação das "Descobertas" novas
 
-**Por que não é uma reprovação severa.** É importante dizer, porque a distância entre esta
-entrega e uma aprovação é curta. **31 de 34 falsificações reprovaram no teste certo**, incluindo
-as que atacam alcance e não função — o hook de export pego quando ignora o span do `langchain`,
-o guarda de budget pego quando é movido para depois da chamada ao modelo, o `thread_id` pego
-quando deixa de isolar sessões. Todos os invariantes do ADR-012 se sustentaram sob medição
-adversarial contra serviços reais: cinco rotas varridas, o `bytea` do Postgres lido, o log do
-processo varrido, nenhuma ocorrência da chave. A retomada do R9 foi provada com dois PIDs
-diferentes contra Postgres de verdade, que é a versão forte do requisito. O ADR-010 foi
-verificado provocando a falha em vez de esperar por ela. O escopo foi respeitado ao pé da letra:
-nenhum RAG, nenhum subagent, nenhuma tool, nenhuma tela, nenhum modelo de usuário. Nenhum
-segredo, CPF, CNPJ ou dado real no diff, com `gitleaks` limpo em 40 commits. E o conjunto de
-decisões registradas — a D-8 acima de todas, que fecha uma rota por ambiente em vez de prometer
-consertá-la depois — é de qualidade acima do que a spec precisava entregar.
+Lidas como *alterações de escopo a justificar*, não como fatos aceitos. As D-1 a D-12 foram
+avaliadas na rodada 1 e eu reconferi por amostragem que continuam válidas (D-1: `AliasChoices`
+com os dois nomes; D-2: `SESSION_BUDGET_USD` não existe mais em código, exemplo ou docs; D-5:
+`runtime.run()` funcionou nos meus scripts com `psycopg` async no Windows; D-8: `PUT /config` só
+em `local`; D-12: `Settings.api_host` tem default `127.0.0.1` **no código**, não só no exemplo).
 
-### Condições para a S-02 ser considerada fechada
+| # | Veredito | Comentário |
+|---|---|---|
+| **D-13** (a verificação reprovou, e o que ele aprendeu) | **Legítima, honesta, e incompleta em dois pontos** | A tabela descreve corretamente cada achado e cada correção, e o parágrafo sobre o método — *"eu escrevi o comentário que descreve o defeito e consertei só a instância na minha frente"* — é o melhor texto da spec e bate com o que eu medi. Dois problemas: (1) a linha da **R-2** diz *"Medido depois: 1,072 s com `model`"* sem dizer que é cache quente, e o primeiro pedido custa 4,0 s (§5.1); (2) a linha da **NC-2** descreve a correção como *"`install_log_redaction()` devolve quantos cobriu, **para um teste reprovar quando ela virar no-op**"* — verdade, e o que a **V5** mostra é que virar no-op não é o único jeito de a redação sumir. O adiamento da **NC-4** está bem argumentado e eu o aceito |
+| **Descoberta que eu esperaria e não encontrei** | — | Que **as ressalvas da própria verificação precisam morar na spec**, e não só no relatório. A D-13 traz para a spec as sete não-conformidades e as duas ressalvas que exigiam código, e deixa as outras nove fora — no arquivo que o ritual sobrescreve. Ver **NC-D** |
 
-1. **NC-1** — fixar `CONFIG_ENCRYPTION_KEY` nos testes que gravam credencial, no mesmo padrão
-   que `test_the_config_response_says_whether_encryption_is_ready` já usa. Critério de aceite:
-   `git archive HEAD` para um diretório sem `.env`, suíte verde lá.
-2. **NC-2** — fazer a redação de log valer na aplicação: instalar o filtro onde os registros
-   realmente passam (o `dictConfig` do uvicorn, ou um handler próprio no root), e cobrir
-   `record.exc_info`. E acrescentar ao arquivo de `security` o teste de **alcance** que hoje não
-   existe: um que reprove se `install_log_redaction()` deixar de instalar alguma coisa.
-3. **NC-3** — emendar o texto do REQ-4 como o REQ-3 foi emendado, nomeando as duas garantias da
-   tabela da D-6. "Nome" mascarado por valor conhecido, com o registro sem chamador até a S-04.
-4. **NC-6** — restaurar o deny de `.env.*` com exceção para `.env.example`, para as duas
-   garantias que o próprio `.env.example` descreve voltarem a estar pareadas.
-5. **NC-4** — reconciliar os três normativos com o `CLAUDE.md` (nota de cabeçalho no ADR-005,
-   uma linha em `.claude/commands/verificar-spec.md`, o corpo da issue #3). É barato e é o que
-   impede a próxima sessão revisora de precisar de uma exceção escrita para executar o ritual.
-6. **NC-5 e NC-7** — atualizar a tabela de commits (10, não 9), o "treze testes-âncora" (21) e o
-   campo `ADRs` da issue #3.
+---
 
-**R-1 e R-2 merecem decisão antes do PR, mesmo que a correção fique para a S-03.** A R-1 descreve
-um invariante do ADR-012 que hoje passa por um teste que não o testa — é a única ressalva desta
-lista que descreve um portão aberto, e eu passei por ele. A R-2 é a única métrica de sucesso da
-spec que eu medi **estourando o alvo**, no caminho que a S-07 vai usar por padrão.
+## 11. Veredito
 
-As demais (R-3 a R-11) podem ser tratadas nas specs seguintes, desde que registradas.
+# APROVADO COM RESSALVAS
+
+**Por que não continua REPROVADO.** As duas coisas que reprovaram a rodada 1 eram objetivas, e as
+duas estão objetivamente resolvidas — medidas por mim, do jeito que o relatório anterior pediu
+que fossem medidas, e falsificadas depois.
+
+A **NC-1** era *"a suíte não passa numa cópia limpa"*. Passa: **360 passed** num `git archive
+HEAD` extraído para um diretório sem `.env`, com o `ENV_FILE` verificado como inexistente e a
+variável fora do shell. E a correção não comprou verde tirando cobertura: o caminho `503 sem
+chave` continua provado, e desligar a fixture nova reabre **exatamente** os quatro testes que a
+rodada 1 nomeou.
+
+A **NC-2** era *"a metade logs do R5 não roda"*. Roda. Reproduzi o caminho de produção
+(`LOGGING_CONFIG` do uvicorn + o `lifespan` real) e o traceback saiu com `[CREDENCIAL]` e `[CPF]`
+no lugar do segredo e do CPF; subi o servidor de verdade contra um banco quebrado e o
+`logger.exception` do endpoint apareceu formatado, com o cliente recebendo só a mensagem vaga. As
+cinco quebras que atacam essa correção — inclusive a que remove **só** o fallback do root e a que
+redige `record.msg` mas não o traceback — reprovaram todas, cada uma no teste certo.
+
+**Por que não é APROVADO limpo.** Três coisas, e a primeira é a que a instrução desta rodada
+mandava procurar: o teste escrito para satisfazer um relatório que passa sem provar o que
+importa.
+
+A **NC-A** é isso. O teste novo responde *"a função instala alguma coisa?"*. A pergunta da rodada
+1 era *"a redação está no caminho?"*, e ela continua sem resposta um nível acima: **apagar a
+chamada no `lifespan` deixa a suíte verde**. Não acuso má-fé — o autor entregou literalmente a
+condição de aceite escrita, e a falha é tanto da prescrição quanto da execução. Mas o efeito é
+concreto: a linha cuja ausência causou o achado Alta da rodada 1 pode ser removida hoje sem que
+nada reclame. Num requisito que a própria spec chama de *invariante de release*, isso é ressalva
+de gravidade Alta.
+
+A **NC-B** é a segunda: o cache que fez a R-2 passar é comportamento novo com **zero** teste, e
+duas falsificações sobrevivem. O modo de falha da invalidação não testada é o mesmo que a R-1 —
+fechada nesta rodada — descreveu como o pior possível: a vitrine concorda e o processo discorda.
+
+A **NC-C** é a terceira, e é a única que toca o código que roda: a redação de traceback não
+alcança a senha do DSN, que o docstring do próprio módulo nomeia como alvo. Ela só não vaza hoje
+porque o host configurado tem pontos e casa por acidente com o regex de e-mail. Com o host de
+contêiner que a S-08 vai usar, vaza.
+
+**Nenhuma das três reprova a entrega**, e é por isso que o veredito é aprovação: os seis
+requisitos estão conformes contra serviços reais, a suíte é verde na condição exata do CI, o
+escopo foi respeitado ao pé da letra, não há segredo nem dado real no diff, e 10 das 13
+falsificações reprovaram no teste certo — incluindo as que atacam alcance, que são as difíceis.
+
+### O que eu faria antes de abrir o PR (barato, e fecha o que sobrou)
+
+1. **NC-A** — um teste de alcance sobre a **aplicação**: esvaziar o root, subir
+   `TestClient(create_app(...))` (que já roda o lifespan em `test_chat_endpoint.py`) e afirmar que
+   os handlers ficaram embrulhados. Critério de aceite: apagar a chamada no `lifespan` tem que
+   reprovar.
+2. **NC-E** — trocar "21 (R5: 10…)" por **24 (R5: 13, R6: 7, R9: 4)**, e de preferência passar a
+   derivar esse número de `pytest -m risco` em vez de escrevê-lo.
+3. **NC-D** — trazer para a spec as ressalvas da verificação que não viram código (a §9 deste
+   relatório serve de texto), para o próximo `/verificar-spec` não depender de um arquivo que ele
+   mesmo sobrescreve.
+4. **NC-F** — decidir: ou a mensagem do commit vai para inglês, ou o `CLAUDE.md` abre a exceção
+   por escrito para commits de resposta a verificação.
+
+### O que pode viajar para a spec seguinte, desde que **registrado na spec**
+
+**NC-B** (teste do cache e da invalidação), **NC-C** (padrão para senha de DSN mais um caso no
+arquivo de `security`), **NC-G** (dizer que o deny é enumerado e por quê; alinhar o cabeçalho do
+`.env.example`), **NC-H** (o custo do redator na S-04), **NC-4** (o PR de harness já previsto) e
+as ressalvas **R-2b** e **R-3 a R-13** da §9.
 
 ---
 
 *Relatório produzido por sessão revisora independente, sem acesso ao histórico da sessão autora.
-Todos os números acima foram medidos nesta máquina, nesta sessão, contra o Postgres do compose,
-o Langfuse Cloud real e as APIs da Anthropic e da OpenAI reais. Nenhum arquivo do repositório foi
-alterado por esta sessão: os arquivos quebrados durante as 34 falsificações foram restaurados com
-`git checkout --`, o banco `vendinha_verif` criado para os testes de credencial foi derrubado, as
-linhas de checkpoint de teste foram removidas, e `git status --short` ao final acusa apenas este
-relatório e o `docs/workshop/apresentacao.html` não rastreado, que já existia antes.*
+Todos os números acima foram medidos nesta máquina, nesta sessão, contra o Postgres do compose, o
+Langfuse Cloud real e as APIs da Anthropic e da OpenAI reais. Nenhum arquivo do repositório foi
+alterado por esta sessão além deste relatório: os arquivos quebrados durante as 13 falsificações
+foram restaurados com `git checkout --`, os bancos `vendinha_verif2` e `vendinha_semtabela` foram
+derrubados, as 27 threads de teste criadas no banco `vendinha` foram removidas (214 linhas entre
+as três tabelas do checkpointer), e `git status --short` ao final acusa apenas este relatório e o
+`docs/workshop/apresentacao.html` não rastreado, que já existia antes.*
 
-*Uma nota de processo, registrada porque é achado e não incômodo: o passo 6 do
+*Nota de processo, repetida da rodada 1 porque continua verdadeira: o passo 6 do
 `.claude/commands/verificar-spec.md` manda publicar este relatório como comentário no PR, e não
 existe PR — porque o `CLAUDE.md`, que tem precedência 1, mudou o ritual para verificação **antes**
-do PR. A entrega é só o arquivo, por decisão do documento superior. Ver **NC-4**.*
+do PR. A entrega é o arquivo. Ver **NC-4**.*

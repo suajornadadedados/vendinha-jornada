@@ -82,6 +82,19 @@ def offered_models(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def contador_de_chamadas(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Conta quantas vezes o fornecedor foi consultado de verdade."""
+    chamadas = [0]
+
+    def listar(_: str) -> list[str]:
+        chamadas[0] += 1
+        return ["claude-haiku-4-5", "claude-opus-5"]
+
+    monkeypatch.setitem(PROVIDERS, "anthropic", Provider("anthropic", "ANTHROPIC_API_KEY", listar))
+    return chamadas
+
+
+@pytest.fixture
 def store() -> InMemoryConfigStore:
     return InMemoryConfigStore()
 
@@ -298,3 +311,56 @@ def test_the_config_response_says_whether_encryption_is_ready(
             )
             assert refused.status_code == 503
             assert "CONFIG_ENCRYPTION_KEY" in refused.text
+
+
+def test_the_model_list_is_not_fetched_again_on_every_request(
+    client: TestClient, contador_de_chamadas: list[int]
+) -> None:
+    """O cache entrou para consertar uma metrica; sem teste ele sai do mesmo jeito.
+
+    Sem ele, todo `POST /chat` que traz `model` — que e toda mensagem que a UI da
+    S-07 vai mandar — consulta os fornecedores por HTTP antes de responder. Medido:
+    p95 do primeiro token de 1,0 s para 3,3 s, alem de duas chamadas a fornecedor por
+    turno de conversa, que e superficie de rate limit e de custo dentro do R6.
+    """
+    client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+    antes = contador_de_chamadas[0]
+
+    for _ in range(3):
+        client.get("/models")
+
+    assert contador_de_chamadas[0] == antes + 1, "cada requisicao esta consultando o fornecedor"
+
+
+def test_writing_configuration_invalidates_the_model_cache(
+    client: TestClient, contador_de_chamadas: list[int]
+) -> None:
+    """Cache que nao invalida esconde a credencial que o operador acabou de gravar."""
+    client.get("/models")
+    antes = contador_de_chamadas[0]
+
+    client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+    client.get("/models")
+
+    assert contador_de_chamadas[0] > antes, "o PUT /config nao invalidou a lista"
+
+
+def test_the_model_cache_expires(
+    client: TestClient, contador_de_chamadas: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TTL infinito esconde uma chave posta direto no ambiente ate alguem reiniciar.
+
+    O `PUT /config` invalida o cache, mas nem toda credencial chega por ali: o
+    ambiente e o caminho do quickstart (ADR-012). Sem expiracao, quem exporta
+    `OPENAI_API_KEY` e recarrega a pagina continua sem ver os modelos, e nada no
+    sistema explica por que.
+    """
+    client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+    client.get("/models")
+    antes = contador_de_chamadas[0]
+    assert antes > 0, "sem credencial nenhum fornecedor e consultado, e o teste nao mede nada"
+
+    monkeypatch.setattr("vendinha.app.MODELS_CACHE_SECONDS", 0.0)
+    client.get("/models")
+
+    assert contador_de_chamadas[0] > antes, "a lista nunca expira: so um restart a atualiza"

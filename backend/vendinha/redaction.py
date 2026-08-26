@@ -37,6 +37,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 # CNPJ before CPF: same digit soup, and the longer one has to win the race.
 CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
@@ -59,7 +60,18 @@ CREDENTIAL = re.compile(
     r"|\bBearer\s+[A-Za-z0-9._-]{16,}"
 )
 
+# The password inside a connection URI. `db.py` prints the DSN on failure and every
+# psycopg error carries it, so this is the credential most likely to reach a log
+# without anyone deciding to log it. Only the password is replaced: the user, the
+# host and the port are what make the line worth reading.
+#
+# `@127.0.0.1` used to disappear by accident, because the e-mail pattern happened to
+# match it. `@postgres` and `@db` — the container forms S-08 will use — did not. An
+# accident that covers the local case and drops the deployed one is the worst kind.
+DSN_PASSWORD = re.compile(r"(?P<esquema>[a-z][a-z0-9+.-]*://)(?P<user>[^:/?#@\s]+):[^@/?#\s]+@")
+
 PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (DSN_PASSWORD, r"\g<esquema>\g<user>:[CREDENCIAL]@"),
     (CREDENTIAL, "[CREDENCIAL]"),
     (EMAIL, "[EMAIL]"),
     (CNPJ, "[CNPJ]"),
@@ -83,14 +95,9 @@ class Redactor:
         for pattern, placeholder in PATTERNS:
             value = pattern.sub(placeholder, value)
 
-        for known in self._worth_masking():
-            value = re.sub(re.escape(known), "[NOME]", value, flags=re.IGNORECASE)
-            # A customer who introduced herself as "Marta Ribeiro" is greeted back
-            # as "Marta" from the second turn on. Masking only the full string
-            # would leave the first name in every reply after the first.
-            for part in known.split():
-                if len(part) >= MIN_KNOWN_VALUE_LENGTH:
-                    value = re.sub(rf"\b{re.escape(part)}\b", "[NOME]", value, flags=re.IGNORECASE)
+        known = _known_values_pattern(self.known_values)
+        if known is not None:
+            value = known.sub("[NOME]", value)
         return value
 
     def attributes(self, attributes: Mapping[str, object]) -> dict[str, str]:
@@ -108,14 +115,38 @@ class Redactor:
                     changed[key] = redacted
         return changed
 
-    def _worth_masking(self) -> list[str]:
-        # Longest first: "Marta Ribeiro" has to be consumed before "Marta", or the
-        # surname survives on its own.
-        return sorted(
-            (v for v in self.known_values if len(v) >= MIN_KNOWN_VALUE_LENGTH),
-            key=len,
-            reverse=True,
-        )
+
+@lru_cache(maxsize=64)
+def _known_values_pattern(known_values: frozenset[str]) -> re.Pattern[str] | None:
+    """One compiled alternation for every known value, cached by the value set.
+
+    Was one `re.sub` per name and per name part, per string redacted. That is fine
+    with three names and quadratic-feeling with five hundred: measured at 0,0065 ms
+    with an empty registry and 17,28 ms with it full, on every log line and every
+    exported span attribute. The registry only fills up from S-04, so this was a
+    latent cost — the kind that shows up as "the app got slow" two specs later, with
+    nothing in the diff to blame.
+
+    Alternation ordered longest first: "Marta Ribeiro" has to be consumed before
+    "Marta", or the surname survives on its own. The first name still gets its own
+    branch, because a customer introduces herself once and is greeted by first name
+    in every reply after that.
+    """
+    pieces: set[str] = set()
+    for value in known_values:
+        if len(value) < MIN_KNOWN_VALUE_LENGTH:
+            continue
+        pieces.add(value)
+        pieces.update(part for part in value.split() if len(part) >= MIN_KNOWN_VALUE_LENGTH)
+
+    if not pieces:
+        return None
+
+    ordered = sorted(pieces, key=len, reverse=True)
+    return re.compile(
+        r"\b(?:" + "|".join(re.escape(piece) for piece in ordered) + r")\b",
+        flags=re.IGNORECASE,
+    )
 
 
 class KnownValues:

@@ -84,8 +84,8 @@ Cenário: a credencial não volta pela porta da frente
 | PII em claro em traces/logs | 0 ocorrências | **0** — trace bruto da sessão `auditoria-pii-01` auditado campo a campo |
 | Credencial em claro em traces/logs/respostas | 0 ocorrências | **0** — resposta da API e coluna `bytea` do Postgres inspecionadas |
 | p95 primeiro token, sem `model` | ≤ 3s | **1,109 s** (n=10, mediana 0,802 s) |
-| p95 primeiro token, com `model` | ≤ 3s | **1,072 s** (n=10, mediana 0,844 s) — era 3,331 s antes do cache; ver D-13 |
-| Suíte | verde | **360 passed**, inclusive em cópia limpa **sem `.env`**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
+| p95 primeiro token, com `model` | ≤ 3s | **1,072 s** (n=10, mediana 0,844 s) — era 3,331 s antes do cache. A frio o primeiro pedido custava 4,0 s; o cache agora é aquecido no boot. Ver D-13 e D-14 |
+| Suíte | verde | **365 passed**, inclusive em cópia limpa **sem `.env`**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
 
 Medições feitas nesta máquina contra o Postgres do compose, o Langfuse Cloud real e a API da
 Anthropic e da OpenAI reais. Os scripts de medição não entram no repositório: eles não são
@@ -325,6 +325,52 @@ correção é governança e vai em **PR próprio de harness**, junto com o subag
 versionado que o PO aprovou: enfiar mudança de ritual dentro do PR de uma spec é o padrão que
 virou a ressalva R-9 da S-01. Fica registrada aqui como aberta e endereçada.
 
+**D-14 — a segunda verificação aprovou com ressalvas, e o achado Alta foi o mesmo erro meu.**
+Relatório reescrito em `docs/specs/relatorios/S-02-verificacao.md`, com as duas rodadas. Veredito
+**APROVADO COM RESSALVAS**: 1 Alta, 3 Média, 4 Baixa, 13 falsificações com 3 sobreviventes.
+
+O achado Alta — **NC-A** — foi: apagar `install_log_redaction()` do `lifespan` deixava a suíte
+verde. Os testes provavam que a *função* instala; nenhum provava que a *aplicação* chama. É o
+mesmo buraco da rodada 1 movido **um nível acima**, e o revisor nomeou pelo que é: *"o teste
+escrito para satisfazer o relatório"*. Terceira vez nesta spec que eu testo a função que faz e
+não que alguém a chama.
+
+| Achado | Correção |
+|---|---|
+| **NC-A** (Alta) | `redaction_is_installed()` e um teste que sobe a aplicação de verdade e pergunta a ela. Apagar a chamada do `lifespan` agora reprova |
+| **NC-B** (Média) | O cache de modelos entrou sem teste — TTL infinito, cache que não guarda e `PUT /config` sem invalidação passavam. Três testes, três quebras que reprovam |
+| **NC-C** (Média) | A senha dentro do DSN não era redigida. `@127.0.0.1` sumia **por acidente**, porque casava com o padrão de e-mail; `@postgres` e `@db` — as formas de contêiner da S-08 — vazavam. Padrão próprio, que preserva usuário, host e porta |
+| **NC-E** (Baixa) | Contagem de testes-âncora medida no fechamento em vez de escrita à mão |
+| **NC-F** (Baixa) | Mensagem de commit em português contra o `CLAUDE.md`. Reescrita |
+| **NC-G** (Baixa) | O resíduo do deny enumerado registrado abaixo |
+| **NC-H** (Baixa) | O custo do `RedactingFormatter` crescia com o registro de nomes: **0,0065 ms vazio → 17,28 ms cheio**, em toda linha de log e todo atributo exportado. Era `re.sub` por nome e por parte de nome. Virou uma alternação compilada e cacheada: medido de novo, **0,0081 ms vazio → 0,065 ms cheio** |
+| **R-2b** (ressalva) | O primeiro pedido com `model` custava 4,0 s a frio — o cache só ajudava da segunda mensagem em diante, e a primeira é a que alguém está olhando. O `lifespan` aquece a lista no boot |
+
+**NC-D e NC-G, registrados aqui porque é onde eles têm que viver.** O relatório da rodada 1 pediu
+que as ressalvas herdadas ficassem registradas, e elas ficaram só no arquivo de relatório — que
+este mesmo ritual sobrescreve na rodada seguinte. Ficam abaixo.
+
+**Sobre o deny enumerado (NC-G):** `.claude/settings.json` agora nega `.env` e as variantes reais
+(`.local`, `.dev`, `.development`, `.prod`, `.production`, `.test`, `*.local`) em vez de `.env.*`,
+porque o padrão amplo cobria também o `.env.example`, que é versionado e precisa ser editável. A
+enumeração tem um resíduo conhecido e aceito: um `.env.staging` inventado amanhã não estaria na
+lista. O `.gitignore` continua sendo a garantia larga — ele ignora `.env.*` inteiro — então o
+resíduo é sobre leitura pelo agente, não sobre vazamento por commit.
+
+### Ressalvas da verificação da S-02 que ficam para as specs seguintes
+
+| # | Ressalva | Onde vive |
+|---|---|---|
+| **NC-4** | `ADR-005`, `.claude/commands/verificar-spec.md` (passo 6) e o corpo da issue #3 ainda contradizem o `CLAUDE.md` sobre quando a verificação acontece | PR de harness, junto com o subagente `verificador-de-spec` versionado |
+| **R-3** | `redact()` — a função só-padrões — não tem consumidor em produção; a maioria das asserções do arquivo de `security` a exercita | S-03 |
+| **R-4** | `Redactor.attributes` só redige valores `str`; atributo OTel pode ser sequência de strings e atravessa intocado. Latente, não observado | S-03 |
+| **R-5** | `LOG_LEVEL` está no `.env.example` marcado `(S-02)` e nenhum código o lê | S-03 |
+| **R-6** | `db.py:main()` imprime o `DATABASE_URL` no stderr quando falha. Mitigado pela NC-C (a senha agora é redigida), mas o print continua deliberado | S-08 |
+| **R-7** | `resolve_model` guarda a `api_key` na chave do `lru_cache`, então a credencial vive em cache de módulo pelo processo inteiro | S-08 |
+| **R-8** | `GET /config` é aberto em qualquer ambiente e revela quais provedores estão configurados e se falta chave de criptografia. Expõe pouco, não nada | S-08 |
+| **R-10** | Quem esquecer `make db-setup` recebe erro de tabela inexistente na primeira mensagem, não no boot | S-03 |
+| **R-11** | O `.venv` local é Python 3.13 e o CI usa 3.12; os números desta spec vêm do 3.13 | registrada |
+
 ## Ressalvas herdadas da verificação da S-01
 
 O relatório da S-01 deixou cinco ressalvas registradas sem correção. Duas caíam nesta spec e
@@ -334,14 +380,14 @@ foram fechadas; as outras três continuam abertas, e ficam registradas aqui para
 | Ressalva | Estado |
 |---|---|
 | **R-4** — `tests/` fora do `mypy` | **Fechada.** O `typecheck` cobre a suíte, no `make` e no CI. Não foi cosmético: o portão mais largo achou 35 erros reais, entre eles um `dict` sem parâmetro em `tests/security/conftest.py` e um `Returning Any` numa fixture. O pacote `vendinha` ganhou `py.typed` — sem o marcador, todo `import` do produto dentro de `tests/` virava `Any` e a suíte estaria dentro do portão sem aprender nada com isso |
-| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** Os testes-âncora da S-02 declaram o marker: **21** (R5: 10, R6: 7, R9: 4). O comando do `docs/testes.md` §6 deixou de ser decorativo |
+| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** `pytest tests -m risco` → **26 passed, 339 deselected** (R5: 15, R6: 7, R9: 4). O comando do `docs/testes.md` §6 deixou de ser decorativo. *Número medido no fechamento, não escrito à mão: ele já ficou desatualizado duas vezes nesta spec — NC-7 e NC-E* |
 | **R-3** — fixture ↔ seed continua acordo humano | Aberta. A S-02 não toca no catálogo |
 | **R-5** — corpo do ADR-003 ainda diz "integração" | Aberta. É o preço da imutabilidade do ADR, e a nota de cabeçalho corrige |
 | **R-10** — seed malformado quebra a coleta do pytest com traceback | Aberta. Nenhum arquivo novo desta spec constrói dado no import de módulo, então a spec não piorou o caso |
 
 ## Definition of Done
 - [x] Todos os requisitos com evidência medida nesta spec (REQ-1 a REQ-6)
-- [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (360 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
+- [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (365 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
 - [x] Os três riscos declarados com teste-âncora verde e falsificado: R5, R6, R9
 - [x] Achados da verificação independente corrigidos (D-13); NC-4 adiada para o PR de harness, com o motivo registrado
 - [ ] CI verde no PR
