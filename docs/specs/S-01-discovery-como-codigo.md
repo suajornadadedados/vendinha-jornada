@@ -1,7 +1,7 @@
 ---
 id: S-01
 titulo: Discovery como código
-status: em-revisao
+status: concluida
 branch: spec/s-01-discovery
 issue: #2
 adrs: [ADR-001, ADR-006, ADR-011]
@@ -218,6 +218,7 @@ comando sai do `docs/testes.md` §6).
 ## Definition of Done
 - [x] Todos os requisitos com evidência nesta spec (REQ-1 a REQ-5)
 - [x] Suíte local verde: `ruff check` · `ruff format --check` · `pytest tests` (294 passed)
-- [ ] CI verde no PR
-- [ ] PR com evidência e `Closes #2`
-- [ ] Relatório `/verificar-spec` anexado com veredito APROVADO
+- [x] CI verde no PR — run `32988998599`, sete checks obrigatórios verdes
+- [x] PR [#13](https://github.com/suajornadadedados/vendinha-jornada/pull/13) com evidência e `Closes #2`; merge por squash em `cb51953`, issue #2 fechada
+- [x] Relatório `docs/specs/relatorios/S-01-verificacao.md` anexado — veredito APROVADO COM
+      RESSALVAS, com os cinco pontos de fechamento corrigidos antes do merge
