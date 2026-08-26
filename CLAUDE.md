@@ -26,10 +26,13 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
    vence — duas fontes de verdade sobre "o que fazer agora" levam a escolher a errada.
 2. Cada spec = uma branch `spec/s-XX-nome` a partir da `main` + uma sessão nova do Claude Code.
 3. Cada task da spec = um commit (Conventional Commits, em inglês).
-4. Ao final: PR para `main` usando o template, com `Closes #N` e evidência (screenshot + trace
-   Langfuse). O squash merge fecha a issue.
-5. Verificação independente: sessão NOVA roda `/verificar-spec` antes do merge (ver comando).
-6. Merge por squash. A `main` é protegida; os checks do CI são obrigatórios.
+4. **Verificação independente ANTES do PR, não antes do merge.** Terminou a implementação, a
+   sessão autora para. Uma sessão **NOVA** roda `/verificar-spec S-XX` (ver comando) e gera
+   `docs/specs/relatorios/S-XX-verificacao.md`. Quem implementou já sabe que está certo — é esse
+   saber que faz o revisor não olhar. Sem veredito, não existe PR.
+5. Corrigir o que a verificação apontou. Só então: PR para `main` usando o template, com
+   `Closes #N` e evidência (screenshot + trace Langfuse), e o relatório anexado.
+6. Merge por squash. A `main` é protegida; os checks do CI são obrigatórios. O squash fecha a issue.
 
 ## Convenções
 - Python 3.12, FastAPI, LangGraph, Qdrant, Postgres, Langfuse. Frontend React (Vite).
