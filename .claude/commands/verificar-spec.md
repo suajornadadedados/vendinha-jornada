@@ -1,5 +1,10 @@
 # /verificar-spec — Verificação independente (sessão revisora)
 
+> **Este comando é a via manual, para sessão nova.** O caminho padrão é o subagente
+> `verificador-de-spec`, cujas instruções vivem em `.claude/agents/verificador-de-spec.md` e são
+> mais completas que as daqui — falsificação obrigatória, tabela de quebras, e a regra de ignorar
+> enquadramento vindo no prompt. Os dois precisam dizer a mesma coisa: ao mudar um, releia o outro.
+
 ## Papel
 Você é o REVISOR desta entrega. Você NÃO é o autor. Padrão autor/revisor: seu valor está em
 olhar apenas a evidência, sem o contexto mental de quem implementou.
@@ -24,4 +29,6 @@ olhar apenas a evidência, sem o contexto mental de quem implementou.
 5. Gerar `docs/specs/relatorios/S-XX-verificacao.md` com: resumo, tabela de conformidade,
    métricas medidas vs alvo, riscos observados, veredito (APROVADO / APROVADO COM RESSALVAS /
    REPROVADO) e o porquê.
-6. Publicar o relatório como comentário no PR.
+6. Entregar o relatório como **arquivo**. Não existe PR neste momento: a verificação vem antes
+   dele (`CLAUDE.md`, fluxo item 4). Quem anexa o relatório ao PR é o autor, depois de corrigir
+   o que a verificação apontou.
