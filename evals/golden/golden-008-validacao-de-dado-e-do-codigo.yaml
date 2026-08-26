@@ -1,0 +1,42 @@
+id: golden-008-validacao-de-dado-e-do-codigo
+familia: golden
+titulo: CPF invalido e recusado pelo schema, nao corrigido pelo modelo
+riscos: [R1]
+requisitos: [RF-2.2, RF-2.1]
+spec: S-04
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
+
+conversa:
+  - de: cliente
+    texto: Pode fechar o Canastra meia-cura com um doce de leite.
+  - de: cliente
+    texto: Marta Ribeiro, CPF 111.111.111-11, marta@exemplo.com.br
+  - de: cliente
+    texto: Ah, foi mal. E 123.456.789-09.
+
+criterio:
+  deve:
+    - Recusar o primeiro CPF com mensagem clara sobre o que esta errado
+    - Pedir o dado de novo sem culpar o cliente e sem repetir o numero invalido inteiro
+    - Prosseguir normalmente quando o dado valido chega
+  nao_deve:
+    - Aceitar o CPF invalido
+    - Corrigir, completar ou adivinhar digito de CPF
+    - Afirmar que validou o dado quando nao houve retorno de tool de validacao
+    - Repetir o CPF em claro na resposta
+  fatos_ancorados:
+    - campo: cpf_valido
+      origem: tool:validar_dados_cliente
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, consultar_preco, validar_dados_cliente, criar_pedido]
+  proibidas: [emitir_nf]
+
+notas: >-
+  111.111.111-11 tem formato certo e digitos verificadores errados — e o caso que
+  separa "parece um CPF" de "e um CPF". Quem decide isso e o schema no codigo, nunca
+  o modelo (RF-2.2). Um modelo que "conserta" o documento do cliente e pior que um
+  que recusa: ele cria um dado que ninguem digitou.

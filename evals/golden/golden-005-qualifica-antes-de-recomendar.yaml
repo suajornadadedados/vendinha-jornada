@@ -1,0 +1,39 @@
+id: golden-005-qualifica-antes-de-recomendar
+familia: golden
+titulo: Necessidade ambigua vira uma pergunta de qualificacao, nao um catalogo despejado
+riscos: [R1]
+requisitos: [RF-1.2, RF-1.4]
+spec: S-03
+produtos_validos:
+  - queijo-canastra-meia-cura
+  - goiabada-cascao
+  - doce-de-leite-cremoso
+  - cafe-microlote-bourbon-amarelo
+  - cachaca-amburana-4-anos
+  - geleia-de-pimenta-biquinho
+
+conversa:
+  - de: cliente
+    texto: Quero um presente.
+
+criterio:
+  deve:
+    - Fazer no maximo uma pergunta de qualificacao antes de qualquer recomendacao
+    - Perguntar algo que estreite de verdade a busca (para quem, ocasiao ou faixa de preco)
+    - Manter o tom de balcao de emporio, sem soar formulario
+  nao_deve:
+    - Listar produtos antes de entender para quem e o presente
+    - Fazer duas ou mais perguntas encadeadas na mesma resposta
+    - Pedir que o cliente escolha uma categoria ou navegue por menu
+    - Citar produto, atributo ou preco que nao tenha vindo de retorno de tool
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco]
+  proibidas: [criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  "Quero um presente" e a entrada mais comum e a menos acionavel. O erro que este
+  caso pega nao e alucinacao — e o agente que responde despejando dez produtos,
+  virando o filtro de e-commerce que o RF-1.2 existe para nao ser. Uma pergunta,
+  nao tres: interrogatorio tambem faz o cliente desistir.

@@ -1,0 +1,43 @@
+id: golden-006-produto-indisponivel-e-dito
+familia: golden
+titulo: Produto indisponivel e informado como tal, com alternativa real no lugar
+riscos: [R1]
+requisitos: [RF-1.3, RF-1.4]
+spec: S-03
+produtos_validos:
+  - cafe-geisha-caparao
+  - cafe-microlote-bourbon-amarelo
+  - cafe-mundo-novo-torra-clara
+  - cafe-matas-de-minas-natural
+
+conversa:
+  - de: cliente
+    texto: Vi que voces tem o Geisha do Caparao. Quero esse.
+
+criterio:
+  deve:
+    - Consultar o catalogo antes de afirmar qualquer coisa sobre disponibilidade
+    - Dizer com clareza que o produto esta indisponivel no momento
+    - Oferecer alternativa que exista no catalogo e esteja disponivel
+    - Justificar a alternativa por semelhanca real de perfil, nao por proximidade de preco
+  nao_deve:
+    - Afirmar que o produto esta disponivel
+    - Prometer prazo, previsao de reposicao ou lista de espera que nao venha de tool
+    - Oferecer como alternativa outro produto tambem indisponivel
+  fatos_ancorados:
+    - campo: disponivel
+      origem: tool:detalhar_produto
+    - campo: nome_produto
+      origem: tool:buscar_produtos
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco]
+  proibidas: [criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  O cliente pediu "estoque, preco e prazo sempre sincronizadas com banco de dados".
+  A nota de escopo de docs/requisitos.md traduziu isso como campo lido do seed, nao
+  como sistema de gestao — e a garantia que sobra e exatamente esta: o agente nunca
+  inventa disponibilidade. Inventar uma previsao de reposicao e a forma mais
+  simpatica de quebrar a promessa, e por isso ela esta em "nao deve".

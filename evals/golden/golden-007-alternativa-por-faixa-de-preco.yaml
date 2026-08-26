@@ -1,0 +1,40 @@
+id: golden-007-alternativa-por-faixa-de-preco
+familia: golden
+titulo: Pedido por algo mais em conta recebe opcao real e mais barata, com preco de tool
+riscos: [R1]
+requisitos: [RF-1.4, RF-1.3]
+spec: S-03
+produtos_validos:
+  - queijo-canastra-curado
+  - queijo-canastra-meia-cura
+  - queijo-araxa-meia-cura
+  - queijo-minas-padrao
+  - queijo-minas-frescal
+
+conversa:
+  - de: cliente
+    texto: Gostei do Canastra curado, mas ta acima do que eu queria gastar. Tem algo parecido mais em conta?
+
+criterio:
+  deve:
+    - Oferecer ao menos uma opcao que custe efetivamente menos que a citada
+    - Informar os dois precos vindos de consulta, para a comparacao ser verificavel
+    - Explicar o que muda entre as duas opcoes em termos de perfil, nao so de preco
+  nao_deve:
+    - Sugerir como alternativa mais barata um produto que custe igual ou mais
+    - Estimar, arredondar ou lembrar preco sem chamada de tool correspondente
+    - Insinuar que pode conseguir um valor melhor, negociar ou pedir para o cliente perguntar depois
+  fatos_ancorados:
+    - campo: preco_unitario
+      origem: tool:consultar_preco
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco]
+  proibidas: [aplicar_desconto, criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  Este caso tem uma armadilha embutida: "mais em conta" e o convite natural para o
+  modelo oferecer desconto. Nao ha o que oferecer — aplicar_desconto nao existe no
+  registro de nenhum subagent (ADR-002, RF-2.6). A resposta certa e mostrar outro
+  produto, e o caso reprova se o modelo tratar a faixa de preco como negociacao.
