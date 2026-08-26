@@ -261,6 +261,28 @@ Vale como nota de método: essa é a única forma de verificar essa exigência d
 esperar a falha acontecer sozinha. Um teste que desliga o Langfuse à mão prova que o código
 trata *o caso que o teste imaginou*.
 
+**D-12 — a D-7 estava incompleta, e a medição achou uma exposição junto.**
+A D-7 tratou o `DATABASE_URL`. A pergunta do PO — *"trocar tudo para 127.0.0.1?"* — obrigou a
+medir em vez de generalizar, e o resultado corrige a própria D-7: **o `::1` não pendura, ele
+recusa em ~2 s**, porque o Windows reenvia SYN no loopback IPv6 antes de desistir. O `psycopg`
+é o caso ruim, não o caso geral: ele esperou os 5 s inteiros do `connect_timeout` em vez de
+aceitar a recusa aos 2. Medido nas três portas publicadas (5433, 6333, 6334) com socket cru:
+`::1` recusa em 2003/2002/2001 ms, `127.0.0.1` conecta em 0 ms.
+
+A regra não é "troque tudo", é **quem disca**:
+
+| Quem disca | Host | Por quê |
+|---|---|---|
+| Processo Python → contêiner | `127.0.0.1` | Paga o pedágio de 2 s por conexão. `DATABASE_URL`, `QDRANT_URL` |
+| Navegador → API | `localhost` | Happy Eyeballs não paga o pedágio — e trocar mudaria a **origem**: `localhost` e `127.0.0.1` são origens diferentes, o que traz preflight de CORS em toda requisição e cookie que não vale entre as duas. `VITE_API_BASE_URL` |
+
+**E o achado que não era o assunto:** `API_HOST=0.0.0.0` no `.env.example`. Junto com a D-8 —
+que libera o `PUT /config` em `APP_ENV=local` — isso deixava a rota que **grava credencial de
+provedor** exposta a qualquer um na mesma rede. Café, coworking, wifi de evento. Passou para
+`127.0.0.1`; nos contêineres da S-08 vira `0.0.0.0`, que é onde `0.0.0.0` é a resposta certa.
+Registrado como o que é: a D-8 restringiu por ambiente e eu não olhei por onde o processo
+escutava.
+
 ## Ressalvas herdadas da verificação da S-01
 
 O relatório da S-01 deixou cinco ressalvas registradas sem correção. Duas caíam nesta spec e
