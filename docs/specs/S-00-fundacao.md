@@ -1,9 +1,9 @@
 ---
 id: S-00
 titulo: Fundação do repositório
-status: aprovada
+status: em-execucao
 branch: spec/s-00-fundacao
-issue: 
+issue: #1
 adrs: [ADR-005, ADR-008]
 riscos_cobertos: []
 ---
@@ -21,15 +21,23 @@ que sobe em um comando.
 - [ ] REQ-3 CI com jobs `commitlint`, `lint`, `typecheck`, `test` (verdes mesmo com código mínimo).
 - [ ] REQ-4 `main` protegida: PR obrigatório, checks obrigatórios, squash-only (ver docs/workshop/github-setup.md).
 - [ ] REQ-5 `.env.example` exaustivo e comentado; `Makefile` com `up`, `test`, `lint`, `evals`.
+- [ ] REQ-6 Cada spec tem issue no GitHub, linkada no frontmatter (`issue:`); a issue é ponteiro
+      para a spec, nunca cópia dos requisitos. Convenção registrada no `CLAUDE.md`.
+- [ ] REQ-7 A suíte coleta ao menos um teste real a partir do momento em que `backend/` existe:
+      rastreabilidade dos casos de `evals/` contra `evals/schema/caso.schema.json`.
 
 ## Fora de escopo
-Qualquer código de agente, API ou frontend.
+Qualquer código de agente, API ou frontend. O `backend/` desta spec é scaffold de build
+(pyproject + configuração de mypy) — nenhuma rota, nenhum grafo, nenhuma tool.
 
 ## Tasks (cada uma vira um commit)
 1. `chore(s-00): scaffold repo with harness and templates`
 2. `chore(s-00): docker compose with postgres and qdrant`
 3. `ci(s-00): pipeline skeleton (commitlint, lint, typecheck, test)`
 4. `docs(s-00): env example, makefile and quickstart readme`
+5. `test(s-00): traceability test for eval cases against schema`
+6. `chore(s-00): backend scaffold with pyproject and mypy config`
+7. `docs(s-00): link specs to github issues`
 
 ## BDD
 ```gherkin
@@ -48,6 +56,37 @@ Cenário: quickstart em máquina limpa
 ## Verificação independente
 - Clonar em diretório limpo e executar o quickstart cronometrando.
 - Confirmar que a main rejeita push direto (tentar e capturar a recusa).
+- Conferir que `bash scripts/run-tests.sh` coleta ao menos um teste (não pode sair pelo
+  atalho de suíte vazia, já que `backend/` passa a existir nesta spec).
+- Conferir que o `issue:` das 10 specs aponta para a issue correspondente e que nenhuma issue
+  duplica requisito ou task da spec.
+
+## Descobertas (preenchido durante a execução)
+
+**D-1 — `backend/` é entregável da S-00, mas nenhuma spec dizia isso.** Três arquivos de infra
+já tratavam a pasta como entregável desta spec (`tests/conftest.py`, `scripts/run-tests.sh`,
+os jobs condicionais de `ci.yml`), e o `docs/workshop/github-setup.md` §4 manda marcar
+`typecheck` como obrigatório "depois da S-00" — o que exige `backend/pyproject.toml` existindo.
+Nenhuma spec mencionava `backend/`. Resolvido pelo PO: a S-00 cria o scaffold de build, e o
+"fora de escopo" foi explicitado para deixar claro que scaffold ≠ código de produto.
+
+**D-2 — `backend/` existindo com suíte vazia reprova o CI.** `scripts/run-tests.sh` falha de
+propósito quando `backend/` existe e o pytest não coleta nada. Como a S-00 não cobre risco
+algum (`riscos_cobertos: []`), a matriz de `docs/testes.md` não lhe devia teste nenhum.
+Resolvido pelo PO com o REQ-7: o teste de rastreabilidade dos casos de eval — já prometido
+pelo `evals/README.md`, independente de agente e de rede.
+
+**D-3 — `tests/discovery/` era referência órfã.** `ruff.toml` e `evals/README.md` citavam a
+pasta, que nunca existiu, e `docs/testes.md` §1 diz "duas camadas, e só duas". Resolvido pelo
+PO: o normativo vence, o teste vive em `tests/unit/` e as duas referências foram corrigidas.
+Nenhuma terceira camada foi criada.
+
+**D-4 — `make evals` não tem runner até a S-06.** Resolvido pelo PO: o alvo existe e falha com
+mensagem explícita apontando para `make evals-check`. Alvo verde que não executou o agente
+seria check decorativo.
 
 ## Definition of Done
-- [ ] Checklist padrão do template
+- [ ] Todos os requisitos CONFORMES no relatório de verificação
+- [ ] CI verde (lint, typecheck, testes, evals)
+- [ ] PR com evidência (screenshot + trace Langfuse)
+- [ ] Relatório /verificar-spec anexado com veredito APROVADO
