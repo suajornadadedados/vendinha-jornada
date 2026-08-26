@@ -81,6 +81,14 @@ pasta, que nunca existiu, e `docs/testes.md` §1 diz "duas camadas, e só duas".
 PO: o normativo vence, o teste vive em `tests/unit/` e as duas referências foram corrigidas.
 Nenhuma terceira camada foi criada.
 
+**D-5 — o job `evals` do CI estava pendurado no gatilho errado.** `typecheck` e `evals`
+usavam a mesma condição (`hashFiles('backend/pyproject.toml')`), escrita presumindo que o
+scaffold do backend e o runner de evals chegariam juntos. Com a S-00 criando o scaffold, o
+job `evals` sairia do estado *skipped* e tentaria executar um runner que só existe na S-06 —
+CI vermelho por construção. Corrigido dentro do REQ-3 (o requisito é justamente "CI com jobs
+verdes mesmo com código mínimo"): `evals` passa a observar `backend/evals/runner.py`. A
+intenção já estava escrita no próprio arquivo — "vira required check a partir da S-06".
+
 **D-4 — `make evals` não tem runner até a S-06.** Resolvido pelo PO: o alvo existe e falha com
 mensagem explícita apontando para `make evals-check`. Alvo verde que não executou o agente
 seria check decorativo.
