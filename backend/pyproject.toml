@@ -1,0 +1,39 @@
+# Projeto de produto. Nasce como scaffold de build na S-00: pyproject e
+# configuração de mypy, sem rota, sem grafo e sem tool — o "fora de escopo" da
+# S-00 é explícito quanto a isso.
+#
+# Existe desde já porque três arquivos de infra dependem da pasta: o job
+# `typecheck` do CI, o skip de `tests/conftest.py` e a regra de suíte vazia de
+# `scripts/run-tests.sh`. Lint e format vêm do ruff.toml da raiz — uma régua só.
+
+[project]
+name = "vendinha"
+version = "0.1.0"
+description = "Agente de vendas do empório mineiro digital"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["mypy>=1.13"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vendinha"]
+
+[tool.mypy]
+python_version = "3.12"
+# strict desde o primeiro arquivo: ligar tipagem estrita depois que o código
+# existe é uma migração; ligar antes é só uma configuração.
+strict = true
+warn_unreachable = true
+# O contrato de fronteira é Pydantic (CLAUDE.md). Dict sem tipo na fronteira é
+# exatamente o que essa regra existe para barrar.
+disallow_any_generics = true
+
+[[tool.mypy.overrides]]
+# Dependências sem stubs ganham exceção nomeada aqui, uma a uma. Nunca global.
+module = []
+ignore_missing_imports = true
