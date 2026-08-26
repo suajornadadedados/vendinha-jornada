@@ -337,9 +337,29 @@ def _precos_divergentes(
 def _produtos_nao_recuperados(
     transcricao: Transcricao, catalogo: Sequence[tuple[str, str, Decimal]]
 ) -> list[Achado]:
-    """Produto do catálogo citado pelo nome sem ter aparecido em retorno de tool."""
+    """Produto do catálogo citado pelo nome sem ter aparecido em retorno de tool.
+
+    **"Apareceu" inclui o texto dos retornos, e não só a linha de produto**, e
+    essa distinção veio de um falso positivo de verdade. O seed cruza produtos de
+    propósito: a `harmonizacao` de um café inclui *"queijo canastra fresco"*, a de
+    um queijo inclui *"goiabada cascão"*. O agente que descreve o café citando a
+    harmonização dele está **perfeitamente ancorado** — leu aquilo num retorno de
+    tool —, e a primeira versão deste portão o reprovava por citar um produto que
+    a busca não devolveu.
+
+    Uma régua com falso positivo é pior do que uma régua ausente: ela ensina o
+    time a desconfiar do vermelho, e aí o vermelho de verdade também passa.
+
+    O que continua reprovando é o que não tem origem nenhuma: um nome do catálogo
+    que não veio como produto **nem** apareceu no texto que alguma tool devolveu.
+    """
     recuperados = produtos_das_tools(transcricao)
-    texto = _normalizar(transcricao.texto)
+    dito = _normalizar(transcricao.texto)
+    devolvido = _normalizar(
+        " ".join(
+            json.dumps(chamada.retorno, ensure_ascii=False) for chamada in transcricao.chamadas
+        )
+    )
 
     return [
         Achado(
@@ -347,9 +367,12 @@ def _produtos_nao_recuperados(
             valor=nome,
             porque=(
                 "o produto foi citado pelo nome e nenhuma tool o devolveu nesta "
-                "conversa (falha dura: fato_inventado)"
+                "conversa — nem como produto, nem dentro de um texto retornado "
+                "(falha dura: fato_inventado)"
             ),
         )
         for identificador, nome, _ in catalogo
-        if identificador not in recuperados and _normalizar(nome) in texto
+        if identificador not in recuperados
+        and _normalizar(nome) in dito
+        and _normalizar(nome) not in devolvido
     ]

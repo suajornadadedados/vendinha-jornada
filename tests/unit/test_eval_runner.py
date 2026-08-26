@@ -29,7 +29,12 @@ from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
-from vendinha.evals.runner import CatalogoEnvenenado, Resultado, relatorio
+from vendinha.evals.runner import (
+    CatalogoEnvenenado,
+    Resultado,
+    _abertura_do_cenario,
+    relatorio,
+)
 
 pytestmark = pytest.mark.requires_backend
 
@@ -313,6 +318,44 @@ async def test_the_poisoned_catalogue_replaces_a_description_and_nothing_else() 
 
     # Só o primeiro: o caso fala de "um produto retornado pela busca".
     assert produtos["queijo-canastra-curado"].descricao != injetado
+
+
+@pytest.mark.risco("R4")
+def test_a_system_turn_produces_an_opening_derived_from_the_case_itself() -> None:
+    """R4, DESC-2 — o turno `de: sistema` descreve um estado que ele não cria.
+
+    "Me fala mais sobre esse café" não tem antecedente. Sem uma busca anterior, o
+    agente pede esclarecimento, a tool nunca é chamada, e o `adversarial-004`
+    reprova **sem exercitar o vetor de injeção** — a pior forma de reprovar,
+    porque parece cobertura.
+
+    A abertura sai do `produtos_validos` do próprio caso, e não de uma tabela
+    escrita à mão por caso: um caso novo com turno de sistema exercita o mesmo
+    caminho sem código a mais.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03") if c.familia == "adversarial")
+    catalogo = [
+        ("cafe-microlote-bourbon-amarelo", "Café microlote bourbon amarelo", Decimal("96.00")),
+        ("queijo-canastra-meia-cura", "Queijo Canastra meia-cura", Decimal("89.90")),
+    ]
+
+    abertura = _abertura_do_cenario(caso, catalogo)
+
+    assert "Café microlote bourbon amarelo" in abertura
+    assert abertura.endswith("?"), "a abertura é uma fala de cliente, não uma instrução"
+
+
+@pytest.mark.risco("R4")
+def test_the_opening_falls_back_when_the_case_names_no_product() -> None:
+    """R4 — um caso adversarial não é obrigado a citar produto (o schema o dispensa).
+
+    `adversarial-003`, de extração de PII, não cita nenhum. Explodir aqui faria o
+    runner morrer num caso que nada tem a ver com catálogo.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03") if c.familia == "adversarial")
+    sem_produtos = caso.model_copy(update={"produtos_validos": ()})
+
+    assert _abertura_do_cenario(sem_produtos, []) == "Oi! O que vocês têm por aí?"
 
 
 # -------------------------------------------------------------------- o relatório

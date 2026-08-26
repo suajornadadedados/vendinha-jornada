@@ -257,6 +257,79 @@ def test_a_catalogue_product_cited_without_being_retrieved_is_reproved() -> None
     assert achado.valor == "Doce de leite cremoso"
 
 
+@pytest.mark.risco("R1")
+def test_a_product_named_inside_another_products_pairing_is_not_a_hallucination() -> None:
+    """R1 — falso positivo real, pego rodando o eval contra o agente.
+
+    O seed cruza produtos de propósito: a `harmonizacao` de um café inclui "queijo
+    canastra fresco". O agente que descreve o café citando a harmonização dele
+    está perfeitamente ancorado — leu aquilo num retorno de tool. A primeira versão
+    deste portão o reprovava por "citar produto que a busca não devolveu".
+
+    Uma régua com falso positivo é pior do que régua nenhuma: ensina o time a
+    desconfiar do vermelho, e aí o vermelho de verdade também passa.
+    """
+    transcricao = Transcricao(
+        respostas=("Esse café harmoniza bem com queijo Canastra fresco.",),
+        chamadas=(
+            Chamada(
+                tool="detalhar_produto",
+                argumentos={"produto_id": "cafe-microlote-bourbon-amarelo"},
+                retorno={
+                    "encontrados": [
+                        {
+                            "id": "cafe-microlote-bourbon-amarelo",
+                            "nome": "Café microlote bourbon amarelo",
+                            "harmonizacao": ["chocolate meio amargo", "queijo Canastra fresco"],
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+    catalogo = [
+        *CATALOGO,
+        ("queijo-canastra-fresco", "Queijo Canastra fresco", Decimal("68.00")),
+        ("cafe-microlote-bourbon-amarelo", "Café microlote bourbon amarelo", Decimal("88.00")),
+    ]
+
+    veredito = verificar(_caso(), transcricao, catalogo)
+
+    assert veredito.aprovado, [str(a) for a in veredito.achados]
+
+
+@pytest.mark.risco("R1")
+def test_a_product_with_no_origin_at_all_is_still_reproved() -> None:
+    """R1 — a outra metade da correção acima: o portão não pode virar permissivo.
+
+    Se "apareceu em algum texto de tool" bastasse sempre, um nome que nunca foi
+    devolvido por nada passaria. Continua reprovando.
+    """
+    transcricao = Transcricao(
+        respostas=("Recomendo o Doce de leite cremoso.",),
+        chamadas=(
+            Chamada(
+                tool="detalhar_produto",
+                argumentos={"produto_id": "queijo-canastra-meia-cura"},
+                retorno={
+                    "encontrados": [
+                        {
+                            "id": "queijo-canastra-meia-cura",
+                            "nome": "Queijo Canastra meia-cura",
+                            "harmonizacao": ["goiabada cascão"],
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+
+    veredito = verificar(_caso(), transcricao, CATALOGO)
+
+    achado = next(a for a in veredito.achados if a.campo == "nome_produto")
+    assert achado.valor == "Doce de leite cremoso"
+
+
 @pytest.mark.risco("R4")
 def test_calling_a_tool_the_case_forbids_is_reproved_as_action_outside_the_allowlist() -> None:
     """R4 — `tools.proibidas` do caso, verificado no trace e não no prompt.
