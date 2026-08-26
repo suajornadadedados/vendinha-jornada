@@ -46,10 +46,10 @@ async def test_conversation_resumes_with_the_same_session_id() -> None:
     await _say(graph, "sessao-1", "queria um presente")
     final = await _say(graph, "sessao-1", "para minha mae")
 
-    ditos = [m.content for m in final["messages"]]
-    assert "oi, tudo bem?" in ditos, "o primeiro turno sumiu do estado retomado"
-    assert "queria um presente" in ditos
-    assert len(final["messages"]) == 6, "tres turnos sao tres perguntas e tres respostas"
+    said = [m.content for m in final["messages"]]
+    assert "oi, tudo bem?" in said, "the first turn vanished from the resumed state"
+    assert "queria um presente" in said
+    assert len(final["messages"]) == 6, "three turns are three questions and three answers"
 
 
 @pytest.mark.risco("R9")
@@ -57,15 +57,17 @@ async def test_a_new_graph_reads_what_the_previous_one_wrote() -> None:
     """The closest a unit test gets to a restart: nothing survives but the checkpointer."""
     checkpointer = InMemorySaver()
 
-    antes = build_graph(_model("ola", "ainda aqui"), checkpointer)
-    await _say(antes, "sessao-2", "meu nome ficou registrado?")
-    del antes
+    before = build_graph(_model("ola", "ainda aqui"), checkpointer)
+    await _say(before, "sessao-2", "meu nome ficou registrado?")
+    del before
 
-    depois = build_graph(_model("ainda aqui"), checkpointer)
-    retomada = await _say(depois, "sessao-2", "e agora?")
+    after = build_graph(_model("ainda aqui"), checkpointer)
+    resumed = await _say(after, "sessao-2", "e agora?")
 
-    ditos = [m.content for m in retomada["messages"]]
-    assert "meu nome ficou registrado?" in ditos, "o grafo novo nao leu o checkpoint do anterior"
+    said = [m.content for m in resumed["messages"]]
+    assert "meu nome ficou registrado?" in said, (
+        "the new graph did not read the previous checkpoint"
+    )
 
 
 @pytest.mark.risco("R9")
@@ -74,10 +76,10 @@ async def test_two_sessions_do_not_share_state() -> None:
     graph = build_graph(_model("a", "b"), checkpointer)
 
     await _say(graph, "sessao-a", "segredo da sessao a")
-    outra = await _say(graph, "sessao-b", "nada a ver")
+    other = await _say(graph, "sessao-b", "nada a ver")
 
-    ditos = [m.content for m in outra["messages"]]
-    assert "segredo da sessao a" not in ditos, "o thread_id nao esta isolando as sessoes"
+    said = [m.content for m in other["messages"]]
+    assert "segredo da sessao a" not in said, "thread_id is not isolating the sessions"
 
 
 @pytest.mark.risco("R9")
@@ -91,5 +93,5 @@ def test_graph_state_carries_identifiers_not_payloads() -> None:
     assertion green. If a spec genuinely needs to widen the state, widening this set
     is a deliberate act with a reviewer looking at it — not a side effect.
     """
-    permitidos = {"session_id", "messages"}
-    assert set(ConversationState.__annotations__) == permitidos
+    allowed = {"session_id", "messages"}
+    assert set(ConversationState.__annotations__) == allowed

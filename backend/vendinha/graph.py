@@ -75,8 +75,8 @@ def build_graph(
         # The system prompt is prepended for the call and never stored in state:
         # storing it would append a copy on every turn, and the checkpoint would
         # grow a prompt per message.
-        resposta = await model.ainvoke([SystemMessage(content=SYSTEM_PROMPT), *state["messages"]])
-        return {"messages": [resposta]}
+        answer = await model.ainvoke([SystemMessage(content=SYSTEM_PROMPT), *state["messages"]])
+        return {"messages": [answer]}
 
     builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
     builder.add_node("conversa", conversa)

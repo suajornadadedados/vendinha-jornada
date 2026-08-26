@@ -37,15 +37,15 @@ async def setup() -> None:
 def main() -> int:
     try:
         runtime.run(setup())
-    except Exception as erro:
+    except Exception as error:
         # A DSN typo and a container that is not up produce very different fixes,
         # and psycopg says which is which. Printing the exception beats a traceback
         # for the person who just ran `make db-setup` for the first time.
-        print(f"falha ao preparar o Postgres: {erro}", file=sys.stderr)
-        print(f"DSN em uso: {get_settings().database_url}", file=sys.stderr)
-        print("o Postgres esta no ar? `make up` sobe e espera ficar healthy.", file=sys.stderr)
+        print(f"failed to prepare Postgres: {error}", file=sys.stderr)
+        print(f"DSN in use: {get_settings().database_url}", file=sys.stderr)
+        print("is Postgres up? `make up` starts it and waits for healthy.", file=sys.stderr)
         return 1
-    print("checkpointer pronto.")
+    print("checkpointer ready.")
     return 0
 
 

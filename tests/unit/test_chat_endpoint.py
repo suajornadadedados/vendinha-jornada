@@ -31,75 +31,75 @@ def checkpointer() -> InMemorySaver:
 
 @pytest.fixture
 def graph(checkpointer: InMemorySaver) -> Any:
-    respostas = [AIMessage(content=t) for t in ("bom dia, tudo joia", "pois nao", "as ordens")]
-    return build_graph(GenericFakeChatModel(messages=iter(respostas)), checkpointer)
+    answers = [AIMessage(content=t) for t in ("bom dia, tudo joia", "pois nao", "as ordens")]
+    return build_graph(GenericFakeChatModel(messages=iter(answers)), checkpointer)
 
 
 @pytest.fixture
 def client(graph: Any) -> Iterator[TestClient]:
-    with TestClient(create_app(graph=graph)) as cliente:
-        yield cliente
+    with TestClient(create_app(graph=graph)) as test_client:
+        yield test_client
 
 
-def _eventos(corpo: str) -> list[tuple[str, dict[str, Any]]]:
+def _events(body: str) -> list[tuple[str, dict[str, Any]]]:
     """Parse the SSE body into (event, data) pairs."""
-    saida: list[tuple[str, dict[str, Any]]] = []
-    nome = ""
-    for linha in corpo.splitlines():
-        if linha.startswith("event:"):
-            nome = linha.removeprefix("event:").strip()
-        elif linha.startswith("data:"):
-            saida.append((nome, json.loads(linha.removeprefix("data:").strip())))
-    return saida
+    parsed: list[tuple[str, dict[str, Any]]] = []
+    name = ""
+    for line in body.splitlines():
+        if line.startswith("event:"):
+            name = line.removeprefix("event:").strip()
+        elif line.startswith("data:"):
+            parsed.append((name, json.loads(line.removeprefix("data:").strip())))
+    return parsed
 
 
 def test_chat_streams_the_answer_as_server_sent_events(client: TestClient) -> None:
-    resposta = client.post("/chat", json={"message": "oi, bom dia"})
+    response = client.post("/chat", json={"message": "oi, bom dia"})
 
-    assert resposta.status_code == 200
-    assert resposta.headers["content-type"].startswith("text/event-stream")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
 
-    eventos = _eventos(resposta.text)
-    tipos = [nome for nome, _ in eventos]
-    assert tipos[0] == "session", "o cliente precisa do id antes de qualquer token"
-    assert tipos[-1] == "done", "um stream sem fim explicita deixa o cliente esperando"
+    events = _events(response.text)
+    kinds = [name for name, _ in events]
+    assert kinds[0] == "session", "the client needs the id before any token"
+    assert kinds[-1] == "done", "a stream with no explicit end leaves the client waiting"
 
-    texto = "".join(dado["text"] for nome, dado in eventos if nome == "token")
-    assert texto == "bom dia, tudo joia"
+    text = "".join(data["text"] for name, data in events if name == "token")
+    assert text == "bom dia, tudo joia"
 
 
 def test_a_request_without_a_session_id_gets_one_back(client: TestClient) -> None:
-    eventos = _eventos(client.post("/chat", json={"message": "oi"}).text)
-    session_id = eventos[0][1]["session_id"]
+    events = _events(client.post("/chat", json={"message": "oi"}).text)
+    session_id = events[0][1]["session_id"]
 
-    assert session_id, "sem id devolvido o cliente nao tem como continuar a conversa"
-    assert len(session_id) >= 32, "id de sessao curto demais para ser um uuid"
+    assert session_id, "without an id the client cannot continue the conversation"
+    assert len(session_id) >= 32, "session id too short to be a uuid"
 
 
 def test_the_same_session_id_continues_the_same_conversation(
     client: TestClient, graph: Any
 ) -> None:
-    primeira = _eventos(client.post("/chat", json={"message": "quero um presente"}).text)
-    session_id = primeira[0][1]["session_id"]
+    first = _events(client.post("/chat", json={"message": "quero um presente"}).text)
+    session_id = first[0][1]["session_id"]
 
     client.post("/chat", json={"message": "para minha mae", "session_id": session_id})
 
-    estado = graph.get_state(session_config(session_id))
-    ditos = [m.content for m in estado.values["messages"]]
-    assert "quero um presente" in ditos, "o segundo turno abriu uma conversa nova"
-    assert "para minha mae" in ditos
+    state = graph.get_state(session_config(session_id))
+    said = [m.content for m in state.values["messages"]]
+    assert "quero um presente" in said, "the second turn opened a new conversation"
+    assert "para minha mae" in said
 
 
 def test_a_new_session_id_does_not_see_the_previous_conversation(
     client: TestClient, graph: Any
 ) -> None:
-    primeira = _eventos(client.post("/chat", json={"message": "segredo"}).text)
-    segunda = _eventos(client.post("/chat", json={"message": "outra pessoa"}).text)
+    first = _events(client.post("/chat", json={"message": "segredo"}).text)
+    second = _events(client.post("/chat", json={"message": "outra pessoa"}).text)
 
-    assert primeira[0][1]["session_id"] != segunda[0][1]["session_id"]
+    assert first[0][1]["session_id"] != second[0][1]["session_id"]
 
-    estado = graph.get_state(session_config(segunda[0][1]["session_id"]))
-    assert "segredo" not in [m.content for m in estado.values["messages"]]
+    state = graph.get_state(session_config(second[0][1]["session_id"]))
+    assert "segredo" not in [m.content for m in state.values["messages"]]
 
 
 def test_an_empty_message_is_refused_by_the_contract(client: TestClient) -> None:
@@ -116,24 +116,24 @@ def test_a_failure_mid_stream_becomes_an_event_and_leaks_nothing() -> None:
     a run that leaks configuration or tool names into an answer.
     """
 
-    class GrafoQueQuebra:
+    class BrokenGraph:
         async def astream(self, *_: Any, **__: Any) -> Any:
             raise RuntimeError("connection to postgresql://vendinha:vendinha@127.0.0.1:5432 failed")
             yield  # pragma: no cover - unreachable, keeps this an async generator
 
-    with TestClient(create_app(graph=GrafoQueQuebra())) as cliente:
-        resposta = cliente.post("/chat", json={"message": "oi"})
+    with TestClient(create_app(graph=BrokenGraph())) as test_client:
+        response = test_client.post("/chat", json={"message": "oi"})
 
-    assert resposta.status_code == 200
-    eventos = _eventos(resposta.text)
-    tipos = [nome for nome, _ in eventos]
-    assert tipos == ["session", "error", "done"], "o stream precisa terminar mesmo quebrando"
+    assert response.status_code == 200
+    events = _events(response.text)
+    kinds = [name for name, _ in events]
+    assert kinds == ["session", "error", "done"], "the stream must end even when it breaks"
 
-    detalhe = next(dado["detail"] for nome, dado in eventos if nome == "error")
-    for vazamento in ("postgres", "127.0.0.1", "vendinha:", "RuntimeError", "5432"):
-        assert vazamento not in detalhe, f"a mensagem ao cliente vazou {vazamento!r}"
+    detail = next(data["detail"] for name, data in events if name == "error")
+    for leak in ("postgres", "127.0.0.1", "vendinha:", "RuntimeError", "5432"):
+        assert leak not in detail, f"the customer-facing message leaked {leak!r}"
 
 
 def test_health_says_the_service_is_up(client: TestClient) -> None:
-    corpo = client.get("/health").json()
-    assert corpo["status"] == "ok"
+    body = client.get("/health").json()
+    assert body["status"] == "ok"

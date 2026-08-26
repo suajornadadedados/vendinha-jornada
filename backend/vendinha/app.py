@@ -75,9 +75,9 @@ def create_app(graph: Any | None = None) -> FastAPI:
         return HealthResponse(status="ok")
 
     @app.post("/chat")
-    async def chat(pedido: ChatRequest, request: Request) -> EventSourceResponse:
-        session_id = pedido.session_id or uuid.uuid4().hex
-        compilado = request.app.state.graph
+    async def chat(payload: ChatRequest, request: Request) -> EventSourceResponse:
+        session_id = payload.session_id or uuid.uuid4().hex
+        graph = request.app.state.graph
 
         async def stream() -> AsyncIterator[dict[str, str]]:
             yield {
@@ -85,8 +85,8 @@ def create_app(graph: Any | None = None) -> FastAPI:
                 "data": SessionEvent(session_id=session_id).model_dump_json(),
             }
             try:
-                async for chunk, _ in compilado.astream(
-                    {"session_id": session_id, "messages": [HumanMessage(content=pedido.message)]},
+                async for chunk, _ in graph.astream(
+                    {"session_id": session_id, "messages": [HumanMessage(content=payload.message)]},
                     config=session_config(session_id),
                     stream_mode="messages",
                 ):
@@ -102,7 +102,7 @@ def create_app(graph: Any | None = None) -> FastAPI:
                 # Loud on our side, vague on the customer's. The exception carries
                 # DSNs, model names and limits; `adversarial-006` fails a run that
                 # leaks internal configuration or tool names into an answer.
-                logger.exception("falha ao gerar resposta na sessao %s", session_id)
+                logger.exception("failed to generate an answer for session %s", session_id)
                 yield {
                     "event": "error",
                     "data": ErrorEvent(

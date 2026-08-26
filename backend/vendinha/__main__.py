@@ -25,10 +25,10 @@ def main() -> None:
     # `uvicorn.run` builds its own loop through its own factory, which is why the
     # server is driven by hand here: `runtime.run` is the only place that decides
     # what kind of loop this process gets.
-    servidor = uvicorn.Server(
+    server = uvicorn.Server(
         uvicorn.Config("vendinha.app:app", host=settings.api_host, port=settings.api_port)
     )
-    runtime.run(servidor.serve())
+    runtime.run(server.serve())
 
 
 if __name__ == "__main__":
