@@ -1,0 +1,316 @@
+[
+  {
+    "id": "queijo-canastra-meia-cura",
+    "nome": "Queijo Canastra meia-cura",
+    "tipo": "queijo",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "O clássico da Canastra no ponto que agrada quase todo mundo: massa firme, sabor lácteo com final levemente picante. Meia-cura é o meio-termo entre o frescor do jovem e a intensidade do curado.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "goiabada cascão",
+      "café coado",
+      "cachaça envelhecida"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "presente",
+      "receber visita"
+    ],
+    "peso": "500 g",
+    "preco": "89.90",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "45 dias"
+  },
+  {
+    "id": "queijo-canastra-curado",
+    "nome": "Queijo Canastra curado 120 dias",
+    "tipo": "queijo",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "Quatro meses de cura em ambiente controlado. Massa quebradiça, cristais de tirosina e final longo e picante. Para quem já sabe do que gosta.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "cachaça envelhecida em amburana",
+      "doce de leite",
+      "mel"
+    ],
+    "ocasiao": [
+      "presente para quem entende",
+      "degustação",
+      "tábua de frios"
+    ],
+    "peso": "500 g",
+    "preco": "118.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "120 dias"
+  },
+  {
+    "id": "queijo-canastra-fresco",
+    "nome": "Queijo Canastra fresco",
+    "tipo": "queijo",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "Recém-saído da salga, ainda úmido e macio. Sabor lácteo limpo, quase adocicado. É o queijo do café da manhã mineiro.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "café coado",
+      "goiabada cremosa",
+      "pão de queijo",
+      "suco de laranja"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "lanche da tarde"
+    ],
+    "peso": "500 g",
+    "preco": "68.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "8 dias"
+  },
+  {
+    "id": "queijo-serro-tradicional",
+    "nome": "Queijo do Serro tradicional",
+    "tipo": "queijo",
+    "regiao": "Serro, MG",
+    "produtor": "Fazenda Águas Claras",
+    "descricao": "A denominação de origem mais antiga de Minas. Massa macia, acidez presente e aquele amargor final característico do Serro.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "goiabada cascão",
+      "vinho branco seco",
+      "cerveja de trigo"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "tábua de frios",
+      "presente"
+    ],
+    "peso": "500 g",
+    "preco": "79.50",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "30 dias"
+  },
+  {
+    "id": "queijo-serro-envelhecido",
+    "nome": "Queijo do Serro envelhecido 6 meses",
+    "tipo": "queijo",
+    "regiao": "Serro, MG",
+    "produtor": "Fazenda Águas Claras",
+    "descricao": "Meio ano de maturação transforma a acidez do Serro em profundidade. Massa dura, aroma intenso, sabor que fica. Vendido em peça menor porque rende muito.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "cachaça envelhecida",
+      "nozes",
+      "mel"
+    ],
+    "ocasiao": [
+      "degustação",
+      "presente para quem entende"
+    ],
+    "peso": "400 g",
+    "preco": "142.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "180 dias"
+  },
+  {
+    "id": "queijo-araxa-meia-cura",
+    "nome": "Queijo de Araxá meia-cura",
+    "tipo": "queijo",
+    "regiao": "Alto Paranaíba, MG",
+    "produtor": "Laticínio Serra Dourada",
+    "descricao": "Mais amanteigado que o Canastra e menos ácido que o Serro. Um queijo conciliador — costuma agradar quem diz não gostar de queijo curado.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "vinho tinto leve",
+      "goiabada cremosa",
+      "café coado",
+      "cerveja pilsen"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "receber visita"
+    ],
+    "peso": "500 g",
+    "preco": "84.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "60 dias"
+  },
+  {
+    "id": "queijo-campo-das-vertentes",
+    "nome": "Queijo Campo das Vertentes",
+    "tipo": "queijo",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Fazenda Três Barras",
+    "descricao": "Região de tradição leiteira e pasto alto. Massa amarelada, textura macia e sabor suave com fundo de manteiga.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "vinho tinto leve",
+      "doce de cidra",
+      "café coado"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "café da manhã"
+    ],
+    "peso": "500 g",
+    "preco": "76.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "40 dias"
+  },
+  {
+    "id": "queijo-cerrado-mineiro-curado",
+    "nome": "Queijo do Cerrado Mineiro curado",
+    "tipo": "queijo",
+    "regiao": "Cerrado Mineiro, MG",
+    "produtor": "Fazenda Vereda Grande",
+    "descricao": "Três meses de cura em queijo de leite de gado criado no cerrado. Sabor terroso, salgado presente, casca rústica.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "cachaça envelhecida",
+      "goiabada cascão"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "presente",
+      "degustação"
+    ],
+    "peso": "500 g",
+    "preco": "95.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "90 dias"
+  },
+  {
+    "id": "queijo-parmesao-mineiro",
+    "nome": "Queijo tipo parmesão mineiro 12 meses",
+    "tipo": "queijo",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Laticínio Vale do Sapucaí",
+    "descricao": "Um ano de cura. Duro, granulado, salgado e umami. Serve tanto ralado sobre massa quanto lascado numa tábua.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "massas",
+      "risoto",
+      "cachaça envelhecida"
+    ],
+    "ocasiao": [
+      "cozinhar",
+      "degustação",
+      "presente"
+    ],
+    "peso": "400 g",
+    "preco": "168.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "12 meses"
+  },
+  {
+    "id": "queijo-minas-padrao",
+    "nome": "Queijo minas padrão",
+    "tipo": "queijo",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Laticínio Boa Esperança",
+    "descricao": "O queijo de todo dia: massa branca, macia e de sabor discreto. Derrete bem e não briga com nada.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "café coado",
+      "goiabada cremosa",
+      "pão de queijo"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "lanche da tarde",
+      "cozinhar"
+    ],
+    "peso": "500 g",
+    "preco": "52.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "20 dias"
+  },
+  {
+    "id": "queijo-minas-frescal",
+    "nome": "Queijo minas frescal",
+    "tipo": "queijo",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Laticínio Boa Esperança",
+    "descricao": "Fresco de verdade, com soro ainda na massa. Levemente adocicado. Combina com doce e com pimenta — não com curados.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "geleia de pimenta biquinho",
+      "mel",
+      "café coado"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "lanche da tarde"
+    ],
+    "peso": "400 g",
+    "preco": "38.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "3 dias"
+  },
+  {
+    "id": "queijo-azul-da-mantiqueira",
+    "nome": "Queijo azul da Mantiqueira",
+    "tipo": "queijo",
+    "regiao": "Serra da Mantiqueira, MG",
+    "produtor": "Sítio Névoa Alta",
+    "descricao": "Mofo azul cultivado em cave na serra. Salgado, picante e cremoso ao mesmo tempo. Produção pequena e sazonal.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "vinho tinto encorpado",
+      "doce de leite",
+      "mel",
+      "licor de jabuticaba"
+    ],
+    "ocasiao": [
+      "degustação",
+      "presente para quem entende"
+    ],
+    "peso": "300 g",
+    "preco": "132.00",
+    "disponivel": false,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "maturacao": "90 dias"
+  },
+  {
+    "id": "queijo-defumado-da-mantiqueira",
+    "nome": "Queijo defumado da Mantiqueira",
+    "tipo": "queijo",
+    "regiao": "Serra da Mantiqueira, MG",
+    "produtor": "Sítio Névoa Alta",
+    "descricao": "Defumado a frio com lenha de goiabeira depois de dois meses de cura. Aroma de fumaça sem esconder o queijo.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "cerveja escura",
+      "cachaça envelhecida",
+      "vinho tinto encorpado"
+    ],
+    "ocasiao": [
+      "tábua de frios",
+      "churrasco",
+      "presente"
+    ],
+    "peso": "400 g",
+    "preco": "108.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "60 dias"
+  }
+]

@@ -1,0 +1,331 @@
+[
+  {
+    "id": "cafe-cerrado-torra-media",
+    "nome": "Café do Cerrado Mineiro torra média",
+    "tipo": "cafe",
+    "regiao": "Cerrado Mineiro, MG",
+    "produtor": "Fazenda Vereda Grande",
+    "descricao": "Corpo médio, doçura de caramelo e acidez baixa. O café que agrada a casa inteira sem chamar atenção para si.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo minas padrão",
+      "pão de queijo",
+      "doce de leite"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "dia a dia"
+    ],
+    "peso": "250 g",
+    "preco": "42.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média",
+    "notas_sensoriais": [
+      "chocolate ao leite",
+      "caramelo",
+      "castanha"
+    ]
+  },
+  {
+    "id": "cafe-sul-de-minas-torra-escura",
+    "nome": "Café Sul de Minas torra escura",
+    "tipo": "cafe",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Fazenda Boa Sorte",
+    "descricao": "Torra escura à moda mineira: encorpado, amargor limpo e persistente. Aguenta leite sem desaparecer.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "doce de leite",
+      "rapadura",
+      "queijo curado"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "depois do almoço"
+    ],
+    "peso": "250 g",
+    "preco": "46.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra escura",
+    "notas_sensoriais": [
+      "cacau",
+      "noz tostada",
+      "melado"
+    ]
+  },
+  {
+    "id": "cafe-matas-de-minas-natural",
+    "nome": "Café Matas de Minas natural",
+    "tipo": "cafe",
+    "regiao": "Matas de Minas, MG",
+    "produtor": "Sítio Serra Verde",
+    "descricao": "Secado ao sol com a cereja inteira. Muito doce, frutado, corpo redondo. Café de conversa de fim de tarde.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "goiabada cremosa",
+      "biscoito amanteigado",
+      "queijo minas frescal"
+    ],
+    "ocasiao": [
+      "lanche da tarde",
+      "presente"
+    ],
+    "peso": "250 g",
+    "preco": "54.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média-clara",
+    "notas_sensoriais": [
+      "fruta vermelha",
+      "mel",
+      "amêndoa"
+    ]
+  },
+  {
+    "id": "cafe-chapada-descafeinado",
+    "nome": "Café Chapada de Minas descafeinado",
+    "tipo": "cafe",
+    "regiao": "Chapada de Minas, MG",
+    "produtor": "Fazenda Alto do Rio",
+    "descricao": "Descafeinado por água, sem solvente. Perde a cafeína e mantém o corpo — raro nessa categoria.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "biscoito de polvilho",
+      "doce de leite",
+      "bolo de fubá"
+    ],
+    "ocasiao": [
+      "fim de noite",
+      "dia a dia"
+    ],
+    "peso": "250 g",
+    "preco": "58.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média",
+    "notas_sensoriais": [
+      "caramelo",
+      "castanha-do-pará"
+    ]
+  },
+  {
+    "id": "cafe-microlote-bourbon-amarelo",
+    "nome": "Café microlote Bourbon Amarelo",
+    "tipo": "cafe",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Fazenda Boa Sorte",
+    "descricao": "Microlote de talhão único, colhido a dedo. Doçura alta e acidez cítrica bem desenhada. Melhor em métodos filtrados.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "chocolate meio amargo",
+      "queijo canastra fresco"
+    ],
+    "ocasiao": [
+      "presente",
+      "degustação"
+    ],
+    "peso": "250 g",
+    "preco": "88.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra clara",
+    "notas_sensoriais": [
+      "laranja",
+      "mel",
+      "jasmim"
+    ]
+  },
+  {
+    "id": "cafe-catuai-vermelho",
+    "nome": "Café Catuaí Vermelho especial",
+    "tipo": "cafe",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Fazenda Boa Sorte",
+    "descricao": "O cultivar mais plantado de Minas, tratado como especial. Equilíbrio entre corpo e doçura, sem arestas.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "doce de leite",
+      "goiabada cascão",
+      "queijo meia-cura"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "presente"
+    ],
+    "peso": "250 g",
+    "preco": "62.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média",
+    "notas_sensoriais": [
+      "chocolate",
+      "caramelo",
+      "maçã madura"
+    ]
+  },
+  {
+    "id": "cafe-fermentado-anaerobico",
+    "nome": "Café fermentado anaeróbico",
+    "tipo": "cafe",
+    "regiao": "Matas de Minas, MG",
+    "produtor": "Sítio Serra Verde",
+    "descricao": "Fermentação sem oxigênio por 72 horas. Perfil exuberante e divisivo: quem gosta, ama. Lote pequeno.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "chocolate meio amargo",
+      "licor de jabuticaba"
+    ],
+    "ocasiao": [
+      "degustação",
+      "presente para quem entende"
+    ],
+    "peso": "250 g",
+    "preco": "96.00",
+    "disponivel": false,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "torra": "torra clara",
+    "notas_sensoriais": [
+      "abacaxi",
+      "rum",
+      "frutas em calda"
+    ]
+  },
+  {
+    "id": "cafe-moido-tradicional",
+    "nome": "Café moído tradicional para coador",
+    "tipo": "cafe",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Fazenda Boa Sorte",
+    "descricao": "Moagem para coador de pano ou papel, pacote grande. O café da garrafa térmica que fica pronta às seis da manhã.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "pão de queijo",
+      "broa de fubá",
+      "queijo minas padrão"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "dia a dia"
+    ],
+    "peso": "500 g",
+    "preco": "39.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra escura",
+    "notas_sensoriais": [
+      "cacau",
+      "melado"
+    ]
+  },
+  {
+    "id": "cafe-blend-espresso",
+    "nome": "Café em grãos blend para espresso",
+    "tipo": "cafe",
+    "regiao": "Cerrado Mineiro, MG",
+    "produtor": "Fazenda Vereda Grande",
+    "descricao": "Blend de três talhões desenhado para espresso: crema densa, corpo alto e doçura que sobrevive ao leite.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "doce de leite",
+      "chocolate meio amargo"
+    ],
+    "ocasiao": [
+      "dia a dia",
+      "presente"
+    ],
+    "peso": "500 g",
+    "preco": "74.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média-escura",
+    "notas_sensoriais": [
+      "chocolate amargo",
+      "avelã",
+      "caramelo"
+    ]
+  },
+  {
+    "id": "cafe-organico-sul-de-minas",
+    "nome": "Café orgânico Sul de Minas",
+    "tipo": "cafe",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Sítio Pé de Serra",
+    "descricao": "Certificado orgânico, sombreado sob mata nativa. Xícara limpa, doce e sem amargor agressivo.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "biscoito amanteigado",
+      "queijo minas frescal",
+      "mel"
+    ],
+    "ocasiao": [
+      "café da manhã",
+      "presente"
+    ],
+    "peso": "250 g",
+    "preco": "66.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra média",
+    "notas_sensoriais": [
+      "castanha",
+      "melado",
+      "frutas amarelas"
+    ]
+  },
+  {
+    "id": "cafe-mundo-novo-torra-clara",
+    "nome": "Café Mundo Novo torra clara",
+    "tipo": "cafe",
+    "regiao": "Matas de Minas, MG",
+    "produtor": "Sítio Serra Verde",
+    "descricao": "Torra clara para quem quer sentir o café, não a torra. Acidez presente, corpo leve, final limpo.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "geleia de jabuticaba",
+      "biscoito de polvilho"
+    ],
+    "ocasiao": [
+      "lanche da tarde",
+      "degustação"
+    ],
+    "peso": "250 g",
+    "preco": "59.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "torra": "torra clara",
+    "notas_sensoriais": [
+      "limão siciliano",
+      "chá preto",
+      "mel"
+    ]
+  },
+  {
+    "id": "cafe-geisha-caparao",
+    "nome": "Café Geisha Serra do Caparaó",
+    "tipo": "cafe",
+    "regiao": "Serra do Caparaó, MG",
+    "produtor": "Fazenda Alto do Rio",
+    "descricao": "A variedade mais cara do mundo, plantada a 1.200 metros no Caparaó. Floral, aromático e caríssimo — com motivo.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "chocolate branco",
+      "queijo azul da mantiqueira"
+    ],
+    "ocasiao": [
+      "presente para quem entende",
+      "degustação"
+    ],
+    "peso": "150 g",
+    "preco": "180.00",
+    "disponivel": false,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "torra": "torra clara",
+    "notas_sensoriais": [
+      "jasmim",
+      "bergamota",
+      "pêssego"
+    ]
+  }
+]

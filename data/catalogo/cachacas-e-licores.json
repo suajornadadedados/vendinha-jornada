@@ -1,0 +1,288 @@
+[
+  {
+    "id": "cachaca-amburana-4-anos",
+    "nome": "Cachaça envelhecida em amburana 4 anos",
+    "tipo": "cachaca",
+    "regiao": "Salinas, MG",
+    "produtor": "Alambique Boca da Mata",
+    "descricao": "Quatro anos em tonel de amburana: baunilha, canela e um doce de madeira que não vem de açúcar. A cachaça que converte quem diz não gostar de cachaça.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo canastra curado",
+      "doce de leite em barra",
+      "café espresso"
+    ],
+    "ocasiao": [
+      "presente",
+      "degustação",
+      "depois do jantar"
+    ],
+    "peso": "700 ml",
+    "preco": "148.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "4 anos em amburana",
+    "teor_alcoolico": "38% vol."
+  },
+  {
+    "id": "cachaca-prata-tradicional",
+    "nome": "Cachaça prata tradicional",
+    "tipo": "cachaca",
+    "regiao": "Salinas, MG",
+    "produtor": "Alambique Boca da Mata",
+    "descricao": "Alambique de cobre, descanso em inox. Nítida, herbácea e sem álcool agressivo. Base honesta de caipirinha.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "caipirinha",
+      "queijo minas frescal",
+      "limão"
+    ],
+    "ocasiao": [
+      "dia a dia",
+      "receber visita"
+    ],
+    "peso": "700 ml",
+    "preco": "78.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "descansada 6 meses em inox",
+    "teor_alcoolico": "40% vol."
+  },
+  {
+    "id": "cachaca-carvalho-8-anos",
+    "nome": "Cachaça envelhecida em carvalho 8 anos",
+    "tipo": "cachaca",
+    "regiao": "Salinas, MG",
+    "produtor": "Alambique Boca da Mata",
+    "descricao": "Oito anos em carvalho europeu. Cor de âmbar escuro, taninos redondos, final seco e longo. Bebe-se devagar, em copo pequeno.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo parmesão mineiro",
+      "chocolate meio amargo",
+      "café espresso"
+    ],
+    "ocasiao": [
+      "presente para quem entende",
+      "degustação"
+    ],
+    "peso": "700 ml",
+    "preco": "236.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "8 anos em carvalho",
+    "teor_alcoolico": "41% vol."
+  },
+  {
+    "id": "cachaca-jequitiba-rosa",
+    "nome": "Cachaça envelhecida em jequitibá-rosa",
+    "tipo": "cachaca",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Alambique Pedra Lisa",
+    "descricao": "Madeira nativa que quase não dá cor e dá muito aroma. Perfil floral e amanteigado, raro fora de Minas.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo canastra meia-cura",
+      "goiabada cascão"
+    ],
+    "ocasiao": [
+      "presente",
+      "degustação"
+    ],
+    "peso": "700 ml",
+    "preco": "132.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "3 anos em jequitibá-rosa",
+    "teor_alcoolico": "40% vol."
+  },
+  {
+    "id": "cachaca-balsamo",
+    "nome": "Cachaça envelhecida em bálsamo",
+    "tipo": "cachaca",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Alambique Pedra Lisa",
+    "descricao": "Bálsamo entrega um amargor perfumado, quase de ervas medicinais. Cachaça de fim de noite, servida pura.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo do serro envelhecido",
+      "doce de leite cremoso",
+      "café sul de minas torra escura"
+    ],
+    "ocasiao": [
+      "depois do jantar",
+      "presente"
+    ],
+    "peso": "700 ml",
+    "preco": "118.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "2 anos em bálsamo",
+    "teor_alcoolico": "39% vol."
+  },
+  {
+    "id": "cachaca-organica-prata",
+    "nome": "Cachaça orgânica prata",
+    "tipo": "cachaca",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Alambique Pé de Serra",
+    "descricao": "Cana orgânica certificada, moída no dia do corte. Leve, quase doce, com aroma de cana fresca ainda presente.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "caipirinha",
+      "geleia de pimenta biquinho"
+    ],
+    "ocasiao": [
+      "dia a dia",
+      "presente"
+    ],
+    "peso": "700 ml",
+    "preco": "96.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "sem envelhecimento",
+    "teor_alcoolico": "38% vol."
+  },
+  {
+    "id": "cachaca-jatoba-reserva",
+    "nome": "Cachaça reserva envelhecida em jatobá",
+    "tipo": "cachaca",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Engenho Água Limpa",
+    "descricao": "Jatobá dá corpo e um travo resinoso característico. Lote limitado a 400 garrafas por safra.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo defumado da mantiqueira",
+      "chocolate meio amargo"
+    ],
+    "ocasiao": [
+      "presente para quem entende",
+      "degustação"
+    ],
+    "peso": "700 ml",
+    "preco": "172.00",
+    "disponivel": false,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "maturacao": "5 anos em jatobá",
+    "teor_alcoolico": "42% vol."
+  },
+  {
+    "id": "cachaca-umburana-reserva-especial",
+    "nome": "Cachaça reserva especial umburana e carvalho",
+    "tipo": "cachaca",
+    "regiao": "Salinas, MG",
+    "produtor": "Alambique Boca da Mata",
+    "descricao": "Blend de dois tonéis: a baunilha da umburana com o tanino do carvalho. Corte feito à mão, safra a safra.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo parmesão mineiro",
+      "doce de figo em calda",
+      "chocolate meio amargo"
+    ],
+    "ocasiao": [
+      "presente para quem entende",
+      "degustação"
+    ],
+    "peso": "700 ml",
+    "preco": "198.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "6 anos, blend de umburana e carvalho",
+    "teor_alcoolico": "40% vol."
+  },
+  {
+    "id": "licor-de-jabuticaba",
+    "nome": "Licor de jabuticaba",
+    "tipo": "licor",
+    "regiao": "Serra da Mantiqueira, MG",
+    "produtor": "Sítio Névoa Alta",
+    "descricao": "Jabuticaba inteira macerada em cachaça por três meses. Cor de tinta, doçura média e a acidez da casca segurando o conjunto.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "queijo azul da mantiqueira",
+      "chocolate meio amargo",
+      "sobremesas"
+    ],
+    "ocasiao": [
+      "presente",
+      "depois do jantar",
+      "receber visita"
+    ],
+    "peso": "500 ml",
+    "preco": "88.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "macerado 90 dias",
+    "teor_alcoolico": "20% vol."
+  },
+  {
+    "id": "licor-de-jenipapo",
+    "nome": "Licor de jenipapo",
+    "tipo": "licor",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Engenho Água Limpa",
+    "descricao": "Sabor divisivo e inesquecível: terroso, especiado, com fundo de casca de árvore. Licor de festa de interior.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "queijo cerrado mineiro curado",
+      "paçoca de amendoim"
+    ],
+    "ocasiao": [
+      "depois do jantar",
+      "presente"
+    ],
+    "peso": "500 ml",
+    "preco": "82.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "macerado 120 dias",
+    "teor_alcoolico": "22% vol."
+  },
+  {
+    "id": "licor-de-cafe",
+    "nome": "Licor de café",
+    "tipo": "licor",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Alambique Pé de Serra",
+    "descricao": "Grãos do Sul de Minas macerados em cachaça prata e adoçados com rapadura. Amargor de café de verdade sob o doce.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "doce de leite cremoso",
+      "paçoca de amendoim",
+      "sorvete de creme"
+    ],
+    "ocasiao": [
+      "depois do jantar",
+      "presente",
+      "receber visita"
+    ],
+    "peso": "500 ml",
+    "preco": "78.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "macerado 60 dias",
+    "teor_alcoolico": "20% vol."
+  },
+  {
+    "id": "licor-de-leite",
+    "nome": "Licor de leite",
+    "tipo": "licor",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Leite, cachaça, açúcar e casca de limão em repouso. Cremoso e leve, do tipo que a visita aceita a segunda dose.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "biscoito de polvilho",
+      "broa de fubá com erva-doce"
+    ],
+    "ocasiao": [
+      "receber visita",
+      "presente"
+    ],
+    "peso": "500 ml",
+    "preco": "74.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "descansado 30 dias",
+    "teor_alcoolico": "18% vol."
+  }
+]

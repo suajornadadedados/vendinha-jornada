@@ -4,9 +4,11 @@ Unit here means: no container, no network, no clock. There is no integration
 tier in this repository (docs/testes.md §1) — what needs live infrastructure is
 verified by hand in /verificar-spec, and said so out loud.
 
-The sample data below deliberately uses the same product names as the eval cases
-in `evals/golden/`. When the S-01 seed lands, these names have to exist in it —
-otherwise a case fails for the wrong reason: missing data, not a wrong agent.
+The sample data below deliberately uses the same product ids and prices as the
+seed in `data/catalogo/` (S-01). It is shaped like a tool return, not like a seed
+row, but the numbers have to agree: a fixture that quotes a price the catalogue
+does not have would let `test_order_total.py` assert a total no customer could
+ever be charged.
 """
 
 from decimal import Decimal
@@ -30,7 +32,7 @@ def produto() -> dict:
     return {
         "sku": "queijo-canastra-meia-cura",
         "nome": "Queijo Canastra meia-cura",
-        "preco_unitario": Decimal("78.90"),
+        "preco_unitario": Decimal("89.90"),
         "maturacao_dias": 45,
         "disponivel": True,
         "prazo_estimado_dias": 4,
@@ -43,20 +45,23 @@ def catalogo(produto: dict) -> list[dict]:
     return [
         produto,
         {
-            "sku": "doce-de-leite-vicosa",
-            "nome": "Doce de leite de Vicosa",
-            "preco_unitario": Decimal("24.50"),
+            "sku": "doce-de-leite-cremoso",
+            "nome": "Doce de leite cremoso",
+            "preco_unitario": Decimal("32.00"),
             "maturacao_dias": None,
             "disponivel": True,
             "prazo_estimado_dias": 4,
         },
+        # Unavailable on purpose, and unavailable in the seed too: the "we do not
+        # have this right now" path needs a row, and it must be the same row the
+        # catalogue would return.
         {
-            "sku": "cafe-cerrado-torra-media",
-            "nome": "Cafe do Cerrado Mineiro, torra media",
-            "preco_unitario": Decimal("42.00"),
+            "sku": "cafe-fermentado-anaerobico",
+            "nome": "Cafe fermentado anaerobico",
+            "preco_unitario": Decimal("96.00"),
             "maturacao_dias": None,
             "disponivel": False,
-            "prazo_estimado_dias": 9,
+            "prazo_estimado_dias": 7,
         },
     ]
 
