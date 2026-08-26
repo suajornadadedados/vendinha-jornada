@@ -124,6 +124,21 @@ CRLF: shebang vira `bad interpreter: /usr/bin/env bash^M` e o `make` recusa as r
 BDD desta spec é justamente "clone limpo", entrou `.gitattributes` com `* text=auto eol=lf`.
 Verificado com um clone real forçando `autocrlf=true`.
 
+**D-10 — o CI nunca executou.** O PR desta spec revelou que todos os runs do repositório,
+desde o `first commit`, eram **startup_failure**: 0 segundo, nenhum job, nenhum log. Causa:
+`hashFiles()` não é permitida em `jobs.<id>.if` — só em contexto de step. Uma expressão inválida
+não reprova o job, ela quebra o parse do arquivo inteiro, e o workflow nunca inicia. O efeito
+prático é o pior possível: nenhum check reporta, então **nada bloqueia o merge** — e o
+`github-setup.md` abre dizendo que "um check que roda e não impede o merge é relatório, não
+portão". Aqui nem relatório era.
+
+Corrigido dentro do REQ-3 com um job `detect` que faz checkout e exporta os gatilhos como
+outputs, consumidos por `needs.detect.outputs.*`. Isso preserva a semântica desejada (job
+*skipped*, nunca vermelho) e é correto também no mérito: no `if` de um job o workspace ainda não
+foi clonado, então `hashFiles` responderia vazio de qualquer forma. Passou a rodar `actionlint`
+no arquivo — a validação de YAML que já existia aceitava o arquivo sem reclamar, porque YAML
+válido não é o mesmo que schema de workflow válido.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)
