@@ -19,6 +19,7 @@ implementation of the same protocol Postgres implements.
 import json
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -29,6 +30,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
+from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
 from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
@@ -53,6 +55,20 @@ def _sem_catalogo() -> Subagent:
 
 
 FAKE_KEY = "sk-ant-api03-" + "Z" * 40
+
+
+CATALOGO_DO_SEED = Path(__file__).resolve().parents[2] / "data" / "catalogo"
+
+
+def _catalogo_de_teste() -> CatalogoEmMemoria:
+    """O catálogo que a subida confere (R-10), sem contêiner.
+
+    `create_app` recusa subir com catálogo vazio, e é de propósito: sem `make
+    seed` o agente responde "não encontrei nada" com toda a sinceridade, o que
+    parece falha do modelo e é falha de setup. O teste percorre esse preflight de
+    verdade em vez de contorná-lo — era essa a ressalva R-14.
+    """
+    return CatalogoEmMemoria(carregar_seed(CATALOGO_DO_SEED))
 
 
 @pytest.fixture(autouse=True)
@@ -137,7 +153,9 @@ def client(store: InMemoryConfigStore) -> Iterator[TestClient]:
         InMemorySaver(),
         _sem_catalogo(),
     )
-    with TestClient(create_app(graph=graph, store=store)) as test_client:
+    with TestClient(
+        create_app(graph=graph, store=store, catalogo=_catalogo_de_teste())
+    ) as test_client:
         yield test_client
 
 
@@ -305,7 +323,7 @@ def test_configuration_cannot_be_written_outside_local(
     get_settings.cache_clear()
 
     graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
-    with TestClient(create_app(graph=graph, store=store)) as prod:
+    with TestClient(create_app(graph=graph, store=store, catalogo=_catalogo_de_teste())) as prod:
         assert prod.get("/config").json()["editable"] is False
         negado = prod.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
         assert negado.status_code == 403
@@ -332,7 +350,9 @@ def test_the_config_response_says_whether_encryption_is_ready(
     get_settings.cache_clear()
 
     graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
-    with TestClient(create_app(graph=graph, store=store)) as test_client:
+    with TestClient(
+        create_app(graph=graph, store=store, catalogo=_catalogo_de_teste())
+    ) as test_client:
         body: dict[str, Any] = test_client.get("/config").json()
         assert body["encryption_ready"] is configured
 

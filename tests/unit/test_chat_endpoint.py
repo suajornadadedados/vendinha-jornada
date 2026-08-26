@@ -12,6 +12,7 @@ those needs Postgres or a real model to be provable.
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -21,6 +22,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
+from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
 from vendinha.providers import PROVIDERS, Provider
@@ -42,6 +44,20 @@ def _sem_catalogo() -> Subagent:
     return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
 
 
+CATALOGO_DO_SEED = Path(__file__).resolve().parents[2] / "data" / "catalogo"
+
+
+def _catalogo_de_teste() -> CatalogoEmMemoria:
+    """O catálogo que a subida confere (R-10), sem contêiner.
+
+    `create_app` recusa subir com catálogo vazio, e é de propósito: sem `make
+    seed` o agente responde "não encontrei nada" com toda a sinceridade, o que
+    parece falha do modelo e é falha de setup. O teste percorre esse preflight de
+    verdade em vez de contorná-lo — era essa a ressalva R-14.
+    """
+    return CatalogoEmMemoria(carregar_seed(CATALOGO_DO_SEED))
+
+
 @pytest.fixture
 def checkpointer() -> InMemorySaver:
     return InMemorySaver()
@@ -58,7 +74,9 @@ def client(graph: Any) -> Iterator[TestClient]:
     # The store is injected for the same reason the graph is: `ConfigStore` is a
     # protocol with a real in-memory implementation, so nothing internal is mocked
     # and no container is needed (docs/testes.md §4).
-    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())) as test_client:
+    with TestClient(
+        create_app(graph=graph, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as test_client:
         yield test_client
 
 
@@ -155,7 +173,9 @@ def test_a_failure_mid_stream_becomes_an_event_and_leaks_nothing() -> None:
         def astream(self, *_: Any, **__: Any) -> BrokenStream:
             return BrokenStream()
 
-    with TestClient(create_app(graph=BrokenGraph(), store=InMemoryConfigStore())) as test_client:
+    with TestClient(
+        create_app(graph=BrokenGraph(), store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as test_client:
         response = test_client.post("/chat", json={"message": "oi"})
 
     assert response.status_code == 200
@@ -192,7 +212,9 @@ def test_the_model_list_is_warmed_before_the_first_request(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-" + "z" * 20)
     monkeypatch.setitem(PROVIDERS, "anthropic", Provider("anthropic", "ANTHROPIC_API_KEY", listar))
 
-    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())) as cliente:
+    with TestClient(
+        create_app(graph=graph, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as cliente:
         assert chamadas[0] == 1, "a lista nao foi aquecida no boot"
         cliente.get("/models")
         assert chamadas[0] == 1, "o boot aqueceu mas a requisicao consultou de novo"

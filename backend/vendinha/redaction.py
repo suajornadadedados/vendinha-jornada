@@ -248,5 +248,18 @@ def redactor() -> Redactor:
 
 
 def redact(value: str) -> str:
-    """Pattern-only redaction, for callers with no collected values to consider."""
+    """Pattern-only redaction, for callers with no collected values to consider.
+
+    **Exactly one production consumer: `db.py:main`**, and o número importa — era
+    a ressalva R-3 da verificação da S-02. Aquele CLI roda antes de a aplicação
+    existir, então não há registro de nomes coletados para consultar: só o que tem
+    forma pode ser mascarado ali.
+
+    Toda fronteira que roda **dentro** do processo de atendimento — o hook de
+    export do OpenTelemetry e o formatter de log — usa `redactor()`, que é
+    padrões *mais* os valores conhecidos. A distinção não é estética: um teste que
+    afirma sobre esta função aqui está medindo a metade fraca, e foi por isso que
+    as asserções de padrão de `tests/security/test_pii_redaction.py` passaram a
+    atravessar `redactor()`.
+    """
     return _PATTERNS_ONLY.text(value)

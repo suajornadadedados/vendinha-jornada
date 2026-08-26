@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # host and remember to fix later. See D-8 in the S-02 spec.
     app_env: str = "local"
 
+    # Lido por `install_log_redaction`, que é o único ponto do processo que mexe
+    # no logger raiz. Estava no `.env.example` marcado (S-02) e nenhum código o
+    # lia — ressalva R-5 da verificação da S-02.
+    log_level: str = "INFO"
+
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
