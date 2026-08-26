@@ -13,16 +13,25 @@ config that works on one machine.
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = REPO_ROOT / ".env"
+
+# Two readers of the same file, and both are needed. `Settings` below reads it for
+# our own configuration; `load_dotenv` puts it in the process environment because
+# provider SDKs read `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from there and know
+# nothing about our settings object. `override=False` so a variable already set in
+# the shell — which is how CI and the containers pass secrets — always wins.
+load_dotenv(ENV_FILE, override=False)
 
 
 class Settings(BaseSettings):
     """Everything S-02 reads from the environment. See `.env.example` for the prose."""
 
     model_config = SettingsConfigDict(
-        env_file=REPO_ROOT / ".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         # `model_` is a Pydantic-reserved prefix and `LLM_MODEL` would collide with
@@ -30,6 +39,9 @@ class Settings(BaseSettings):
         # env var explicitly keeps both names readable.
         populate_by_name=True,
     )
+
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
 
     database_url: str = "postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha"
 

@@ -10,15 +10,14 @@ Tuesday for a reason nobody can reproduce. So it is an explicit command:
 Run it once after `make up`, and again whenever LangGraph ships a schema change.
 """
 
-import asyncio
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
+from vendinha import runtime
 from vendinha.config import get_settings
-from vendinha.runtime import configure_event_loop
 
 
 @asynccontextmanager
@@ -36,9 +35,8 @@ async def setup() -> None:
 
 
 def main() -> int:
-    configure_event_loop()
     try:
-        asyncio.run(setup())
+        runtime.run(setup())
     except Exception as erro:
         # A DSN typo and a container that is not up produce very different fixes,
         # and psycopg says which is which. Printing the exception beats a traceback

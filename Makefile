@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup test lint format typecheck evals-check evals hooks
+.PHONY: help up down logs db-setup api test lint format typecheck evals-check evals hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -19,6 +19,9 @@ logs:  ## Segue o log dos serviços
 
 db-setup:  ## Cria as tabelas do checkpointer do LangGraph (rode uma vez após `make up`)
 	cd backend && uv run python -m vendinha.db
+
+api:  ## Sobe a API (precisa de `make up` e `make db-setup` antes)
+	cd backend && uv run python -m vendinha
 
 test:  ## Suíte completa: unit + security
 	bash scripts/run-tests.sh

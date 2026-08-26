@@ -135,10 +135,21 @@ chega na primeira chamada ao banco, não no startup, e fala de event loop para q
 pensando em Postgres.
 
 Importa mais do que parece: o desenvolvimento acontece no Windows e o deploy vai para uma VPS
-Linux (ADR-008) — a plataforma que quebra é justamente a que o CI nunca executa. Resolvido em
-`vendinha/runtime.py`, chamado de todo entrypoint, porque *"lembrar de configurar a policy"*
-não é mecanismo. Verificado depois em dois processos separados contra o Postgres do compose:
-o processo 2 leu o que o processo 1 gravou.
+Linux (ADR-008) — a plataforma que quebra é justamente a que o CI nunca executa.
+
+E o conserto óbvio não funciona. Definir a *policy* do asyncio resolve o CLI e **não** resolve
+o servidor: o uvicorn constrói o loop por um factory próprio, não pela policy, então quando
+qualquer código da aplicação roda o loop já é o errado — inclusive dentro do `lifespan`. O que
+funciona é ser dono da chamada a `asyncio.run`. Por isso existe `python -m vendinha`
+(`make api`) em vez de `uvicorn vendinha.app:app`: o entrypoint monta o `uvicorn.Server` à mão
+e o entrega a `runtime.run()`, que é o único lugar que decide o tipo de loop do processo.
+
+Detalhe de tipagem que veio junto: o teste é `os.name == "nt"` e não `sys.platform == "win32"`
+porque o mypy trata `sys.platform` como constante de compilação e apaga um dos dois ramos —
+com `warn_unreachable` ligado, um ramo diferente em cada plataforma vira erro.
+
+Verificado ponta a ponta contra o Postgres do compose: dois processos separados retomando o
+mesmo `session_id`, e a API real respondendo em SSE com o modelo real.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
