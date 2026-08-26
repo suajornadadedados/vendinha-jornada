@@ -1,0 +1,14 @@
+# Configuração do gitleaks. Ver job `secrets` em .github/workflows/ci.yml.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+.claude/skills/ é DERIVADO de .claude/skills.lock.json (ADR-009) e contém documentação de
+terceiros com placeholders do tipo LANGSMITH_API_KEY=<your-key>, que o scanner lê como
+credencial genérica. Editar aquela árvore à mão é proibido — e o job `skills-drift` reprova o
+PR se alguém tentar. Ou seja: um segredo não pode ser introduzido ali por um commit nosso sem
+que outro portão feche antes. É a única exclusão do scanner, e é por isso que ela é aceitável.
+"""
+paths = ['''^\.claude/skills/''']

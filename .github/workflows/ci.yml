@@ -3,15 +3,39 @@ name: CI
 # typecheck, evals.
 # Os nomes dos jobs abaixo devem bater com os "required status checks" do ruleset.
 #
-# `typecheck` e `evals` dependem de `backend/` e usam `if: hashFiles(...)` —
-# ficam SKIPPED até a S-00 criar a pasta, em vez de vermelhos. Check vermelho
-# permanente treina a ignorar CI vermelho; check pulado liga sozinho quando a
-# spec entra.
+# `typecheck` e `evals` ficam SKIPPED até existir o arquivo que cada um precisa,
+# em vez de vermelhos. Check vermelho permanente treina a ignorar CI vermelho;
+# check pulado liga sozinho quando a spec entra. Cada um observa o SEU gatilho:
+# `typecheck` liga com o scaffold do backend (S-00); `evals` só com o runner
+# (S-06). Apontar os dois para o mesmo arquivo faria o scaffold da S-00 ligar um
+# job cujo código ainda não existe.
+#
+# O gatilho é calculado pelo job `detect`, e NÃO por `if: hashFiles(...)` no
+# nível do job: `hashFiles` só é permitido em contexto de step. Usá-la em
+# `jobs.<id>.if` não dá erro de job — quebra o parse do arquivo inteiro, e o
+# workflow vira startup_failure: zero job executado, nenhum log, e o merge
+# liberado porque não há check nenhum reportando. Era o estado deste repositório
+# até a S-00 (D-10). Semanticamente também estaria errado: no `if` do job o
+# workspace ainda não foi clonado, então hashFiles responderia vazio sempre.
 on:
   pull_request:
     branches: [main]
 
 jobs:
+  # Decide quais jobs condicionais ligam. Precisa do checkout — é justamente o que
+  # falta no contexto de `jobs.<id>.if`.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.files.outputs.backend }}
+      evals: ${{ steps.files.outputs.evals }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: files
+        run: |
+          test -f backend/pyproject.toml && echo "backend=true" >> "$GITHUB_OUTPUT" || echo "backend=false" >> "$GITHUB_OUTPUT"
+          test -f backend/evals/runner.py && echo "evals=true"   >> "$GITHUB_OUTPUT" || echo "evals=false"   >> "$GITHUB_OUTPUT"
+
   commitlint:
     runs-on: ubuntu-latest
     steps:
@@ -43,14 +67,20 @@ jobs:
       - run: bash scripts/run-tests.sh
 
   # Credencial no diff. Roda no histórico completo do PR, não só no head.
+  #
+  # Binário oficial, não a action `gitleaks/gitleaks-action@v2`: aquela action exige
+  # licença PAGA quando o repositório pertence a uma organização — e este pertence.
+  # Ela falhava com "is an organization. License key is required", ou seja, o portão
+  # de segredo nunca chegou a escanear nada. A allowlist do scanner está em
+  # .gitleaks.toml, versionada e justificada (D-12).
   secrets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.29.0             git /repo --config /repo/.gitleaks.toml --redact --verbose
 
   # .claude/skills/ é derivado do lockfile (ADR-009). Este job é a sanção da
   # regra "não edite uma skill vendorizada à mão".
@@ -64,7 +94,8 @@ jobs:
       - run: bash scripts/gen-skills-doc.sh --check
 
   typecheck:
-    if: ${{ hashFiles('backend/pyproject.toml') != '' }}
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +108,12 @@ jobs:
   evals:
     # Vira required check a partir da S-06, junto com o código que o deixa verde.
     # Requer secret ANTHROPIC_API_KEY. Observabilidade é Langfuse Cloud (ADR-010).
-    if: ${{ hashFiles('backend/pyproject.toml') != '' }}
+    #
+    # O gatilho é o RUNNER, não o backend: a S-00 cria backend/pyproject.toml para
+    # ligar o typecheck, e este job precisa continuar pulado até a S-06 entregar
+    # backend/evals/runner.py.
+    needs: detect
+    if: needs.detect.outputs.evals == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

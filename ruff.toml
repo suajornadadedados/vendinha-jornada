@@ -2,7 +2,7 @@
 #
 # Fica na raiz de propósito: o ruff resolve config subindo a árvore, então esta
 # vale para backend/ quando a S-00 criar a pasta, e já vale hoje para
-# scripts/ e tests/discovery/. Uma régua só, um lugar só.
+# scripts/ e tests/. Uma régua só, um lugar só.
 
 target-version = "py312"
 line-length = 100

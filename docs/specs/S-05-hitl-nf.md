@@ -3,7 +3,7 @@ id: S-05
 titulo: HITL + emissão de NF
 status: aprovada
 branch: spec/s-05-hitl-nf
-issue: 
+issue: #6
 adrs: [ADR-003, ADR-004]
 riscos_cobertos: [R3, R8]
 ---

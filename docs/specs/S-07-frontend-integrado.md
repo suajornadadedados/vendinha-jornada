@@ -3,7 +3,7 @@ id: S-07
 titulo: Frontend integrado
 status: aprovada
 branch: spec/s-07-frontend
-issue: 
+issue: #8
 adrs: [ADR-004]
 riscos_cobertos: []
 ---

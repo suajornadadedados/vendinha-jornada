@@ -3,7 +3,7 @@ id: S-04
 titulo: Fronteira de permissão + pagamento
 status: aprovada
 branch: spec/s-04-checkout
-issue: 
+issue: #5
 adrs: [ADR-002, ADR-004]
 riscos_cobertos: [R2, R4, R8]
 ---

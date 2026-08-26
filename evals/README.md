@@ -36,7 +36,7 @@ outros verdes. É deliberado: essas duas falhas não são questão de grau.
 
 ## O formato
 
-`schema/caso.schema.json` é normativo — `make evals-check` e o teste `tests/discovery/` validam
+`schema/caso.schema.json` é normativo — `make evals-check` e o teste `tests/unit/test_eval_corpus_is_traceable.py` validam
 todo YAML contra ele. Campos obrigatórios: `id`, `familia`, `titulo`, `riscos`, `spec`, `conversa`,
 `criterio`.
 

@@ -1,5 +1,7 @@
 ## Spec relacionada
-S-XX — link para `docs/specs/` e para a issue.
+S-XX — link para `docs/specs/S-XX-*.md`.
+
+Closes #N   <!-- a issue da spec; o squash merge a fecha -->
 
 ## O que muda
 Resumo em 3-5 linhas do que este PR entrega, em termos de requisitos da spec (REQ-#).

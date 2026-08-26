@@ -3,7 +3,7 @@ id: S-06
 titulo: Qualidade como gate (EDD)
 status: aprovada
 branch: spec/s-06-evals-gate
-issue: 
+issue: #7
 adrs: [ADR-006]
 riscos_cobertos: [R7]
 ---

@@ -3,7 +3,7 @@ id: S-02
 titulo: Agente base observável
 status: aprovada
 branch: spec/s-02-agente-observavel
-issue: 
+issue: #3
 adrs: [ADR-007]
 riscos_cobertos: [R5, R6, R9]
 ---
