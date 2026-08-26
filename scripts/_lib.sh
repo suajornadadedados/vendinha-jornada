@@ -46,7 +46,15 @@ clone_sparse() {
   shift 3
   local paths=("$@")
 
+  # O clone e transitorio e existe para COMPARAR com .claude/skills/, que o
+  # .gitattributes deste repo materializa sempre em LF. As duas linhas de config
+  # abaixo tornam esse clone deterministico: sem elas ele herda o core.autocrlf
+  # da maquina (true por default no Git for Windows), vem em CRLF, e o --check
+  # acusa drift que nao existe. Drift falso ensina a ignorar o job skills-drift,
+  # que e exatamente o portao de que o ADR-009 depende para valer.
   git init -q "$dest"
+  git -C "$dest" config core.autocrlf false
+  git -C "$dest" config core.eol lf
   git -C "$dest" remote add origin "https://github.com/$repo.git"
   git -C "$dest" sparse-checkout init --no-cone
   git -C "$dest" sparse-checkout set --no-cone "${paths[@]}"

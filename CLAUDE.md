@@ -37,7 +37,7 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 - Contratos Pydantic em toda fronteira (rotas, tools, webhooks). Tipos do frontend gerados do OpenAPI.
 - Estado do grafo: IDs, não payloads (pointer-not-payload).
 - Commits: `feat|fix|test|docs|spec|adr|eval|ci|chore|refactor(escopo): mensagem`.
-  Escopo obrigatório (`s-04`, `harness`, `deploy`) — a lista de tipos é a de `commitlint.config.js`.
+  Escopo obrigatório (`s-04`, `harness`, `deploy`) — a lista de tipos é a de `commitlint.config.cjs`.
 
 ## Guardrails da sessão
 - NUNCA commitar secrets, certificados, CNPJ ou dados reais. `.env.example` é a referência.

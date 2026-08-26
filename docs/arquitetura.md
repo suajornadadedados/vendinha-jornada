@@ -23,7 +23,7 @@ de produto:
 | **0 · O pedido** | nada ainda — só a leitura do enunciado | separar desejo de requisito |
 | **1 · Discovery** | `requisitos.md` → `jornada.md` → `riscos.md` → `PRD.md` → `decisoes.md` + `adr/` → `specs/` | cada documento consome o anterior; risco sem verificação é desejo |
 | **2 · Harness** | `CLAUDE.md`, `.claude/commands/`, `.claude/skills/` | **P1** — contexto volátil: o que eu expliquei uma vez vira artefato versionado |
-| **3 · Portões** | `.github/`, `commitlint.config.js`, CODEOWNERS, `main` protegida | **P2** — sem portão: o `CLAUDE.md` pede, o CI impõe |
+| **3 · Portões** | `.github/`, `commitlint.config.cjs`, CODEOWNERS, `main` protegida | **P2** — sem portão: o `CLAUDE.md` pede, o CI impõe |
 | **4 · Execução** | S-00 → S-09, uma spec por branch e por sessão | **P3** — processo invisível: o histórico vira o argumento |
 
 ---
