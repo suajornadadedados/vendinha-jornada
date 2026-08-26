@@ -1,6 +1,14 @@
 # ADR-005 — SDD com branch por spec e verificação autor/revisor
 
 - Status: aceito · Data: 2026-08-03 · Decisão: D9 · Risco: R7 (parcial)
+- Atualizado **apenas quanto ao momento e ao executor da verificação**, sem tocar a decisão:
+  onde se lê *"relatório de verificação independente anexado antes do **merge**"*, leia-se
+  **antes do PR** — o `CLAUDE.md`, fluxo item 4, é quem manda, e o PR nasce já com a correção
+  dentro. E onde se lê *"sessão revisora nova"*, o executor padrão passou a ser o subagente
+  **`verificador-de-spec`**, cujo prompt vive versionado em `.claude/agents/`. Sessão nova
+  continua valendo e continua sendo o portão mais forte: o subagente elimina o **contexto**, a
+  sessão nova elimina a **autoria**.
+  O par autor/revisor decidido aqui permanece inteiro — mudou quando o revisor entra e quem ele é.
 
 ## Contexto
 Trabalho com agente de código tende a escopo elástico e auto-aprovação: quem implementa

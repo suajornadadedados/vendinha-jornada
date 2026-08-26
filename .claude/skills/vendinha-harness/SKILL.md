@@ -66,9 +66,10 @@ Outros tres pontos em que o projeto e mais estrito que a skill:
   cobertura, sao o requisito: nenhuma spec que os toque fecha sem esses testes verdes, e nao
   ha versao "minima" deles.
 
-**`code-review`** cobre padroes de codigo; **`/verificar-spec`** cobre conformidade com a
-spec e e o **gate**. Sao complementares: rodar `code-review` nao substitui a verificacao
-independente em sessao nova.
+**`code-review`** cobre padroes de codigo; a **verificacao independente** cobre conformidade
+com a spec e e o **gate**. Sao complementares: rodar `code-review` nao substitui a verificacao.
+Ela roda **antes do PR** e o executor padrao e o subagente `verificador-de-spec`, com o prompt
+versionado em `.claude/agents/` — o autor passa o id da spec e mais nada.
 
 **`eval-engineering`** propoe rubricas com dimensoes e thresholds numericos ajustaveis.
 Aqui **nao existe arquivo de rubric**: o criterio de aprovacao vive dentro de cada caso em

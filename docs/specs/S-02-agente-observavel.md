@@ -1,7 +1,7 @@
 ---
 id: S-02
 titulo: Agente base observável
-status: em-revisao
+status: concluida
 branch: spec/s-02-agente-observavel
 issue: #3
 adrs: [ADR-001, ADR-007, ADR-010, ADR-012]
@@ -450,6 +450,8 @@ foram fechadas; as outras três continuam abertas, e ficam registradas aqui para
 - [x] Suíte verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (370 passed) — e verde também em cópia limpa sem `.env`, que é a condição do CI
 - [x] Os três riscos declarados com teste-âncora verde e falsificado: R5, R6, R9
 - [x] Achados da verificação independente corrigidos (D-13); NC-4 adiada para o PR de harness, com o motivo registrado
-- [ ] CI verde no PR
-- [ ] PR com evidência (trace Langfuse) e `Closes #3`
-- [ ] Relatório /verificar-spec anexado com veredito APROVADO
+- [x] CI verde no PR — sete checks obrigatórios verdes
+- [x] PR [#14](https://github.com/suajornadadedados/vendinha-jornada/pull/14) com evidência e `Closes #3`; merge por squash em `c0764de`, issue #3 fechada
+- [x] Relatório `/verificar-spec` anexado — **três rodadas**. O último veredito registrado é
+      REPROVADO e os achados dele foram corrigidos depois, sem uma quarta rodada: decisão do
+      PO, registrada no corpo do PR em vez de virar um APROVADO que ninguém emitiu

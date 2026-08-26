@@ -14,7 +14,13 @@ ADRs, specs, casos de eval e os portões de CI. Comece por:
 9. `docs/workshop/github-setup.md` — proteção da main e configuração de PR/CD
 
 Rituais (comandos do Claude Code em `.claude/commands/`):
-`/escrever-spec` · `/entregar-spec` · `/verificar-spec` (sessão nova!) · `/registrar-adr`
+`/escrever-spec` · `/entregar-spec` · `/registrar-adr`
+
+A verificação independente não é comando: é o subagente **`verificador-de-spec`**, com o prompt
+versionado em `.claude/agents/`. O autor passa o id da spec e mais nada — instrução escrita à mão
+por quem implementou não é verificação independente. Ela roda **antes do PR**, e o PR nasce já com
+as correções dentro (`CLAUDE.md`, fluxo item 4). O `/verificar-spec` continua existindo como a via
+manual, para quando você quiser rodar numa sessão nova de verdade.
 
 ## Quickstart
 

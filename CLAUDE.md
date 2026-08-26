@@ -27,11 +27,21 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 2. Cada spec = uma branch `spec/s-XX-nome` a partir da `main` + uma sessão nova do Claude Code.
 3. Cada task da spec = um commit (Conventional Commits, em inglês).
 4. **Verificação independente ANTES do PR, não antes do merge.** Terminou a implementação, a
-   sessão autora para. Uma sessão **NOVA** roda `/verificar-spec S-XX` (ver comando) e gera
-   `docs/specs/relatorios/S-XX-verificacao.md`. Quem implementou já sabe que está certo — é esse
-   saber que faz o revisor não olhar. Sem veredito, não existe PR.
-5. Corrigir o que a verificação apontou. Só então: PR para `main` usando o template, com
-   `Closes #N` e evidência (screenshot + trace Langfuse), e o relatório anexado.
+   sessão autora para e dispara o subagente **`verificador-de-spec`** passando o id da spec —
+   e nada além disso. Ele gera `docs/specs/relatorios/S-XX-verificacao.md`. Quem implementou já
+   sabe que está certo: é esse saber que faz o revisor não olhar. O relatório é **arquivo, não
+   comentário de PR** — o PR ainda não existe. Sem veredito, não existe PR.
+   > O prompt do revisor vive em `.claude/agents/verificador-de-spec.md`, **versionado**. O autor
+   > passa o id da spec e mais nada: instrução escrita à mão pelo autor não é verificação
+   > independente, é o autor se avaliando com outra voz. Com o prompt no repositório, enviesar a
+   > revisão passa a exigir um commit naquele arquivo — no diff, onde o PO vê.
+   >
+   > Subagente elimina o **contexto**; sessão nova elimina a **autoria**, e continua sendo o
+   > portão mais forte. Vale usar quando o veredito vier bom demais: veredito sem nenhuma
+   > ressalva mede o prompt antes de medir a entrega.
+5. Corrigir o que a verificação apontou, **na mesma branch e antes do PR** — o PR nasce já com a
+   correção dentro. Só então: PR para `main` usando o template, com `Closes #N` e evidência
+   (screenshot + trace Langfuse), e o relatório anexado.
 6. Merge por squash. A `main` é protegida; os checks do CI são obrigatórios. O squash fecha a issue.
 
 ## Convenções
