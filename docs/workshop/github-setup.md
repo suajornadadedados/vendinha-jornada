@@ -69,23 +69,36 @@ Os nomes precisam bater exatamente com os `jobs:` de `.github/workflows/ci.yml`.
 | Check | O que ele barra | Marcar como obrigatório |
 |---|---|---|
 | `commitlint` | histórico ilegível — escopo é obrigatório (`s-04`, `harness`) | agora |
-| `lint` | estilo e erro estático, na raiz inteira | agora |
+| `lint` | estilo, erro estático e **workflow inválido** (actionlint), na raiz inteira | agora |
 | `test` | regressão funcional: `unit` (a conta está certa) e `security` (a ação errada é alcançável?) | agora |
 | `secrets` | credencial no diff | agora |
 | `skills-drift` | skill vendorizada editada à mão, fora do lockfile (ADR-009) | agora |
-| `typecheck` | tipo quebrado no backend | depois da S-00 |
+| `detect` | calcula quais jobs condicionais ligam; se ele falhar, os dependentes somem | agora |
+| `typecheck` | tipo quebrado no backend | **já obrigatório** (`backend/` existe desde a S-00) |
 | `evals` | **regressão de qualidade do agente** | **depois da S-06** |
 
-Os cinco primeiros já rodam verde hoje, sem código de produto — marque-os desde o começo.
+`evals` é o único que ainda aparece como **skipped**, e **check pulado não pode ser marcado
+como obrigatório enquanto pular** — ele entra junto com o runner, na S-06.
 
-`typecheck` e `evals` dependem de `backend/` e usam
-`if: hashFiles('backend/pyproject.toml') != ''`: até a S-00 criar a pasta, aparecem como
-**skipped** em vez de vermelhos. **Check pulado não pode ser marcado como obrigatório enquanto
-pular** — marque esses dois depois dos merges da S-00 e da S-06, respectivamente.
+### Como um job condicional decide se liga
+
+O gatilho é calculado pelo job `detect`, que faz checkout e exporta o resultado como output;
+os jobs condicionais leem `needs.detect.outputs.*`.
+
+**Não use `if: hashFiles(...)` no nível do job.** Foi como este repositório nasceu, e o
+resultado foi seis dias de CI que nunca executou: `hashFiles` só é permitida em contexto de
+step, e uma expressão inválida **não reprova o job — quebra o parse do arquivo inteiro**. O
+workflow vira `startup_failure`, sem job, sem log, e nenhum check reporta. A falha é
+especialmente traiçoeira porque a ausência de check não se parece com um erro: a página do PR
+fica limpa. Semanticamente também não funcionaria: no `if` de um job o workspace ainda não foi
+clonado, então `hashFiles` responderia vazio sempre.
+
+O portão contra a volta disso é o `actionlint`, que roda dentro do job `lint` e no `pre-push`.
+Validar o YAML não basta — YAML válido não é schema de workflow válido.
 
 > **Por que não deixar vermelho e pronto:** check vermelho permanente treina a ignorar CI
 > vermelho. No dia em que um ficar vermelho de verdade, você ignora também — e aí os outros
-> cinco perderam o valor junto.
+> perderam o valor junto.
 
 O job `test` **não sobe contêiner**. É consequência de não existir camada de integração
 (`docs/testes.md` §1): `unit` e `security` são rápidos por construção, e o que precisa de
