@@ -24,6 +24,22 @@ from vendinha.app import create_app
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
 from vendinha.providers import PROVIDERS, Provider
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede a fronteira HTTP. Um subagent sem tool
+    mantém o grafo no formato de uma volta só, que é o que estas asserções
+    descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
 
 
 @pytest.fixture
@@ -34,7 +50,7 @@ def checkpointer() -> InMemorySaver:
 @pytest.fixture
 def graph(checkpointer: InMemorySaver) -> Any:
     answers = [AIMessage(content=t) for t in ("bom dia, tudo joia", "pois nao", "as ordens")]
-    return build_graph(GenericFakeChatModel(messages=iter(answers)), checkpointer)
+    return build_graph(GenericFakeChatModel(messages=iter(answers)), checkpointer, _sem_catalogo())
 
 
 @pytest.fixture

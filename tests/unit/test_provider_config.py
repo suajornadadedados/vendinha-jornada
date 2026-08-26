@@ -34,6 +34,23 @@ from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
 from vendinha.graph import build_graph
 from vendinha.providers import PROVIDERS, Provider, effective_credentials
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede a configuração de provedor. Um subagent sem tool
+    mantém o grafo no formato de uma volta só, que é o que estas asserções
+    descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
+
 
 FAKE_KEY = "sk-ant-api03-" + "Z" * 40
 
@@ -116,7 +133,9 @@ def store() -> InMemoryConfigStore:
 @pytest.fixture
 def client(store: InMemoryConfigStore) -> Iterator[TestClient]:
     graph = build_graph(
-        GenericFakeChatModel(messages=iter([AIMessage(content="pois nao")])), InMemorySaver()
+        GenericFakeChatModel(messages=iter([AIMessage(content="pois nao")])),
+        InMemorySaver(),
+        _sem_catalogo(),
     )
     with TestClient(create_app(graph=graph, store=store)) as test_client:
         yield test_client
@@ -285,7 +304,7 @@ def test_configuration_cannot_be_written_outside_local(
     monkeypatch.setenv("APP_ENV", "prod")
     get_settings.cache_clear()
 
-    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver())
+    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
     with TestClient(create_app(graph=graph, store=store)) as prod:
         assert prod.get("/config").json()["editable"] is False
         negado = prod.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
@@ -312,7 +331,7 @@ def test_the_config_response_says_whether_encryption_is_ready(
     )
     get_settings.cache_clear()
 
-    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver())
+    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
     with TestClient(create_app(graph=graph, store=store)) as test_client:
         body: dict[str, Any] = test_client.get("/config").json()
         assert body["encryption_ready"] is configured

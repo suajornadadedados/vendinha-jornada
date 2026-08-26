@@ -34,6 +34,22 @@ from vendinha.budget import (
     within_budget,
 )
 from vendinha.graph import build_graph, session_config
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede o teto de custo e o timeout. Um subagent sem tool
+    mantém o grafo no formato de uma volta só, que é o que estas asserções
+    descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
 
 
 def _answer(text: str, total: int) -> AIMessage:
@@ -106,7 +122,10 @@ async def test_a_session_over_budget_answers_honestly_without_calling_the_model(
 
     checkpointer = InMemorySaver()
     graph = build_graph(
-        ModelThatMustNotBeCalled(messages=iter([])), checkpointer, budget_tokens=100
+        ModelThatMustNotBeCalled(messages=iter([])),
+        checkpointer,
+        _sem_catalogo(),
+        budget_tokens=100,
     )
 
     await graph.aupdate_state(session_config("cara"), {"messages": [_answer("caro", 500)]})
@@ -125,6 +144,7 @@ async def test_a_session_under_budget_is_answered_normally() -> None:
     graph = build_graph(
         GenericFakeChatModel(messages=iter([AIMessage(content="claro")])),
         checkpointer,
+        _sem_catalogo(),
         budget_tokens=100_000,
     )
 

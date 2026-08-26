@@ -24,6 +24,22 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.graph import ConversationState, build_graph, session_config
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede a retomada a partir do checkpoint. Um subagent sem tool
+    mantém o grafo no formato de uma volta só, que é o que estas asserções
+    descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
 
 
 def _model(*answers: str) -> GenericFakeChatModel:
@@ -41,7 +57,7 @@ async def _say(graph: Any, session_id: str, text: str) -> dict[str, Any]:
 @pytest.mark.risco("R9")
 async def test_conversation_resumes_with_the_same_session_id() -> None:
     checkpointer = InMemorySaver()
-    graph = build_graph(_model("bom dia", "claro", "anotado"), checkpointer)
+    graph = build_graph(_model("bom dia", "claro", "anotado"), checkpointer, _sem_catalogo())
 
     await _say(graph, "sessao-1", "oi, tudo bem?")
     await _say(graph, "sessao-1", "queria um presente")
@@ -58,11 +74,11 @@ async def test_a_new_graph_reads_what_the_previous_one_wrote() -> None:
     """The closest a unit test gets to a restart: nothing survives but the checkpointer."""
     checkpointer = InMemorySaver()
 
-    before = build_graph(_model("ola", "ainda aqui"), checkpointer)
+    before = build_graph(_model("ola", "ainda aqui"), checkpointer, _sem_catalogo())
     await _say(before, "sessao-2", "meu nome ficou registrado?")
     del before
 
-    after = build_graph(_model("ainda aqui"), checkpointer)
+    after = build_graph(_model("ainda aqui"), checkpointer, _sem_catalogo())
     resumed = await _say(after, "sessao-2", "e agora?")
 
     said = [m.content for m in resumed["messages"]]
@@ -74,7 +90,7 @@ async def test_a_new_graph_reads_what_the_previous_one_wrote() -> None:
 @pytest.mark.risco("R9")
 async def test_two_sessions_do_not_share_state() -> None:
     checkpointer = InMemorySaver()
-    graph = build_graph(_model("a", "b"), checkpointer)
+    graph = build_graph(_model("a", "b"), checkpointer, _sem_catalogo())
 
     await _say(graph, "sessao-a", "segredo da sessao a")
     other = await _say(graph, "sessao-b", "nada a ver")

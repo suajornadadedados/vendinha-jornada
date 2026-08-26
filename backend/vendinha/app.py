@@ -30,11 +30,13 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, status
+from langchain.embeddings import init_embeddings
 from langchain_core.messages import HumanMessage
 from langfuse import propagate_attributes
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.budget import run_with_timeout
+from vendinha.catalogo import Busca, PostgresCatalogo, QdrantBusca
 from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
@@ -61,6 +63,7 @@ from vendinha.schemas import (
     SessionEvent,
     TokenEvent,
 )
+from vendinha.subagents import recomendacao
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,12 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         app.state.langfuse = callback_handler()
         app.state.graphs = {}
         app.state.models_cache = None
+        # O catálogo não depende de credencial nenhuma: é leitura de Postgres.
+        # A busca depende — ela embeda a necessidade do cliente —, então nasce
+        # `None` e é montada na primeira consulta, com a chave que estiver
+        # valendo naquele momento (ADR-012: banco por cima do ambiente).
+        app.state.catalogo = PostgresCatalogo(with_connect_timeout(settings.database_url))
+        app.state.busca = None
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -130,7 +139,10 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             # existe no caminho que nenhum teste percorre é um trecho que ninguém
             # verifica. Sem credencial configurada isto é um no-op.
             await _warm_models(app)
-            yield
+            try:
+                yield
+            finally:
+                await _fechar_busca(app)
             return
 
         app.state.fixed_graph = None
@@ -138,7 +150,10 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             app.state.checkpointer = checkpointer
             await app.state.store.setup()
             await _warm_models(app)
-            yield
+            try:
+                yield
+            finally:
+                await _fechar_busca(app)
 
     app = FastAPI(
         title="Vendinha",
@@ -159,6 +174,32 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             await _allowed_models(app)
         except Exception:
             logger.warning("nao consegui pre-carregar a lista de modelos", exc_info=True)
+
+    async def _fechar_busca(app: FastAPI) -> None:
+        """O cliente do Qdrant carrega conexão aberta; deixá-la para o GC é vazamento."""
+        busca = getattr(app.state, "busca", None)
+        if busca is not None:
+            await busca.aclose()
+            app.state.busca = None
+
+    async def _busca(app: FastAPI) -> Busca:
+        """A busca semântica, montada sob demanda com a credencial vigente.
+
+        Cacheada em `app.state` porque o cliente do Qdrant tem pool, e o
+        `PUT /config` a descarta junto com os grafos: trocar a chave do provedor
+        de embedding sem reconstruir aqui deixaria o processo embedando com a
+        credencial antiga até o próximo restart.
+        """
+        if app.state.busca is not None:
+            existente: Busca = app.state.busca
+            return existente
+
+        provider, model = split_model(settings.embedding_model)
+        api_key = (await _credentials(app)).get(provider)
+        embeddings = init_embeddings(model, provider=provider, api_key=api_key)
+        app.state.busca = QdrantBusca(settings.qdrant_url, settings.qdrant_collection, embeddings)
+        nova: Busca = app.state.busca
+        return nova
 
     async def _credentials(app: FastAPI) -> dict[str, str]:
         """Environment first, stored configuration on top — stored always wins."""
@@ -213,6 +254,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         built = build_graph(
             resolve_model(model_name, api_key),
             app.state.checkpointer,
+            recomendacao(await _busca(app), app.state.catalogo, settings.tool_timeout_seconds),
             budget_tokens=settings.session_budget_tokens,
         )
         app.state.graphs[model_name] = built
@@ -315,6 +357,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         # which entries went stale.
         request.app.state.graphs.clear()
         request.app.state.models_cache = None
+        await _fechar_busca(request.app)
         return await read_config(request)
 
     @app.post("/chat")

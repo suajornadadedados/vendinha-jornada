@@ -50,6 +50,23 @@ from vendinha.observability import (
     redaction_is_installed,
 )
 from vendinha.redaction import KNOWN_VALUES, Redactor, redact
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede o mascaramento de PII. Um subagent
+    sem tool mantém o grafo no formato de uma volta só, que é o que estas
+    asserções descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
+
 
 # Keys shaped like the real thing and belonging to nobody. The guardrail in
 # CLAUDE.md is absolute: no real credential in the repository, not even in a test.
@@ -382,7 +399,7 @@ def test_the_application_turns_redaction_on_when_it_starts() -> None:
     """
     assert not redaction_is_installed(), "a fixture deveria ter deixado o logging cru"
 
-    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver())
+    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
     with TestClient(create_app(graph=graph, store=InMemoryConfigStore())):
         assert redaction_is_installed(), "a aplicacao subiu sem ligar a redacao de log"
 
@@ -533,6 +550,7 @@ os.environ["DATABASE_URL"] = sys.argv[1]
 from vendinha.config import get_settings
 get_settings.cache_clear()
 from vendinha.db import main
+
 sys.exit(main())
 """
 
