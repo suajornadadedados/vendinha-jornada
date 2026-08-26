@@ -67,14 +67,20 @@ jobs:
       - run: bash scripts/run-tests.sh
 
   # Credencial no diff. Roda no histórico completo do PR, não só no head.
+  #
+  # Binário oficial, não a action `gitleaks/gitleaks-action@v2`: aquela action exige
+  # licença PAGA quando o repositório pertence a uma organização — e este pertence.
+  # Ela falhava com "is an organization. License key is required", ou seja, o portão
+  # de segredo nunca chegou a escanear nada. A allowlist do scanner está em
+  # .gitleaks.toml, versionada e justificada (D-12).
   secrets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.29.0             git /repo --config /repo/.gitleaks.toml --redact --verbose
 
   # .claude/skills/ é derivado do lockfile (ADR-009). Este job é a sanção da
   # regra "não edite uma skill vendorizada à mão".

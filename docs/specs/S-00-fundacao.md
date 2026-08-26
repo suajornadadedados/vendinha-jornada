@@ -139,6 +139,24 @@ foi clonado, então `hashFiles` responderia vazio de qualquer forma. Passou a ro
 no arquivo — a validação de YAML que já existia aceitava o arquivo sem reclamar, porque YAML
 válido não é o mesmo que schema de workflow válido.
 
+**D-11 — `commitlint.config.js` era ilegível dentro da action.** O container da
+`wagoid/commitlint-github-action` tem `/package.json` com `"type": "module"`, então um
+`commitlint.config.js` com `module.exports` é interpretado como ESM e estoura
+`module is not defined in ES module scope`. Localmente passava, porque sem `package.json` o
+Node trata `.js` como CommonJS — o clássico "na minha máquina funciona", só que ao contrário.
+Renomeado para `commitlint.config.cjs`, que é inequívoco nos dois lugares.
+
+**D-12 — o job `secrets` nunca escaneou nada.** `gitleaks/gitleaks-action@v2` exige **licença
+paga** quando o repositório pertence a uma organização, e este pertence: falhava com
+"[suajornadadedados] is an organization. License key is required". Trocado pelo binário oficial
+(`ghcr.io/gitleaks/gitleaks:v8.29.0`), que é livre e faz a mesma varredura de histórico. Ao
+ligar, apontou um falso positivo: `LANGSMITH_API_KEY=<your-key>`, placeholder de documentação
+numa skill vendorizada — que o ADR-009 proíbe editar à mão. Daí a única exclusão do
+`.gitleaks.toml`, restrita a `.claude/skills/` e justificada no próprio arquivo: aquela árvore é
+derivada do lockfile e protegida pelo job `skills-drift`. Falsificado: com um segredo plantado
+fora do caminho excluído, o scanner sai com exit 1. A versão do hook local foi alinhada à do CI
+para não divergirem as regras.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)
