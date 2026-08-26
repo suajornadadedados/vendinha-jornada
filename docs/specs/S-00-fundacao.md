@@ -51,7 +51,7 @@ Cenário: quickstart em máquina limpa
 | Métrica | Alvo | Como medir | Medido |
 |---|---|---|---|
 | Tempo clone→serviços healthy | ≤ 10 min | Cronometrado em clone limpo | **7 s** |
-| CI do PR desta spec | verde | GitHub Actions | a confirmar no PR |
+| CI do PR desta spec | verde | GitHub Actions | **7 checks verdes** + `evals` skipped |
 
 Medição do clone limpo: `git clone` da branch em diretório novo, `cp .env.example .env`,
 `docker compose up -d --wait`. O `--wait` só retorna quando os healthchecks passam — é o que
