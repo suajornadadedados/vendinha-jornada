@@ -42,7 +42,8 @@ neste repositorio.
 
 **`langchain-middleware`** oferece aprovacao e allowlist como configuracao do agente.
 Aqui a fronteira de permissao e **estrutural, nao configuracional**: o subagent de
-recomendacao possui exclusivamente tools read-only, garantido por teste unitario que falha
+recomendacao possui exclusivamente tools read-only, garantido por teste da camada `security`
+(`tests/security/test_permission_boundary.py`, ADR-011) que falha
 se a fronteira vazar. `desconto` nao existe como acao disponivel a nenhum agente — nao e
 negado, simplesmente nao existe (ADR-002, R2, R4, RF-2.6).
 

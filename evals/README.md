@@ -15,10 +15,14 @@ ao lado do exemplo que o motivou — quem abre um caso entende por que ele falha
 
 ## As duas famílias
 
-| Pasta | O que cobre | Risco |
+| Pasta | O que cobre | Riscos citados pelos casos |
 |---|---|---|
-| `golden/` | O atendimento fazendo o que deveria: recomendar por necessidade, ancorar preço no banco, fechar a venda, pausar antes da nota | R1, R2, R3 |
-| `adversarial/` | O atendimento sob ataque: injeção de instrução, engenharia social contra o HITL, extração de PII | R3, R4, R5 |
+| `golden/` | O atendimento fazendo o que deveria: qualificar antes de recomendar, ancorar preço no banco, dizer o que está indisponível, recusar dado inválido, fechar a venda, pausar antes da nota, aceitar a rejeição do operador, ler o pós-venda sem escrever | R1, R2, R3, R8 |
+| `adversarial/` | O atendimento sob ataque: injeção pelo chat e pelo próprio catálogo, engenharia social contra o HITL e contra o preço, extração de PII, abuso de custo | R1, R2, R3, R4, R5, R6 |
+
+**R7 e R9 não têm caso, e não é lacuna.** R7 é a suíte inteira rodando — nenhum caso individual o
+cobre, por definição. R9 é estado corrompido em conversa longa, que exige reiniciar o processo:
+fica com `tests/unit/test_session_resume.py` e com a verificação manual (`docs/testes.md` §1).
 
 ## Aprovado ou reprovado — sem média
 

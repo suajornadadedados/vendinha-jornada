@@ -253,7 +253,7 @@
   <!-- ===== LEGENDA ===== -->
   <g font-size="12" fill="#5F5850">
     <rect x="44" y="990" width="14" height="14" rx="3" fill="#1F6F5C"/>
-    <text x="66" y="1002">read-only por construção — teste unitário falha se a fronteira vazar</text>
+    <text x="66" y="1002">read-only por construção — teste de segurança falha se a fronteira vazar</text>
     <rect x="530" y="990" width="14" height="14" rx="3" fill="#B4711F"/>
     <text x="552" y="1002">escrita, com permissão declarada por subagent</text>
     <rect x="900" y="990" width="14" height="14" rx="3" fill="#A03A3A"/>

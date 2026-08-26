@@ -1,14 +1,16 @@
 # ADR-011 — Duas camadas de teste: unit e security, sem camada de integração
 
-- Status: aceito · Data: 2026-08-26 · Decisão: D14 · Riscos: R2, R3, R5, R8
-- Atualiza o ADR-003 **apenas quanto à camada onde a invariante do HITL é provada**. A decisão
-  do ADR-003 — interrupt do LangGraph, estado persistido, fila do operador, aprovação registrada
-  com quem e quando — permanece vigente e inalterada.
+- Status: aceito · Data: 2026-08-26 · Decisão: D14 · Riscos: R1, R2, R3, R5, R6, R8, R9
+- Atualiza o ADR-003 e o ADR-002 **apenas quanto à camada onde a invariante de cada um é provada**.
+  As decisões em si — interrupt persistido com aprovação registrada (ADR-003) e registro explícito
+  de tools por subagent (ADR-002) — permanecem vigentes e inalteradas.
 
 ## Contexto
-A discovery escreveu, em oito lugares, que a invariante "nenhum caminho emite NF sem aprovação
-registrada" é *testada em integração*. A palavra ali significava **"provada por execução, não
-prometida em prosa"** — era ênfase, não escolha de tier.
+A discovery nomeou camada de teste em duas redações, nenhuma das duas correspondendo à arquitetura
+que acabou valendo. Em oito lugares, a invariante "nenhum caminho emite NF sem aprovação
+registrada" é *testada em integração*; em outros cinco, a fronteira de permissão do R2 é travada
+por *teste unitário*. As duas expressões significavam a mesma coisa — **"provada por execução, não
+prometida em prosa"** — e nenhuma era escolha deliberada de tier.
 
 Depois, `docs/testes.md` fechou a arquitetura de testes em duas camadas e declarou o contrário
 com todas as letras: *"Não existe camada de integração neste repositório"*, mapeando R3 para
@@ -37,10 +39,14 @@ modo que "o documento mais novo vence" não decidia sozinho.
 Opção 3. O repositório tem **duas camadas de teste automatizado e apenas duas**, como descrito
 em `docs/testes.md` §1. A invariante do ADR-003 é provada em `tests/security/test_hitl_invariant.py`.
 
-Onde os documentos diziam *"testado em integração"*, passam a dizer a camada real. **A exigência
-não afrouxa** — muda de endereço, e para um endereço mais forte: um teste de `security/` prova
-que o caminho proibido **não existe**, enquanto um teste de integração provaria apenas que o
-caminho feliz funciona. A distinção é a própria regra de ouro aplicada a teste.
+Onde os documentos diziam *"testado em integração"* ou *"teste unitário trava a fronteira"*,
+passam a dizer a camada real. Invariante de fronteira e invariante de HITL vivem as duas em
+`security/`: as duas respondem *"existe caminho de código até a ação proibida?"*.
+
+**A exigência não afrouxa** — muda de endereço, e para um endereço mais forte: um teste de
+`security/` prova que o caminho proibido **não existe**, enquanto um teste de integração provaria
+apenas que o caminho feliz funciona, e um teste unitário provaria que a função de registro soma
+certo. A distinção é a própria regra de ouro aplicada a teste.
 
 O que depende de infraestrutura real — retomada após restart de processo, adapter contra o
 sandbox do gateway — continua verificado **à mão** no `/verificar-spec`, com resultado no

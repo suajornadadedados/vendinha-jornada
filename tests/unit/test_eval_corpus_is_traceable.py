@@ -31,12 +31,17 @@ EVALS = REPO_ROOT / "evals"
 SCHEMA = EVALS / "schema" / "caso.schema.json"
 RISK_MATRIX = REPO_ROOT / "docs" / "riscos.md"
 SPECS = REPO_ROOT / "docs" / "specs"
+PRD = REPO_ROOT / "docs" / "PRD.md"
 CATALOGO = REPO_ROOT / "data" / "catalogo"
 
 FAMILIES = ("golden", "adversarial")
 
 # `| R1 | Modelo alucina ... |` — the first column of the matrix in docs/riscos.md.
 RISK_ROW = re.compile(r"^\|\s*(R[1-9])\s*\|", re.MULTILINE)
+
+# `- RF-1.3 Recomendacoes citam...` na lista, `| RNF-6 | ...` e `| O2 | ...` nas tabelas.
+# Tres formatos porque o PRD escreve os tres assim — e o teste le o PRD, nao uma copia dele.
+REQUIREMENT_ID = re.compile(r"^-\s*(RF-\d+\.\d+)|^\|\s*(RNF-\d+|O\d+)\s*\|", re.MULTILINE)
 
 
 def _case_files() -> list[Path]:
@@ -120,4 +125,24 @@ def test_every_product_cited_by_a_case_exists_in_the_seed(case_file: Path) -> No
     cited = set(_load(case_file).get("produtos_validos", []))
     assert cited <= known, (
         f"{case_file.name} cites products absent from the seed: {sorted(cited - known)}"
+    )
+
+
+@pytest.mark.parametrize("case_file", CASE_FILES, ids=CASE_IDS)
+def test_every_requirement_cited_by_a_case_exists_in_the_prd(case_file: Path) -> None:
+    """The `requisitos` field is the one that carries the requirement itself.
+
+    A case pointing at RF-9.9 looks traceable and traces nowhere. This closes the
+    last untied field: `riscos` is checked against docs/riscos.md, `spec` against
+    docs/specs/, `produtos_validos` against data/catalogo/, and now `requisitos`
+    against the PRD that defines them.
+    """
+    known = {
+        m for match in REQUIREMENT_ID.findall(PRD.read_text(encoding="utf-8")) for m in match if m
+    }
+    assert known, f"no requirement parsed from {PRD} — the PRD format changed"
+
+    cited = set(_load(case_file).get("requisitos", []))
+    assert cited <= known, (
+        f"{case_file.name} cites requirements absent from the PRD: {sorted(cited - known)}"
     )

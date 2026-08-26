@@ -4,7 +4,7 @@ titulo: Discovery como código
 status: em-revisao
 branch: spec/s-01-discovery
 issue: #2
-adrs: [ADR-001, ADR-006]
+adrs: [ADR-001, ADR-006, ADR-011]
 riscos_cobertos: [R1, R7]
 ---
 
@@ -70,9 +70,12 @@ O que a execução entregou, e por que difere da lista:
 | 4 | `feat(s-01): catalog seed data (50 products)` | Executada antes da task 2: o cruzamento da 2 precisa do seed para nascer verde |
 | 2 | `eval(s-01): bind eval cases to the seed with produtos_validos` | Só a metade que faltava — schema e validador vieram da S-00 |
 | 3 | `eval(s-01): golden dataset (12 cases) and adversarial suite (6 cases)` | +8 golden e +3 adversariais sobre os 7 casos que já existiam |
+| — | `docs(s-01): record what the spec delivered and what it measured` | Fechamento da spec |
+| — | `docs(harness): move independent verification ahead of the PR` | Fora do escopo da S-01, por instrução do PO durante a sessão. Escopo `harness`, commit isolado |
+| — | `docs(s-01): fix what the independent verification found` | Correção dos achados do relatório |
 
-Entrega final: **5 commits**. A ordem de execução (1 → 4 → 2 → 3) não é a da lista, para nenhum
-commit deixar a suíte vermelha atrás de si.
+Entrega final: **8 commits**. A ordem de execução das quatro primeiras tasks (1 → 4 → 2 → 3) não é
+a da lista, para nenhum commit deixar a suíte vermelha atrás de si.
 
 ## BDD
 ```gherkin
@@ -109,8 +112,9 @@ Cenário: casos de eval válidos
 ## Descobertas (preenchido durante a execução)
 
 **D-1 — "testado em integração" aparece em oito lugares; a camada de integração não existe.**
-A varredura do REQ-1 encontrou a única contradição entre normativos do repositório, e ela é
-estrutural, não de redação:
+A varredura do REQ-1 encontrou uma contradição estrutural entre normativos — não de redação.
+(*Ela não era a única: a verificação independente achou depois uma segunda redação do mesmo
+problema, no R2. Ver D-5.*)
 
 | Onde | O que diz |
 |---|---|
@@ -176,6 +180,31 @@ cobertos. R7 é a suíte inteira, por definição — nenhum caso individual o c
 corrompido em conversa longa) exige reiniciar o processo, coisa que nenhum caso conversacional
 faz: fica com `tests/unit/test_session_resume.py` e com a verificação manual, exatamente como
 `docs/testes.md` §1 já declarava. Registrado para o `/verificar-spec` não ler a ausência como falha.
+
+**D-5 — a verificação independente achou a segunda metade da D-1, e um portão que ela mesma
+atravessou.** A sessão revisora rodou antes do PR (regra nova do `CLAUDE.md`, item 4) e reprovou
+o REQ-1 com razão. Achados corrigidos nesta spec:
+
+| Achado | O que era | Correção |
+|---|---|---|
+| **NC-1** | A D-1 corrigiu *"testado em integração"* em oito lugares, mas a **mesma** contradição tinha uma segunda redação: *"teste unitário trava a fronteira"* para o R2, viva em `S-04:19`, `S-04:30`, `ADR-002:13`, na skill do harness e no texto do diagrama `arquitetura-produto.svg` | ADR-011 passa a cobrir as duas redações; ADR-002 recebe a nota de cabeçalho que o ADR-003 já tinha; os cinco lugares nomeiam `security` |
+| **NC-3** | A nota do `golden-008` afirmava que `111.111.111-11` tem dígitos verificadores errados. **Ele passa no cálculo** (DV1=1, DV2=1) — é inválido por sequência repetida | Nota corrigida, e o caso ficou mais forte: o número existe justamente para pegar validador que só confere o dígito |
+| **NC-4 / NC-5** | Tabela de commits e tabela de famílias do `evals/README.md` desatualizadas | Atualizadas contra o medido |
+| **R-1** | `requisitos` era o único campo de rastreabilidade sem cruzamento. O revisor falsificou: `RF-9.9` passava | Quarto cruzamento entrou, contra o `docs/PRD.md`. Falsificado de novo: agora reprova |
+| **R-2** | `O-2` e `O-4` não existem no PRD, que usa `O1`…`O5`. O schema exigia um hífen que o PRD não escreve | Pattern e casos alinhados ao PRD. Era achado direto da R-1 — com o cruzamento, teria aparecido sozinho |
+| **R-6 / R-7** | O ADR-011 declarava menos riscos do que tocou; a spec que criou o ADR-011 não o listava no frontmatter | Ambos corrigidos |
+| **R-8** | `adversarial-006` declarava `falha_dura` num caso que não mede ação nenhuma — um modelo prolixo derrubaria a suíte inteira | `falha_dura: null`, com o porquê na nota |
+
+O que a verificação prova sobre o método: **o autor não enxerga a segunda ocorrência do próprio
+achado.** A D-1 encontrou uma contradição e eu a tratei como se fosse a contradição — a frase
+"a única contradição do repositório" estava na spec, e era falsa. Um `grep` a desmentia.
+
+Ficam registradas para as specs seguintes, sem correção aqui: **R-3** (fixture↔seed continua
+acordo humano; a S-01 consertou a instância, não a classe), **R-4** (`tests/` fora do `mypy`),
+**R-5** (o corpo do ADR-003 ainda diz "integração"; só o cabeçalho corrige — é o preço da
+imutabilidade), **R-10** (seed malformado quebra a coleta do pytest com traceback em vez de
+mensagem) e **R-11** (`pytest tests -m "risco"` coleta zero: ou o marker entra nos testes, ou o
+comando sai do `docs/testes.md` §6).
 
 ## Definition of Done
 - [x] Todos os requisitos com evidência nesta spec (REQ-1 a REQ-5)

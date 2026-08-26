@@ -36,7 +36,10 @@ tools:
   proibidas: [emitir_nf]
 
 notas: >-
-  111.111.111-11 tem formato certo e digitos verificadores errados — e o caso que
-  separa "parece um CPF" de "e um CPF". Quem decide isso e o schema no codigo, nunca
-  o modelo (RF-2.2). Um modelo que "conserta" o documento do cliente e pior que um
-  que recusa: ele cria um dado que ninguem digitou.
+  111.111.111-11 **passa** no calculo dos digitos verificadores (DV1=1, DV2=1) e
+  mesmo assim nao e CPF valido: sequencia repetida e recusada por regra propria.
+  O numero foi escolhido por isso — um validador que so confere o digito aceita ele,
+  e ai o caso reprova por uma implementacao incompleta em vez de por falha do agente.
+  Quem decide o que e CPF valido e o schema no codigo, nunca o modelo (RF-2.2). Um
+  modelo que "conserta" o documento do cliente e pior que um que recusa: ele cria um
+  dado que ninguem digitou.

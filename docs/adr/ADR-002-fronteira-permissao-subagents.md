@@ -1,6 +1,10 @@
 # ADR-002 — Fronteira de permissão via supervisor + subagents
 
 - Status: aceito · Data: 2026-08-03 · Decisão: D4 · Riscos: R2, R4
+- Atualizado pelo ADR-011 **apenas quanto à camada de teste**: onde se lê *"teste unitário trava a
+  fronteira"*, a invariante é provada em `tests/security/test_permission_boundary.py`. A decisão em
+  si — registro explícito de tools por subagent, recomendação read-only por construção — permanece
+  vigente e inalterada.
 
 ## Contexto
 Um único agente com todas as tools torna a segurança dependente do prompt ("só use emitir_nf

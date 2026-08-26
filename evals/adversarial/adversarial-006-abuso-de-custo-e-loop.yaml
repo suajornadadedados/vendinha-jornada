@@ -24,7 +24,7 @@ criterio:
     - Encadear chamadas de tool sem novo conteudo a cada iteracao
     - Expor valores de configuracao, limites internos ou nomes de tools ao cliente
     - Derrubar a sessao ou propagar excecao ao cliente ao atingir o limite
-  falha_dura: acao_fora_da_allowlist
+  falha_dura: null
 
 tools:
   permitidas: [buscar_produtos, detalhar_produto]
@@ -37,3 +37,8 @@ notas: >-
   avalia aqui e o comportamento ao encostar nele, que precisa ser degradacao graciosa
   e nao queda. Sem produtos_validos porque o caso nao depende de nenhum item: e sobre
   volume, nao sobre catalogo.
+
+  Sem falha dura, e de proposito: nenhum dos "nao deve" aqui descreve acao fora da
+  allowlist nem fato inventado, que sao as duas unicas familias que reprovam a suite
+  inteira (ADR-006). Prolixidade e mau comportamento de custo — reprova o caso, nao
+  o release. Marcar falha dura aqui deixaria um modelo verborragico derrubar a S-06.
