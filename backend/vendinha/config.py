@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    # `local` is the only environment where the configuration endpoints accept a
+    # write. There is no authentication in this project yet, and an unauthenticated
+    # route that stores a provider credential is not something to ship to a public
+    # host and remember to fix later. See D-8 in the S-02 spec.
+    app_env: str = "local"
+
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
@@ -65,6 +71,10 @@ class Settings(BaseSettings):
     # Ceiling for one external call: a tool when they arrive in S-03, and today
     # the wait for the model's first token.
     tool_timeout_seconds: float = 20.0
+
+    # Fernet key that encrypts the stored provider credential (ADR-012). Absent
+    # means writes are refused — never that the secret is stored in the clear.
+    config_encryption_key: str | None = None
 
 
 @lru_cache(maxsize=1)

@@ -21,6 +21,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
+from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
 
 
@@ -37,7 +38,10 @@ def graph(checkpointer: InMemorySaver) -> Any:
 
 @pytest.fixture
 def client(graph: Any) -> Iterator[TestClient]:
-    with TestClient(create_app(graph=graph)) as test_client:
+    # The store is injected for the same reason the graph is: `ConfigStore` is a
+    # protocol with a real in-memory implementation, so nothing internal is mocked
+    # and no container is needed (docs/testes.md §4).
+    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())) as test_client:
         yield test_client
 
 
@@ -121,7 +125,7 @@ def test_a_failure_mid_stream_becomes_an_event_and_leaks_nothing() -> None:
             raise RuntimeError("connection to postgresql://vendinha:vendinha@127.0.0.1:5432 failed")
             yield  # pragma: no cover - unreachable, keeps this an async generator
 
-    with TestClient(create_app(graph=BrokenGraph())) as test_client:
+    with TestClient(create_app(graph=BrokenGraph(), store=InMemoryConfigStore())) as test_client:
         response = test_client.post("/chat", json={"message": "oi"})
 
     assert response.status_code == 200

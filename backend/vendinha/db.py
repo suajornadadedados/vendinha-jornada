@@ -1,4 +1,4 @@
-"""Postgres: the checkpointer's home, and the one place that knows the DSN.
+"""Postgres: the checkpointer, the instance configuration, and the DSN they share.
 
 `AsyncPostgresSaver` creates its own tables, which makes `setup()` a migration —
 and migrations do not belong in the startup path of a web process. Two replicas
@@ -19,6 +19,8 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from vendinha import runtime
 from vendinha.config import get_settings
+from vendinha.config_store import PostgresConfigStore
+from vendinha.credentials import Vault
 
 # Without it, libpq waits forever on a host that accepts the packet and never
 # answers. The classic one on Windows is `localhost` resolving to ::1 while the
@@ -52,9 +54,14 @@ async def open_checkpointer(database_url: str | None = None) -> AsyncIterator[As
 
 
 async def setup() -> None:
-    """Create the checkpointer tables. Idempotent — safe to run again."""
+    """Create every table the application owns. Idempotent — safe to run again."""
+    settings = get_settings()
     async with open_checkpointer() as saver:
         await saver.setup()
+    await PostgresConfigStore(
+        with_connect_timeout(settings.database_url),
+        Vault(settings.config_encryption_key),
+    ).setup()
 
 
 def main() -> int:
@@ -73,7 +80,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("checkpointer ready.")
+    print("checkpointer and instance_config ready.")
     return 0
 
 

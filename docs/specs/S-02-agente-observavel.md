@@ -192,6 +192,41 @@ desiste do `::1` e cai para IPv4. O bound converteu um travamento infinito num s
 sucesso lento é o bug mais difícil de notar: cinco segundos em toda conexão, sem nenhum erro
 para investigar. Por isso o `.env.example` fixa `127.0.0.1` em vez de confiar no fallback.
 
+**D-8 — não existe autenticação, e `PUT /config` guarda credencial.**
+O REQ-6 entrega uma rota que grava a API key do provedor. Não há usuário, sessão de operador
+nem autenticação em nenhuma spec até a S-08 — então essa rota, aberta, é uma porta para gravar
+credencial de terceiro em qualquer host que a exponha.
+
+Resolvido por restrição em vez de por promessa: **a escrita só é aceita com `APP_ENV=local`**.
+Em `dev` ou `prod` o `PUT /config` responde `403` e o `GET /config` devolve `editable: false`.
+Leitura continua liberada porque ela não expõe nada — `configured`, a origem (`banco` /
+`ambiente` / `nenhuma`) e uma dica de quatro caracteres.
+
+Isso deixa uma consequência explícita para a S-07 e a S-08: **a tela de configuração não
+funciona fora do ambiente local até existir autenticação.** É a intenção. "Depois a gente
+protege" é como uma rota assim nunca é protegida.
+
+**D-9 — não existe catálogo de modelos neste repositório, e é de propósito.**
+A escolha do modelo na UI precisa de uma lista. A saída óbvia — uma constante com os ids de
+cada fornecedor — é exatamente o que o ADR-001 proíbe o agente de fazer: afirmar um fato que
+não foi lido de uma fonte. Uma lista escrita de memória está desatualizada na semana seguinte e
+nada avisa.
+
+`GET /models` pergunta ao próprio fornecedor (`models.list()` de cada SDK), e o resultado
+prova o argumento: **119 modelos** vieram na primeira execução real, entre eles alguns que não
+estariam numa lista escrita à mão. O seam de teste é `Provider.list_models`, que é o adapter
+para a API de terceiro — o lugar onde `docs/testes.md` §4 permite substituir.
+
+Fornecedor fora do ar devolve lista vazia em vez de erro: um seletor que explode porque um
+fornecedor teve uma tarde ruim é pior que um seletor com uma opção a menos.
+
+**D-10 — a recusa por falta de chave de criptografia morava no lugar errado.**
+O teste do REQ-6 pegou: `CredentialsUnavailable` era levantada dentro do `PostgresConfigStore`,
+então a garantia *"sem `CONFIG_ENCRYPTION_KEY`, não se guarda credencial"* dependia de qual
+implementação do `ConfigStore` estivesse ligada — com a de memória, a gravação passava. Recusar
+é **política**, não persistência. A checagem subiu para o endpoint (`503`, não `500`: o serviço
+está bem, o deploy é que está incompleto), e o store manteve a dele como defesa em profundidade.
+
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
 - [ ] CI verde (lint, typecheck, testes, evals)
