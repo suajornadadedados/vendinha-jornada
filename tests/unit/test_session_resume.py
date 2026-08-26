@@ -31,10 +31,11 @@ def _model(*answers: str) -> GenericFakeChatModel:
 
 
 async def _say(graph: Any, session_id: str, text: str) -> dict[str, Any]:
-    return await graph.ainvoke(
+    state: dict[str, Any] = await graph.ainvoke(
         {"session_id": session_id, "messages": [HumanMessage(content=text)]},
         config=session_config(session_id),
     )
+    return state
 
 
 @pytest.mark.risco("R9")

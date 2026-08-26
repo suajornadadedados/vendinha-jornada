@@ -117,6 +117,14 @@ jobs:
       - run: uv run mypy .
         working-directory: backend
 
+      # A suite tambem entra no portao desde a S-02 (ressalva R-4 da verificacao
+      # da S-01): havia tipagem escrita em tests/ que nada verificava. Roda da
+      # raiz e com --explicit-package-bases porque tests/unit/conftest.py e
+      # tests/security/conftest.py tem o mesmo nome de modulo — o mesmo motivo
+      # pelo qual o pytest usa --import-mode=importlib.
+      - name: mypy na suite
+        run: uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
+
   evals:
     # Vira required check a partir da S-06, junto com o código que o deixa verde.
     # Requer secret ANTHROPIC_API_KEY. Observabilidade é Langfuse Cloud (ADR-010).

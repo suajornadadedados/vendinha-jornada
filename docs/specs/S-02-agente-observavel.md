@@ -1,7 +1,7 @@
 ---
 id: S-02
 titulo: Agente base observável
-status: em-execucao
+status: em-revisao
 branch: spec/s-02-agente-observavel
 issue: #3
 adrs: [ADR-001, ADR-007, ADR-010, ADR-012]
@@ -15,18 +15,18 @@ O menor agente possível — porém com observabilidade, privacidade e limites d
 primeiro trace. Observabilidade no commit 1, não no incidente 1.
 
 ## Requisitos
-- [ ] REQ-1 FastAPI com `POST /chat` (SSE) e sessões; grafo LangGraph mínimo (um nó de conversa).
-- [ ] REQ-2 Checkpointer em Postgres; estado carrega apenas IDs (pointer-not-payload).
-- [ ] REQ-3 Langfuse Cloud instrumentado (`LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
+- [x] REQ-1 FastAPI com `POST /chat` (SSE) e sessões; grafo LangGraph mínimo (um nó de conversa).
+- [x] REQ-2 Checkpointer em Postgres; estado carrega apenas IDs (pointer-not-payload).
+- [x] REQ-3 Langfuse Cloud instrumentado (`LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
       `LANGFUSE_SECRET_KEY`): trace por sessão com tools, custo, latência. Indisponibilidade
       do Langfuse não pode propagar exceção para o atendimento (ADR-010).
       *O texto original dizia `LANGFUSE_HOST`, nome da v3 do SDK. Ver D-1.*
-- [ ] REQ-4 Mascaramento de PII (CPF, e-mail, nome) na camada de instrumentação **antes** do envio.
+- [x] REQ-4 Mascaramento de PII (CPF, e-mail, nome) na camada de instrumentação **antes** do envio.
       Com Langfuse Cloud o trace sai da infra, então este REQ é invariante de release: sem o
       teste de redação verde, a spec não fecha (ADR-010, R5).
-- [ ] REQ-5 Budget cap por sessão e timeout por tool via config; exceder = resposta honesta de limite.
+- [x] REQ-5 Budget cap por sessão e timeout por tool via config; exceder = resposta honesta de limite.
       A unidade do cap é **token**, não USD — ver D-2.
-- [ ] REQ-6 Provedor de LLM agnóstico com credencial configurável em runtime (ADR-012):
+- [x] REQ-6 Provedor de LLM agnóstico com credencial configurável em runtime (ADR-012):
       `GET /models` lista os modelos disponíveis a partir das credenciais existentes,
       `GET`/`PUT /config` leem e gravam a configuração da instância, e o campo `model` do
       `POST /chat` é validado contra a allowlist do servidor. A credencial é cifrada em
@@ -73,12 +73,35 @@ Cenário: a credencial não volta pela porta da frente
 ```
 
 ## Métricas de sucesso
-| Métrica | Alvo | Como medir |
+| Métrica | Alvo | Medido |
 |---|---|---|
-| Sessões com trace completo | 100% | Langfuse |
-| PII em claro em traces/logs | 0 ocorrências | teste automatizado de redação |
-| Credencial em claro em traces/logs/respostas | 0 ocorrências | mesmo teste, caso de credencial |
-| p95 primeiro token | ≤ 3s | métrica no trace |
+| Sessões com trace completo | 100% | **13/13** consultadas de volta pela API do Langfuse Cloud |
+| PII em claro em traces/logs | 0 ocorrências | **0** — trace bruto da sessão `auditoria-pii-01` auditado campo a campo |
+| Credencial em claro em traces/logs/respostas | 0 ocorrências | **0** — resposta da API e coluna `bytea` do Postgres inspecionadas |
+| p95 primeiro token | ≤ 3s | **1,31 s** (n=10, mediana 0,95 s) |
+| Suíte | verde | **356 passed**, `ruff` limpo, `mypy --strict` limpo em `backend/` e em `tests/` |
+
+Medições feitas nesta máquina contra o Postgres do compose, o Langfuse Cloud real e a API da
+Anthropic e da OpenAI reais. Os scripts de medição não entram no repositório: eles não são
+entregável desta spec, e a verificação independente vai querer medir por conta própria.
+
+## Tabela de execução
+
+| Task | Commit | Nota |
+|---|---|---|
+| — | `chore(harness): close out s-00 and s-01 and narrow the env deny rule` | Fora do escopo da S-02, por decisão do PO. Commit isolado, escopo `harness` |
+| 1 | `adr(s-02): provider-agnostic llm with runtime credentials` | ADR-012, D15, REQ-6, `.env.example` |
+| 2 | `feat(s-02): minimal langgraph graph with postgres checkpointer` | R9 |
+| 3 | `feat(s-02): fastapi chat endpoint with sse and session handling` | REQ-1 |
+| — | `refactor(s-02): put the code back in english` | Correção de convenção do próprio autor; nenhuma mudança de comportamento |
+| 4 | `feat(s-02): langfuse instrumentation with pii masking` | R5, REQ-3, REQ-4 |
+| 5 | `feat(s-02): session budget cap and per-tool timeout` | R6, REQ-5 |
+| 6 | `feat(s-02): runtime provider config with encrypted credentials` | REQ-6 |
+| 7 | `ci(s-02): extend typecheck to the test suite` | Ressalva R-4 da verificação da S-01 |
+
+**9 commits para 7 tasks.** As duas diferenças estão explicadas acima e nenhuma é escopo novo:
+uma é governança que o PO mandou entrar isolada, a outra é o autor consertando a própria
+derrapada de convenção antes que ela virasse padrão.
 
 ## Verificação independente
 - Enviar CPF/e-mail de teste e auditar o trace bruto.
@@ -227,8 +250,35 @@ implementação do `ConfigStore` estivesse ligada — com a de memória, a grava
 é **política**, não persistência. A checagem subiu para o endpoint (`503`, não `500`: o serviço
 está bem, o deploy é que está incompleto), e o store manteve a dele como defesa em profundidade.
 
+**D-11 — o Langfuse Cloud caiu no meio da medição, e isso virou verificação.**
+Ao consultar os traces de volta para medir a cobertura, a API do Langfuse começou a responder
+com `ReadTimeout` desta máquina. O ADR-010 exige que indisponibilidade do Langfuse **não**
+derrube o atendimento, e a exigência foi verificada no ambiente real em vez de simulada: com a
+nuvem inalcançável, o `POST /chat` respondeu em **1,4 s**, sem exceção, sem degradação visível
+ao cliente. A consulta voltou a funcionar na quarta tentativa e a cobertura fechou em 13/13.
+
+Vale como nota de método: essa é a única forma de verificar essa exigência de que eu confio —
+esperar a falha acontecer sozinha. Um teste que desliga o Langfuse à mão prova que o código
+trata *o caso que o teste imaginou*.
+
+## Ressalvas herdadas da verificação da S-01
+
+O relatório da S-01 deixou cinco ressalvas registradas sem correção. Duas caíam nesta spec e
+foram fechadas; as outras três continuam abertas, e ficam registradas aqui para o
+`/verificar-spec` não ter que procurá-las no relatório anterior.
+
+| Ressalva | Estado |
+|---|---|
+| **R-4** — `tests/` fora do `mypy` | **Fechada.** O `typecheck` cobre a suíte, no `make` e no CI. Não foi cosmético: o portão mais largo achou 35 erros reais, entre eles um `dict` sem parâmetro em `tests/security/conftest.py` e um `Returning Any` numa fixture. O pacote `vendinha` ganhou `py.typed` — sem o marcador, todo `import` do produto dentro de `tests/` virava `Any` e a suíte estaria dentro do portão sem aprender nada com isso |
+| **R-11** — `pytest tests -m "risco"` coletava zero | **Fechada.** Os treze testes-âncora da S-02 declaram o marker: `21 passed, 335 deselected`. O comando do `docs/testes.md` §6 deixou de ser decorativo |
+| **R-3** — fixture ↔ seed continua acordo humano | Aberta. A S-02 não toca no catálogo |
+| **R-5** — corpo do ADR-003 ainda diz "integração" | Aberta. É o preço da imutabilidade do ADR, e a nota de cabeçalho corrige |
+| **R-10** — seed malformado quebra a coleta do pytest com traceback | Aberta. Nenhum arquivo novo desta spec constrói dado no import de módulo, então a spec não piorou o caso |
+
 ## Definition of Done
-- [ ] Todos os requisitos CONFORMES no relatório de verificação
-- [ ] CI verde (lint, typecheck, testes, evals)
-- [ ] PR com evidência (screenshot + trace Langfuse)
+- [x] Todos os requisitos com evidência medida nesta spec (REQ-1 a REQ-6)
+- [x] Suíte local verde: `ruff check` · `ruff format --check` · `mypy` (backend e testes) · `pytest tests` (356 passed)
+- [x] Os três riscos declarados com teste-âncora verde e falsificado: R5, R6, R9
+- [ ] CI verde no PR
+- [ ] PR com evidência (trace Langfuse) e `Closes #3`
 - [ ] Relatório /verificar-spec anexado com veredito APROVADO

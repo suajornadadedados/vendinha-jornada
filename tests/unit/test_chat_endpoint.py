@@ -120,10 +120,23 @@ def test_a_failure_mid_stream_becomes_an_event_and_leaks_nothing() -> None:
     a run that leaks configuration or tool names into an answer.
     """
 
-    class BrokenGraph:
-        async def astream(self, *_: Any, **__: Any) -> Any:
+    class BrokenStream:
+        """An async iterator that fails on the first pull.
+
+        Written as an explicit iterator rather than as a generator with an
+        unreachable `yield` after the `raise`: that shape is the usual trick, and
+        `warn_unreachable` is right to flag it.
+        """
+
+        def __aiter__(self) -> "BrokenStream":
+            return self
+
+        async def __anext__(self) -> Any:
             raise RuntimeError("connection to postgresql://vendinha:vendinha@127.0.0.1:5432 failed")
-            yield  # pragma: no cover - unreachable, keeps this an async generator
+
+    class BrokenGraph:
+        def astream(self, *_: Any, **__: Any) -> BrokenStream:
+            return BrokenStream()
 
     with TestClient(create_app(graph=BrokenGraph(), store=InMemoryConfigStore())) as test_client:
         response = test_client.post("/chat", json={"message": "oi"})

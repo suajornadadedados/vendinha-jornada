@@ -21,6 +21,7 @@ No network, no agent, no API key — it only reads files already in the repo.
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -48,9 +49,10 @@ def _case_files() -> list[Path]:
     return sorted(p for family in FAMILIES for p in (EVALS / family).glob("*.yaml"))
 
 
-def _load(path: Path) -> dict:
+def _load(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+        caso: dict[str, Any] = yaml.safe_load(handle)
+        return caso
 
 
 CASE_FILES = _case_files()

@@ -47,6 +47,7 @@ dev = [
     "httpx>=0.28",
     "types-PyYAML>=6.0",
     "jsonschema>=4.21",
+    "types-jsonschema>=4.26.0.20260518",
 ]
 
 [build-system]
@@ -55,6 +56,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vendinha"]
+# PEP 561. Without this marker mypy refuses to read the package's own types from
+# outside it, and every `from vendinha... import` in tests/ becomes `Any` — the
+# suite would be inside the type gate and learn nothing from being there.
+artifacts = ["vendinha/py.typed"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -33,8 +33,9 @@ lint:  ## Lint e checagem de formatação (uma régua só, na raiz)
 format:  ## Aplica a formatação
 	ruff format .
 
-typecheck:  ## mypy strict no backend
+typecheck:  ## mypy strict no backend E na suite de testes
 	cd backend && uv run mypy .
+	uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
