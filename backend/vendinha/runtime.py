@@ -15,9 +15,7 @@ is not a mechanism.
 import asyncio
 import os
 from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 
 def loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:
@@ -34,7 +32,7 @@ def loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:
     return None
 
 
-def run(coro: Coroutine[Any, Any, T]) -> T:
+def run[T](coro: Coroutine[Any, Any, T]) -> T:
     """`asyncio.run`, on a loop psycopg can actually talk to."""
     factory = loop_factory()
     if factory is None:

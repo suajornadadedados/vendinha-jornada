@@ -53,7 +53,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install ruff
+      # Versao FIXA, e igual a do grupo dev do backend. Com `pip install ruff`
+      # solto, a regua do CI anda sozinha: um `ruff` mais novo traz regra nova e
+      # reprova um PR que passou na maquina de quem escreveu, sem nada ter mudado
+      # no codigo. Aconteceu na S-02 com a UP047. Ao subir a versao, suba nos dois
+      # lugares no mesmo commit.
+      - run: pip install ruff==0.16.4
       - run: ruff check .
       - run: ruff format --check .
 

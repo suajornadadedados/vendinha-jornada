@@ -48,6 +48,7 @@ dev = [
     "types-PyYAML>=6.0",
     "jsonschema>=4.21",
     "types-jsonschema>=4.26.0.20260518",
+    "ruff==0.16.4",
 ]
 
 [build-system]

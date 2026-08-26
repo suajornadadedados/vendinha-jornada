@@ -26,12 +26,12 @@ api:  ## Sobe a API (precisa de `make up` e `make db-setup` antes)
 test:  ## Suíte completa: unit + security
 	bash scripts/run-tests.sh
 
-lint:  ## Lint e checagem de formatação (uma régua só, na raiz)
-	ruff check .
-	ruff format --check .
+lint:  ## Lint e checagem de formatação (uma régua só, e a MESMA do CI)
+	uv run --project backend ruff check .
+	uv run --project backend ruff format --check .
 
 format:  ## Aplica a formatação
-	ruff format .
+	uv run --project backend ruff format .
 
 typecheck:  ## mypy strict no backend E na suite de testes
 	cd backend && uv run mypy .

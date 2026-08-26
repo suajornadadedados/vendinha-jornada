@@ -23,11 +23,8 @@ configuration values, internal limits or tool names — and "you have exceeded y
 
 import asyncio
 from collections.abc import Awaitable, Iterable, Sequence
-from typing import TypeVar
 
 from langchain_core.messages import AIMessage, BaseMessage
-
-T = TypeVar("T")
 
 # Honest about the outcome, silent about the machinery. It also has to leave the
 # customer somewhere to go: a refusal with no next step reads as a fault.
@@ -61,7 +58,7 @@ def within_budget(messages: Sequence[BaseMessage], cap: int) -> bool:
     return tokens_spent(messages) <= cap
 
 
-async def run_with_timeout(awaitable: Awaitable[T], seconds: float, what: str) -> T:
+async def run_with_timeout[T](awaitable: Awaitable[T], seconds: float, what: str) -> T:
     """Bound one external call. Raises `TimedOut` naming `what` did not finish."""
     try:
         async with asyncio.timeout(seconds):

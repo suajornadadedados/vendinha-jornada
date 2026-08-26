@@ -416,6 +416,21 @@ reprovam.
 | **R-13** | `install_log_redaction()` acrescenta um `StreamHandler` ao root quando ele está vazio, mudando o destino padrão de qualquer log de terceiro no processo. É o que fecha a NC-2 e é a decisão certa; o efeito colateral agora está declarado no docstring do módulo | registrada |
 | **R-14** | A cobertura do `lifespan` é assimétrica: o ramo `graph is None` não é alcançável por nenhum teste. É a raiz estrutural da NC-L — qualquer coisa que entrar ali (pool, migração, healthcheck) nasce sem defesa | S-03 |
 
+**D-16 — a régua de lint do CI andava sozinha, e reprovou o PR.**
+O job `lint` reprovou o PR #14 com duas `UP047` que **não existem na versão local**: o CI fazia
+`pip install ruff` sem versão, então instalava a mais nova do dia (0.16.4) enquanto a máquina do
+autor tinha a 0.11.7. Regra nova, código intocado, PR vermelho.
+
+Isso é a mesma classe da NC-1 — *"o portão mede uma coisa aqui e outra lá"* — e o conserto é o
+mesmo: fixar a régua num lugar só. `ruff==0.16.4` entrou no grupo `dev` do backend, o CI instala
+exatamente essa versão, e o `make lint` passou a chamar `uv run --project backend ruff` em vez do
+`ruff` que estiver no PATH de quem digita. Subir a versão passa a ser um commit que muda os dois
+lugares juntos.
+
+Os dois achados em si eram legítimos: `run_with_timeout` e `runtime.run` declaravam genérico com
+`TypeVar` num projeto que exige Python 3.12, onde a sintaxe de parâmetro de tipo do PEP 695
+(`def run[T](...)`) é a forma nativa. Corrigidos, e o `TypeVar` importado saiu junto.
+
 ## Ressalvas herdadas da verificação da S-01
 
 O relatório da S-01 deixou cinco ressalvas registradas sem correção. Duas caíam nesta spec e
