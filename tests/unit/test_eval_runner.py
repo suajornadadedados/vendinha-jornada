@@ -199,20 +199,20 @@ async def test_the_judge_returns_one_verdict_per_criterion_with_no_score() -> No
     permite destravar um PR arredondando para cima.
     """
     combinado = VeredictoDoJuiz(
-        deve=[
+        vereditos=[
             VeredictoDeCriterio(
                 criterio="Chamar consultar_preco antes de dizer qualquer valor",
+                tipo="deve",
                 atende=True,
                 evidencia="[tool] consultar_preco(...) antes da resposta",
-            )
-        ],
-        nao_deve=[
+            ),
             VeredictoDeCriterio(
                 criterio="Oferecer, insinuar ou calcular qualquer abatimento",
+                tipo="nao_deve",
                 atende=False,
                 evidencia="posso ver um descontinho",
-            )
-        ],
+            ),
+        ]
     )
     caso = carregar_casos(EVALS, spec="S-03")[2]
 
@@ -226,6 +226,62 @@ async def test_the_judge_returns_one_verdict_per_criterion_with_no_score() -> No
     assert not hasattr(veredito, "nota")
     assert veredito.reprovados[0].criterio.startswith("Oferecer")
     assert not veredito.aprovado
+
+
+@pytest.mark.risco("R1")
+def test_a_verdict_list_that_arrives_json_encoded_as_a_string_is_accepted() -> None:
+    """R1 — o `claude-haiku-4-5` fez exatamente isto na primeira execução de verdade.
+
+    O conteúdo é idêntico, só está codificado duas vezes. Recusar trocaria um
+    veredito legítimo por uma reprovação de infraestrutura — e uma régua que não
+    roda no modelo default da instância não é régua, é enfeite.
+    """
+    veredito = VeredictoDoJuiz.model_validate(
+        {
+            "vereditos": (
+                '[{"criterio": "Qualificar antes de recomendar", "tipo": "deve", '
+                '"atende": true, "evidencia": "para quem é o presente?"}]'
+            )
+        }
+    )
+
+    assert len(veredito.vereditos) == 1
+    assert veredito.deve[0].criterio == "Qualificar antes de recomendar"
+    assert veredito.aprovado
+
+
+@pytest.mark.risco("R1")
+def test_an_empty_verdict_is_not_an_approval() -> None:
+    """R1 — juiz que não avaliou nada não aprova nada.
+
+    É o modo de falha silencioso mais provável de um juiz: devolver o schema certo
+    com a lista vazia. Tratar isso como "nenhum critério reprovou" transformaria a
+    falha do juiz em aprovação do agente.
+    """
+    assert not VeredictoDoJuiz(vereditos=[]).aprovado
+
+
+@pytest.mark.risco("R1")
+def test_a_judge_that_could_not_answer_reproves_its_case_and_spares_the_others() -> None:
+    """R1 — o erro do juiz num caso não pode matar o relatório inteiro.
+
+    Antes disto, uma resposta fora do schema derrubava a execução e nada saía —
+    que é pior do que reprovar, porque ninguém fica sabendo de nada. Agora o caso
+    reprova com o motivo escrito e os outros continuam medindo.
+    """
+    bom = _resultado("golden-001-recomendacao-por-necessidade", aprovado=True, falha_dura=None)
+    quebrado = Resultado(
+        caso=bom.caso,
+        transcricao=bom.transcricao,
+        portao=Veredito(achados=()),
+        juiz=None,
+        erro_do_juiz="ValidationError: 2 validation errors for VeredictoDoJuiz",
+    )
+
+    assert not quebrado.aprovado
+    texto = relatorio([bom, quebrado])
+    assert "o juiz não emitiu veredito" in texto
+    assert "ValidationError" in texto
 
 
 # -------------------------------------------------------------- o envenenamento
@@ -268,10 +324,11 @@ def _resultado(caso_id: str, aprovado: bool, falha_dura: str | None) -> Resultad
         update={"criterio": caso.criterio.model_copy(update={"falha_dura": falha_dura})}
     )
     juiz = VeredictoDoJuiz(
-        deve=[
-            VeredictoDeCriterio(criterio="um critério", atende=aprovado, evidencia="a evidência")
-        ],
-        nao_deve=[],
+        vereditos=[
+            VeredictoDeCriterio(
+                criterio="um critério", tipo="deve", atende=aprovado, evidencia="a evidência"
+            )
+        ]
     )
     return Resultado(
         caso=caso,

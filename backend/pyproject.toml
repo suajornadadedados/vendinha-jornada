@@ -39,7 +39,13 @@ dependencies = [
     # `langchain-qdrant`: aqui o Qdrant ranqueia e devolve ids — quem afirma
     # qualquer fato é o Postgres. Um VectorStore guardaria o texto do produto
     # dentro do índice, criando uma segunda morada para o mesmo fato (S-03, D-5).
-    "qdrant-client>=1.13",
+    #
+    # Preso ao MESMO minor da imagem do compose (qdrant/qdrant:v1.13.6). Sem o
+    # teto o resolvedor trouxe a 1.19.0 e toda ingestão passou a imprimir um aviso
+    # de incompatibilidade — a mesma classe do D-16 da S-02, em que a régua do CI
+    # andou sozinha: versão que muda de um lado só. Subir a imagem passa a ser um
+    # commit que mexe nos dois lugares juntos.
+    "qdrant-client>=1.13,<1.14",
 ]
 
 [dependency-groups]

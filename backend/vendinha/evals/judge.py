@@ -28,10 +28,11 @@ de quem lê o relatório.
 
 import json
 from collections.abc import Sequence
+from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from vendinha.evals.caso import Caso
 from vendinha.evals.groundedness import Transcricao
@@ -50,6 +51,7 @@ Regras do seu trabalho:
    RESPEITOU a proibição — ou seja, ele NÃO fez a coisa descrita.
 4. `evidencia` é uma citação curta e literal da transcrição que sustenta o seu
    veredito. Se o veredito é "não atende" por ausência, escreva o que faltou.
+   `tipo` diz de qual das duas listas o critério veio: "deve" ou "nao_deve".
 5. Você não avalia preço nem valor numérico: isso é conferido por comparação
    exata fora daqui. Se um critério falar de preço, avalie a CONDUTA descrita
    (chamou a tool antes? evitou "aproximadamente"?), nunca o número em si."""
@@ -61,8 +63,11 @@ class VeredictoDeCriterio(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     criterio: str = Field(description="O critério avaliado, copiado literalmente.")
+    tipo: Literal["deve", "nao_deve"] = Field(
+        description="De qual das duas listas este critério veio."
+    )
     atende: bool = Field(
-        description="Verdadeiro se o critério foi satisfeito. Para 'não deve', "
+        description="Verdadeiro se o critério foi satisfeito. Para 'nao_deve', "
         "verdadeiro significa que o agente respeitou a proibição."
     )
     evidencia: str = Field(
@@ -71,18 +76,57 @@ class VeredictoDeCriterio(BaseModel):
 
 
 class VeredictoDoJuiz(BaseModel):
-    """O veredito do caso inteiro, critério a critério. Sem nota, sem média."""
+    """O veredito do caso inteiro, critério a critério. Sem nota, sem média.
 
-    deve: list[VeredictoDeCriterio]
-    nao_deve: list[VeredictoDeCriterio]
+    **Uma lista só, e não duas.** A primeira versão tinha `deve` e `nao_deve` como
+    campos separados, e o `claude-haiku-4-5` — que é o modelo default da instância,
+    portanto o juiz default — reprovou o schema na primeira execução de verdade:
+    devolveu `deve` como *string* com o JSON dentro e omitiu `nao_deve` inteiro.
+    Duas listas aninhadas dentro de um objeto é uma forma que modelo pequeno erra;
+    uma lista plana de objetos, com o lado dito num campo, é uma forma que ele
+    acerta.
+
+    Ninguém teria descoberto isso lendo o código. Apareceu porque o eval rodou
+    contra o agente antes do PR, que é a razão de o ritual existir.
+    """
+
+    vereditos: list[VeredictoDeCriterio] = Field(
+        description="Um item para CADA critério das duas listas."
+    )
+
+    @field_validator("vereditos", mode="before")
+    @classmethod
+    def _aceita_a_lista_serializada_como_string(cls, value: Any) -> Any:
+        """Aceita a lista chegando como JSON dentro de uma string.
+
+        É a mesma falha do parágrafo acima, um nível abaixo, e a coerção é segura
+        porque o conteúdo é idêntico — só está codificado duas vezes. Recusar
+        seria trocar um veredito legítimo por uma reprovação de infraestrutura, e
+        uma régua que não roda no modelo default não é régua, é enfeite.
+        """
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return value
+        return value
+
+    @property
+    def deve(self) -> tuple[VeredictoDeCriterio, ...]:
+        return tuple(v for v in self.vereditos if v.tipo == "deve")
+
+    @property
+    def nao_deve(self) -> tuple[VeredictoDeCriterio, ...]:
+        return tuple(v for v in self.vereditos if v.tipo == "nao_deve")
 
     @property
     def reprovados(self) -> tuple[VeredictoDeCriterio, ...]:
-        return tuple(v for v in (*self.deve, *self.nao_deve) if not v.atende)
+        return tuple(v for v in self.vereditos if not v.atende)
 
     @property
     def aprovado(self) -> bool:
-        return not self.reprovados
+        """Veredito vazio NÃO é aprovação: é um juiz que não avaliou nada."""
+        return bool(self.vereditos) and not self.reprovados
 
 
 def formatar_transcricao(transcricao: Transcricao) -> str:
@@ -122,7 +166,8 @@ def _pedido(caso: Caso, transcricao: Transcricao, conversa_do_cliente: Sequence[
 ## Critérios "não deve" (o agente precisa NÃO ter feito)
 {enumerar(caso.criterio.nao_deve)}
 
-Devolva um veredito para CADA critério das duas listas, na mesma ordem."""
+Devolva um veredito para CADA critério das duas listas, numa lista só,
+marcando em `tipo` de qual delas o critério veio."""
 
 
 async def julgar(

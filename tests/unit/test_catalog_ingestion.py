@@ -158,6 +158,38 @@ def test_the_embedded_document_carries_what_answers_an_implicit_need(
 
 
 @pytest.mark.risco("R1")
+def test_the_document_crosses_occasion_and_pairing_the_way_a_customer_asks(
+    produtos: tuple[Produto, ...],
+) -> None:
+    """R1 — é o que separa 0/4 de 3/4 na consulta que o produto existe para responder.
+
+    Medido: com `harmonizacao` e `ocasiao` como duas listas separadas, *nenhum*
+    dos nove queijos que harmonizam com tinto aparecia no top-4 de "presente para
+    quem ama vinho tinto" — o vetor via "presente" e trazia licor. Com a cruzada
+    escrita como frase, três dos quatro primeiros são queijo. Trocar o modelo de
+    embedding não mudou nada; a forma da frase mudou.
+
+    O teste trava a forma, não o número: a medição está no docstring de
+    `texto_para_embedding` e não se reproduz sem rede. Sem a frase cruzada no
+    documento, a busca volta a errar exatamente onde o RF-1.2 existe.
+    """
+    for produto in produtos:
+        documento = texto_para_embedding(produto)
+        esperada = (
+            f"{produto.ocasiao[0].capitalize()} para quem gosta de {produto.harmonizacao[0]}."
+        )
+        assert esperada in documento, f"{produto.id}: falta a frase cruzada '{esperada}'"
+
+    # Toda combinação, não só a primeira: é o cruzamento que faz "tábua de frios"
+    # e "vinho tinto" encontrarem o mesmo queijo por caminhos diferentes.
+    um = next(p for p in produtos if len(p.ocasiao) > 1 and len(p.harmonizacao) > 1)
+    documento = texto_para_embedding(um)
+    for ocasiao in um.ocasiao:
+        for harmonizacao in um.harmonizacao:
+            assert f"{ocasiao.capitalize()} para quem gosta de {harmonizacao}." in documento
+
+
+@pytest.mark.risco("R1")
 def test_the_postgres_row_matches_the_declared_column_order(produtos: tuple[Produto, ...]) -> None:
     """R1 — `COLUNAS` e `colunas_de` desalinhados gravariam preço na coluna errada.
 

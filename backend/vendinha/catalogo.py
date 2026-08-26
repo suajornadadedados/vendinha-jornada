@@ -157,11 +157,40 @@ def texto_para_embedding(produto: Produto) -> str:
     """O documento que vira vetor.
 
     Sem preço e sem prazo, de propósito: o vetor responde *para quem serve este
-    produto*, e valor não é uma dimensão de semelhança que alguém pediu. O que
-    entra é o que faz "presente pra minha sogra que ama vinho tinto" encontrar um
-    queijo — `harmonizacao` e `ocasiao` antes de tudo (`data/catalogo/README.md`).
+    produto*, e valor não é uma dimensão de semelhança que alguém pediu.
+
+    **As frases cruzadas do topo são o documento fazendo o trabalho do produto**, e
+    elas foram escritas depois de medir. A primeira versão listava `harmonizacao` e
+    `ocasiao` como duas linhas de itens separados por vírgula, e a busca ia bem em
+    pergunta explícita e mal justamente na pergunta que o produto existe para
+    responder. Medido, com `text-embedding-3-small`, top-4:
+
+    | Consulta | linhas de itens | frases cruzadas |
+    |---|---|---|
+    | "café pra tomar de manhã" | 4/4 café | 3/4 |
+    | "algo doce pra levar de lembrança" | 4/4 doce | 3/4 |
+    | "presente para quem ama vinho tinto" | **0/4 queijo** | **3/4** |
+    | "algo pra tábua de frios" | **0/4 queijo** | **2/4** |
+
+    Nove queijos do seed harmonizam com tinto e nenhum aparecia: o vetor via
+    "presente" e trazia licor. Trocar de modelo não resolveu — o
+    `text-embedding-3-large` erra os mesmos 0/4, e custa quatro vezes mais.
+    Reordenar as linhas também não. O que resolveu foi escrever a cruzada
+    `ocasiao` x `harmonizacao` **na forma em que o cliente pergunta**: ele não diz
+    "harmonização: vinho tinto encorpado", ele diz "presente pra quem ama vinho
+    tinto".
+
+    O preço é uma pequena perda nas consultas fáceis, e é aceito: filtro de
+    e-commerce já resolvia aquelas. É a frase do `data/catalogo/README.md` levada
+    a sério — `harmonizacao` e `ocasiao` são o produto, não enfeite.
     """
+    cruzadas = [
+        f"{ocasiao.capitalize()} para quem gosta de {harmonizacao}."
+        for ocasiao in produto.ocasiao
+        for harmonizacao in produto.harmonizacao
+    ]
     linhas = [
+        *cruzadas,
         f"{produto.nome} — {produto.tipo} de {produto.regiao}, do produtor {produto.produtor}.",
         f"Intensidade {produto.intensidade}. Peso {produto.peso}.",
         produto.descricao,

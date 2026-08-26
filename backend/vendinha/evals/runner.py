@@ -95,9 +95,18 @@ class Resultado:
     transcricao: Transcricao
     portao: Veredito
     juiz: VeredictoDoJuiz | None
+    erro_do_juiz: str | None = None
 
     @property
     def aprovado(self) -> bool:
+        """Juiz que não emitiu veredito não aprova — nem derruba os outros casos.
+
+        Um erro do juiz num caso costumava matar a execução inteira, e o relatório
+        não saía. Reprovar só aquele caso, dizendo o motivo, é pior para o caso e
+        melhor para quem lê: os outros cinco continuam medindo alguma coisa.
+        """
+        if self.erro_do_juiz is not None:
+            return False
         return self.portao.aprovado and (self.juiz is None or self.juiz.aprovado)
 
     @property
@@ -172,10 +181,22 @@ async def rodar_caso(
     portao = verificar(caso, transcricao, do_catalogo)
 
     veredito_do_juiz = None
+    erro_do_juiz = None
     if juiz_modelo is not None:
-        veredito_do_juiz = await julgar(juiz_modelo, caso, transcricao, falas_do_cliente)
+        try:
+            veredito_do_juiz = await julgar(juiz_modelo, caso, transcricao, falas_do_cliente)
+        except Exception as falhou:
+            # Um juiz que não devolve o schema é problema do juiz, não do agente —
+            # mas também não é aprovação. Fica registrado no caso e o resto roda.
+            erro_do_juiz = f"{type(falhou).__name__}: {falhou}"
 
-    return Resultado(caso=caso, transcricao=transcricao, portao=portao, juiz=veredito_do_juiz)
+    return Resultado(
+        caso=caso,
+        transcricao=transcricao,
+        portao=portao,
+        juiz=veredito_do_juiz,
+        erro_do_juiz=erro_do_juiz,
+    )
 
 
 async def rodar(spec: str = SPEC_PADRAO, apenas: str | None = None) -> list[Resultado]:
@@ -272,6 +293,16 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
         else:
             linhas += ["### Fatos sem origem em tool", "", "- nenhum", ""]
 
+        if resultado.erro_do_juiz is not None:
+            linhas += [
+                "### Critérios",
+                "",
+                f"- **o juiz não emitiu veredito**: {resultado.erro_do_juiz}",
+                "- o caso conta como reprovado: sem veredito não há aprovação",
+                "",
+            ]
+            continue
+
         if resultado.juiz is None:
             linhas += ["### Critérios", "", "- juiz não executado (sem credencial)", ""]
             continue
@@ -287,11 +318,20 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
     reprovados = [r for r in resultados if not r.aprovado]
     linhas += ["## Veredito da suíte", ""]
     if duras:
+        # Cada caso com a SUA falha dura. A primeira versão imprimia a do primeiro
+        # para todos, o que fez cinco casos de `fato_inventado` aparecerem como
+        # `acao_fora_da_allowlist` — um relatório que mente sobre por que reprovou
+        # manda a pessoa consertar a coisa errada.
         linhas.append(
-            f"**REPROVADA.** {', '.join(r.caso.id for r in duras)} declara(m) falha dura "
-            f"(`{duras[0].caso.criterio.falha_dura}`) e reprovou — o que derruba a suíte "
-            f"inteira, com todos os outros verdes (ADR-006)."
+            "**REPROVADA.** Os casos abaixo declaram falha dura e reprovaram, o que "
+            "derruba a suíte inteira mesmo com todos os outros verdes (ADR-006):"
         )
+        linhas.append("")
+        linhas += [f"- {r.caso.id} (`{r.caso.criterio.falha_dura}`)" for r in duras]
+        outros = [r for r in reprovados if r not in duras]
+        if outros:
+            linhas.append("")
+            linhas.append(f"Também reprovados: {', '.join(r.caso.id for r in outros)}")
     elif reprovados:
         linhas.append(
             f"**REPROVADA.** Casos reprovados: {', '.join(r.caso.id for r in reprovados)}"

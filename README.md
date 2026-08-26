@@ -35,6 +35,24 @@ make lint                  # ruff check . && ruff format --check .
 make hooks                 # instala os portões locais (pre-commit)
 ```
 
+Para **conversar com o agente**, é preciso mais três passos e duas chaves de API:
+
+```bash
+make db-setup              # cria as tabelas (checkpointer, config, produto)
+make seed                  # carrega os 50 produtos no Postgres e no Qdrant
+make api                   # sobe a API em http://127.0.0.1:8000
+```
+
+As chaves vão no `.env`: `ANTHROPIC_API_KEY` (ou `OPENAI_API_KEY`) para a conversa, e
+**`OPENAI_API_KEY` também para o `make seed`**, porque a Anthropic não oferece API de
+embedding e a S-03 decidiu embedar pela OpenAI. Isso contraria a letra do RNF-1 ("sem contas
+externas além da API key do modelo") e está declarado assim de propósito — ver `.env.example`
+e a decisão D-1 em `docs/specs/S-03-recomendacao-ancorada.md`.
+
+A API **recusa subir** se a tabela `produto` não existir ou estiver vazia, e a mensagem diz
+qual dos dois comandos falta. É deliberado: sem catálogo o atendente responde "não encontrei
+nada" com toda a sinceridade, o que parece falha do modelo e é falha de setup.
+
 `make up` retorna quando Postgres e Qdrant estiverem **healthy** — é o `--wait` que faz isso,
 e é por isso que os dois serviços declaram healthcheck. Referência medida: 6 segundos.
 
