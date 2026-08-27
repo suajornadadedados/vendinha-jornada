@@ -1,4 +1,4 @@
-# Mapa de decisões (D1-D15) → ADRs
+# Mapa de decisões (D1-D16) → ADRs
 
 | Decisão | Pergunta | Resposta adotada | ADR |
 |---|---|---|---|

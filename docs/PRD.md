@@ -132,7 +132,7 @@ Consequências diretas: preço e total nunca são gerados pelo modelo (sempre li
 
 ## 8. Riscos e mitigação
 
-A matriz completa (R1-R9), com mitigação, spec responsável e verificação automatizada, vive em `docs/riscos.md` e é requisito normativo. Riscos de projeto adicionais:
+A matriz completa (R1-R10), com mitigação, spec responsável e verificação automatizada, vive em `docs/riscos.md` e é requisito normativo. Riscos de projeto adicionais:
 
 - **Dependência de sandbox de terceiros na demo** → mocks de primeira classe e checkpoints gravados como plano B.
 - **Fricção do adapter de homologação (certificado/CNPJ)** → mantido opcional (S-09), nunca no caminho do quickstart.

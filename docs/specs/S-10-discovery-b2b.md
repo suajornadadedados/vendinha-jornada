@@ -1,7 +1,7 @@
 ---
 id: S-10
 titulo: Discovery B2B — comprador corporativo e composição de evento
-status: em-execucao
+status: em-revisao
 branch: spec/s-10-discovery-b2b
 issue: #11
 adrs: [ADR-013]
@@ -47,11 +47,11 @@ modelo escolhe com gosto e o código recusa com aritmética.
 - [x] REQ-5 Seed enriquecido: todos os produtos com `rendimento` e `contem`, mais petiscos
       mineiros (torresmo, biscoito de polvilho, pão de queijo) e itens de topo de faixa.
       `make test` verde — o teste do seed é o portão.
-- [ ] REQ-6 Corpus de evals reescrito para o comprador corporativo: os 12 golden e os 6
+- [x] REQ-6 Corpus de evals reescrito para o comprador corporativo: os 12 golden e os 6
       adversariais, mais os casos de composição. `evals/schema/caso.schema.json` aceitando R10.
-- [ ] REQ-7 S-04, S-05 e S-07 reescritas (as três estão `aprovada` e não iniciadas): pedido com
+- [x] REQ-7 S-04, S-05 e S-07 reescritas (as três estão `aprovada` e não iniciadas): pedido com
       composições, cliente PJ, NF-e para PJ, tela de montagem.
-- [ ] REQ-8 S-11 redigida, com o desenho de `TipoDeEvento` e `validar_composicao`.
+- [x] REQ-8 S-11 redigida, com o desenho de `TipoDeEvento` e `validar_composicao`.
 
 ## Fora de escopo
 Qualquer código de produto — `composicao.py`, a tool e o prompt são da **S-11**. Preço escalonado
@@ -138,6 +138,18 @@ Estava em `doces.json` por falta de categoria melhor. Com `petisco` no enum ele 
 virou o exemplo mais útil do catálogo: polvilho é mandioca, então é **sem glúten**, enquanto a
 broa de fubá ao lado leva trigo. Um celíaco pode comer um e não o outro, e nenhuma das duas
 descrições diz isso — que é exatamente o argumento para `contem` ser declarado e não inferido.
+
+**D-5 · Os dois diagramas de `docs/img/` estavam defasados antes desta spec.**
+Ao atualizar `fluxo-discovery.svg` para R1-R10, apareceram duas defasagens que não vieram do
+pivô: a caixa de decisões dizia `D1-D13 → ADR-001..010` (o repositório estava em D15 e ADR-012
+desde a S-02) e a cadeia de execução não tinha como incluir as specs novas. Corrigidas as três
+no mesmo commit, com os PNG regerados em 2x conforme `docs/arquitetura.md` §5.
+
+Vale como aviso de manutenção: **diagrama não tem teste**. As tabelas de `riscos.md` e
+`testes.md` têm `test_eval_corpus_is_traceable.py` cruzando risco contra matriz, e por isso não
+divergem em silêncio; o SVG diverge, e só se descobre quando alguém olha. Registrado aqui em
+vez de virar um teste novo porque testar texto de SVG custa mais do que vale — mas quem mexer
+em ADR, risco ou lista de specs deve abrir os dois arquivos.
 
 **D-4 · Sem sistema de migração, `CREATE TABLE IF NOT EXISTS` não basta.**
 Um banco de desenvolvimento que já tem a tabela `produto` nunca veria as colunas novas, e o
