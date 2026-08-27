@@ -35,9 +35,10 @@ debug at three in the morning.
 import re
 import threading
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import TypeGuard
 
 # CNPJ before CPF: same digit soup, and the longer one has to win the race.
 CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
@@ -105,20 +106,53 @@ class Redactor:
             value = known.sub("[NOME]", value)
         return value
 
-    def attributes(self, attributes: Mapping[str, object]) -> dict[str, str]:
-        """Redact string-valued attributes, reporting only what actually changed.
+    def attributes(self, attributes: Mapping[str, object]) -> dict[str, str | tuple[str, ...]]:
+        """Redact string attributes AND string sequences, reporting only what changed.
 
         Returning just the differences keeps the OpenTelemetry patch sparse, which
         is what the Langfuse contract asks for — and it keeps a trace diff readable,
         because an attribute that shows up in a patch really did change.
+
+        **The sequence branch is the ressalva R-4 da verificação da S-02.** An
+        OpenTelemetry attribute is a scalar *or a homogeneous sequence of
+        scalars*, and this function used to look only at `str`. A list of strings
+        went through untouched — masked nowhere, exported whole. It was latent
+        then, because nothing in the process produced one. The S-03 tools do:
+        `harmonizacao`, `ocasiao` and `notas_sensoriais` are lists, and the
+        instrumentations we do not own put list-valued attributes on spans as a
+        matter of course.
+
+        Non-string scalars are left alone on purpose. A number is a price, a
+        token count or a latency — over-masking those debugs nothing and is the
+        failure mode this module's docstring warns about.
         """
-        changed: dict[str, str] = {}
+        changed: dict[str, str | tuple[str, ...]] = {}
         for key, value in attributes.items():
             if isinstance(value, str):
                 redacted = self.text(value)
                 if redacted != value:
                     changed[key] = redacted
+            elif _is_string_sequence(value):
+                redacted_items = tuple(self.text(item) for item in value)
+                if redacted_items != tuple(value):
+                    changed[key] = redacted_items
         return changed
+
+
+def _is_string_sequence(value: object) -> TypeGuard[Sequence[str]]:
+    """Uma sequência de strings — a segunda forma que um atributo OTel pode ter.
+
+    `str` e `bytes` são sequências e não contam: a primeira já foi tratada como
+    escalar, e a segunda não tem string dentro.
+
+    Sequência **mista** também não conta, e isso não é um buraco: a
+    OpenTelemetry exige sequência homogênea, então uma lista com um número no
+    meio já é atributo inválido e não sobrevive ao export. Tentar redigi-la só
+    trocaria um atributo descartado por outro atributo descartado.
+    """
+    if isinstance(value, str | bytes) or not isinstance(value, Sequence):
+        return False
+    return len(value) > 0 and all(isinstance(item, str) for item in value)
 
 
 @lru_cache(maxsize=64)
@@ -214,5 +248,18 @@ def redactor() -> Redactor:
 
 
 def redact(value: str) -> str:
-    """Pattern-only redaction, for callers with no collected values to consider."""
+    """Pattern-only redaction, for callers with no collected values to consider.
+
+    **Exactly one production consumer: `db.py:main`**, and o número importa — era
+    a ressalva R-3 da verificação da S-02. Aquele CLI roda antes de a aplicação
+    existir, então não há registro de nomes coletados para consultar: só o que tem
+    forma pode ser mascarado ali.
+
+    Toda fronteira que roda **dentro** do processo de atendimento — o hook de
+    export do OpenTelemetry e o formatter de log — usa `redactor()`, que é
+    padrões *mais* os valores conhecidos. A distinção não é estética: um teste que
+    afirma sobre esta função aqui está medindo a metade fraca, e foi por isso que
+    as asserções de padrão de `tests/security/test_pii_redaction.py` passaram a
+    atravessar `redactor()`.
+    """
     return _PATTERNS_ONLY.text(value)

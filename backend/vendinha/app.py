@@ -30,11 +30,13 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, status
-from langchain_core.messages import HumanMessage
+from langchain.embeddings import init_embeddings
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.budget import run_with_timeout
+from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, QdrantBusca
 from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
@@ -61,8 +63,14 @@ from vendinha.schemas import (
     SessionEvent,
     TokenEvent,
 )
+from vendinha.subagents import recomendacao
 
 logger = logging.getLogger(__name__)
+
+
+class CatalogoIndisponivel(RuntimeError):
+    """O catálogo não está pronto. A mensagem diz qual comando resolve."""
+
 
 # Long enough that a conversation never pays for the lookup twice, short enough that
 # a key added straight into the environment shows up without a restart.
@@ -98,47 +106,77 @@ async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> As
         yield chunk
 
 
-def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> FastAPI:
+def create_app(
+    graph: Any | None = None,
+    store: ConfigStore | None = None,
+    catalogo: Catalogo | None = None,
+) -> FastAPI:
     """Build the application.
 
-    `graph` and `store` exist for the tests, and both are injected at seams the
-    architecture already declares: the model behind the graph is a `BaseChatModel`
-    (ADR-012), the checkpointer is a LangGraph interface with more than one
-    implementation, and `ConfigStore` is a protocol with a real in-memory sibling.
-    When they are `None` — the production path — the lifespan opens Postgres.
+    `graph`, `store` and `catalogo` exist for the tests, and os três são injetados
+    em costuras que a arquitetura já declara: o modelo por trás do grafo é um
+    `BaseChatModel` (ADR-012), o checkpointer é uma interface do LangGraph com mais
+    de uma implementação, e `ConfigStore` e `Catalogo` são protocolos com um irmão
+    em memória de verdade. Quando são `None` — o caminho de produção — o lifespan
+    abre o Postgres.
+
+    `catalogo` entrou na S-03 por causa da conferência de subida: um preflight que
+    o teste não consegue percorrer é um preflight que ninguém verifica, e era essa
+    a ressalva R-14.
     """
     settings = get_settings()
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def preparar(app: FastAPI, checkpointer: Any, fixed_graph: Any) -> None:
+        """Tudo que a subida faz além de abrir a conexão com o Postgres.
+
+        Isto era o corpo duplicado dos dois ramos do `lifespan`, e a duplicação
+        era a **ressalva R-14 da verificação da S-02**: o ramo de produção —
+        `graph is None` — não era alcançado por nenhum teste, então qualquer coisa
+        que entrasse ali (pool, migração, healthcheck) nascia sem defesa. E foi
+        exatamente o que aconteceu: a conferência de catálogo abaixo é nova.
+
+        Com o corpo aqui fora, o que sobra sem cobertura no ramo de produção é o
+        `async with` — que é a linha que só existe para abrir e fechar conexão.
+        """
         # After uvicorn has configured logging, never before: the filter attaches to
         # the root handlers, and there are none until the server sets them up.
         install_log_redaction()
         app.state.langfuse = callback_handler()
         app.state.graphs = {}
         app.state.models_cache = None
+        app.state.checkpointer = checkpointer
+        app.state.fixed_graph = fixed_graph
+        # A busca depende de credencial — ela embeda a necessidade do cliente —,
+        # então nasce `None` e é montada na primeira consulta, com a chave que
+        # estiver valendo naquele momento (ADR-012: banco por cima do ambiente).
+        app.state.busca = None
+        app.state.catalogo = catalogo or PostgresCatalogo(
+            with_connect_timeout(settings.database_url)
+        )
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
         )
+        await app.state.store.setup()
+        await _conferir_catalogo(app)
+        await _warm_models(app)
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if graph is not None:
-            app.state.checkpointer = None
-            app.state.fixed_graph = graph
-            await app.state.store.setup()
-            # Aquecer aqui também, e não só no ramo de produção: um trecho que só
-            # existe no caminho que nenhum teste percorre é um trecho que ninguém
-            # verifica. Sem credencial configurada isto é um no-op.
-            await _warm_models(app)
-            yield
+            await preparar(app, checkpointer=None, fixed_graph=graph)
+            try:
+                yield
+            finally:
+                await _fechar_busca(app)
             return
 
-        app.state.fixed_graph = None
         async with open_checkpointer(settings.database_url) as checkpointer:
-            app.state.checkpointer = checkpointer
-            await app.state.store.setup()
-            await _warm_models(app)
-            yield
+            await preparar(app, checkpointer=checkpointer, fixed_graph=None)
+            try:
+                yield
+            finally:
+                await _fechar_busca(app)
 
     app = FastAPI(
         title="Vendinha",
@@ -159,6 +197,59 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
             await _allowed_models(app)
         except Exception:
             logger.warning("nao consegui pre-carregar a lista de modelos", exc_info=True)
+
+    async def _conferir_catalogo(app: FastAPI) -> None:
+        """Recusa subir com o catálogo ausente ou vazio — ressalva R-10 da S-02.
+
+        Antes disso, quem esquecia `make db-setup` descobria na primeira mensagem
+        do cliente, como erro de tabela inexistente. Com o catálogo no banco a
+        falha piorou de forma: sem `make seed`, a tabela existe e está vazia, a
+        busca não acha nada, e o agente responde "não encontrei nada disso" com
+        toda a sinceridade. Parece problema do modelo e é problema de setup — a
+        pior classe de falha para diagnosticar.
+
+        Falhar aqui é ruidoso de propósito. A alternativa — subir e avisar no log —
+        é a que ninguém lê.
+        """
+        try:
+            quantos = await app.state.catalogo.quantos()
+        except Exception as erro:
+            raise CatalogoIndisponivel(
+                f"não consegui ler a tabela `produto`: {erro}. "
+                "Ela é criada por `make db-setup` e preenchida por `make seed`."
+            ) from erro
+        if quantos == 0:
+            raise CatalogoIndisponivel(
+                "a tabela `produto` está vazia. Rode `make seed`. "
+                "Sem catálogo o atendente responde que não encontrou nada — o que "
+                "parece falha do modelo e é falha de setup."
+            )
+
+    async def _fechar_busca(app: FastAPI) -> None:
+        """O cliente do Qdrant carrega conexão aberta; deixá-la para o GC é vazamento."""
+        busca = getattr(app.state, "busca", None)
+        if busca is not None:
+            await busca.aclose()
+            app.state.busca = None
+
+    async def _busca(app: FastAPI) -> Busca:
+        """A busca semântica, montada sob demanda com a credencial vigente.
+
+        Cacheada em `app.state` porque o cliente do Qdrant tem pool, e o
+        `PUT /config` a descarta junto com os grafos: trocar a chave do provedor
+        de embedding sem reconstruir aqui deixaria o processo embedando com a
+        credencial antiga até o próximo restart.
+        """
+        if app.state.busca is not None:
+            existente: Busca = app.state.busca
+            return existente
+
+        provider, model = split_model(settings.embedding_model)
+        api_key = (await _credentials(app)).get(provider)
+        embeddings = init_embeddings(model, provider=provider, api_key=api_key)
+        app.state.busca = QdrantBusca(settings.qdrant_url, settings.qdrant_collection, embeddings)
+        nova: Busca = app.state.busca
+        return nova
 
     async def _credentials(app: FastAPI) -> dict[str, str]:
         """Environment first, stored configuration on top — stored always wins."""
@@ -213,6 +304,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         built = build_graph(
             resolve_model(model_name, api_key),
             app.state.checkpointer,
+            recomendacao(await _busca(app), app.state.catalogo, settings.tool_timeout_seconds),
             budget_tokens=settings.session_budget_tokens,
         )
         app.state.graphs[model_name] = built
@@ -315,6 +407,7 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
         # which entries went stale.
         request.app.state.graphs.clear()
         request.app.state.models_cache = None
+        await _fechar_busca(request.app)
         return await read_config(request)
 
     @app.post("/chat")
@@ -355,6 +448,15 @@ def create_app(graph: Any | None = None, store: ConfigStore | None = None) -> Fa
                         stream_mode="messages",
                     )
                     async for chunk, _ in _bounded_first_token(token_stream, timeout):
+                        # Só o que o ATENDENTE diz. `stream_mode="messages"` emite
+                        # também os `ToolMessage`, e o retorno das tools desta spec
+                        # é JSON — sem este filtro o cliente recebia o payload
+                        # inteiro do catálogo no meio da frase, com nome de tool e
+                        # estrutura interna junto. `adversarial-004` e
+                        # `adversarial-006` reprovam uma execução que revela
+                        # qualquer um dos dois.
+                        if not isinstance(chunk, AIMessage | AIMessageChunk):
+                            continue
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.

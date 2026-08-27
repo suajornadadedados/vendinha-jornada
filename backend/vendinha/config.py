@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # host and remember to fix later. See D-8 in the S-02 spec.
     app_env: str = "local"
 
+    # Lido por `install_log_redaction`, que é o único ponto do processo que mexe
+    # no logger raiz. Estava no `.env.example` marcado (S-02) e nenhum código o
+    # lia — ressalva R-5 da verificação da S-02.
+    log_level: str = "INFO"
+
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
@@ -54,6 +59,24 @@ class Settings(BaseSettings):
 
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
     llm_model: str = "anthropic:claude-haiku-4-5"
+
+    # Qdrant: where the catalogue is ranked. No fact lives there — the index
+    # returns ids by similarity and Postgres asserts the rest (S-03, `catalogo.py`).
+    qdrant_url: str = "http://127.0.0.1:6333"
+    qdrant_collection: str = "catalogo"
+
+    # What turns into a vector, in the same `provedor:modelo` shape as the chat
+    # model. Anthropic offers no embedding endpoint, so this requires an
+    # OPENAI_API_KEY even on an instance that only talks through Anthropic — that
+    # is S-03 D-1, and the cost is written there and in `.env.example` rather than
+    # discovered here.
+    embedding_model: str = "openai:text-embedding-3-small"
+
+    # The model that judges the eval cases, `provedor:modelo`. Unset means the
+    # judge is the agent's own model, and the runner says so out loud: a model
+    # grading its own output is a known bias, and a ruler must not hide it from
+    # whoever reads the report (S-03, ADR-006).
+    evals_judge_model: str | None = None
 
     # `LANGFUSE_HOST` is the v3 name and `LANGFUSE_BASE_URL` is the current one.
     # Both are accepted so an existing `.env` keeps working; see D-1 in the spec.

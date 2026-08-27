@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup api test lint format typecheck evals-check evals hooks
+.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -20,7 +20,10 @@ logs:  ## Segue o log dos serviços
 db-setup:  ## Cria as tabelas do checkpointer do LangGraph (rode uma vez após `make up`)
 	cd backend && uv run python -m vendinha.db
 
-api:  ## Sobe a API (precisa de `make up` e `make db-setup` antes)
+seed:  ## Carrega o catálogo no Postgres e no Qdrant (rode após `make db-setup`)
+	cd backend && uv run python -m vendinha.ingest
+
+api:  ## Sobe a API (precisa de `make up`, `make db-setup` e `make seed` antes)
 	cd backend && uv run python -m vendinha
 
 test:  ## Suíte completa: unit + security
@@ -40,9 +43,12 @@ typecheck:  ## mypy strict no backend E na suite de testes
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
 
+evals-groundedness:  ## Roda os 6 casos da S-03 contra o agente (precisa de `make up`, `db-setup` e `seed`)
+	cd backend && uv run python -m vendinha.evals.runner --spec S-03
+
 evals:  ## Executa a suíte de evals contra o agente (chega na S-06)
-	@echo "O runner de evals é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
-	@echo "Por enquanto use: make evals-check — valida os casos contra o schema."
+	@echo "A suíte completa é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
+	@echo "Por enquanto: make evals-check (schema, sem agente) e make evals-groundedness (S-03)."
 	@exit 1
 
 hooks:  ## Instala os portões locais (pre-commit, commit-msg, pre-push)

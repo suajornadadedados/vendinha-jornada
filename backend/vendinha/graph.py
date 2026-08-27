@@ -1,20 +1,28 @@
-"""The smallest graph that can hold a conversation — and remember it.
+"""O grafo: conversa, chama tool, conversa de novo — e continua sem guardar payload.
 
-One node, one edge in, one edge out. Everything interesting about this file is in
-what it refuses to hold rather than in what it does.
+Duas coisas mudaram na S-03, e as duas são sobre o que o grafo *continua* não
+fazendo.
 
-**Pointer, not payload (RNF-6).** `ConversationState` has two keys and is meant to
-stay that way. A checkpointer that carries business objects becomes a second copy
-of the database: nobody migrates it, nobody invalidates it, and it disagrees with
-Postgres the first time a price changes. When a later spec needs the order in the
-conversation, the shape is `pedido_id: str` plus a read through a tool.
+**Ganhou um laço de tools e nenhuma chave de estado.** `ConversationState` segue
+com duas chaves, e `tests/unit/test_session_resume.py` trava esse conjunto de
+propósito. As chamadas de tool e os retornos viajam dentro de `messages`, que é
+para onde o LangGraph já os manda — guardar "o último produto consultado" no
+estado seria começar a segunda cópia do catálogo que o `catalogo.py` existe para
+evitar (RNF-6, R9).
 
-**The model is injected, never constructed here.** `BaseChatModel` is the port
-(ADR-012), which is what lets this module know nothing about Anthropic, OpenAI or
-whatever comes third — and what lets the tests stand a fake in the same place.
+**O prompt e as tools vêm de fora, do registro de `subagents.py`.** O grafo não
+sabe quais tools existem nem escolhe entre elas: recebe um `Subagent` montado e
+faz o bind. É o que mantém a fronteira do ADR-002 num lugar só — se ela morasse
+aqui, cada mudança no grafo seria uma mudança na fronteira de permissão.
 
-**The budget is checked before the call, not after.** A guard that refuses once the
-model has already answered protects nothing: the money is spent (RNF-3, R6).
+**O teto de tokens continua sendo checado antes de cada chamada**, e agora isso
+inclui as chamadas *depois* de uma tool. É também o que limita o laço: cada volta
+acrescenta tokens de resposta, então um modelo preso pedindo tool para sempre bate
+no teto e para com uma frase que o cliente entende, em vez de girar (R6).
+
+**O modelo é injetado, nunca construído aqui.** `BaseChatModel` é a porta
+(ADR-012), que é o que permite ao módulo não conhecer Anthropic nem OpenAI, e aos
+testes colocarem um duplo no mesmo lugar.
 """
 
 from typing import Annotated, Any, TypedDict
@@ -26,28 +34,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from vendinha.budget import LIMIT_REACHED_MESSAGE, within_budget
-
-# Deliberately short, and deliberately fenced. This agent has no catalogue, no
-# price and no tool until S-03/S-04 — so the one thing it must not do is sound
-# like it has them. A friendly model with nothing to read invents a cheese.
-SYSTEM_PROMPT = """Você é o atendente da Vendinha, um empório mineiro digital.
-
-Fale como gente: cordial, direto, sem formalidade de robô e sem emoji.
-
-Você ainda NÃO tem acesso ao catálogo, a preços, a estoque ou a prazos. Enquanto
-for assim, você não afirma nada sobre produto — nem nome, nem preço, nem
-disponibilidade, nem prazo de entrega. Se perguntarem, diga com naturalidade que
-ainda não consegue consultar o catálogo, e ofereça continuar a conversa no que
-estiver ao seu alcance. Inventar um produto para não decepcionar é o pior
-resultado possível.
-
-Isso vale para tudo que você não tem, não só para produto: você não tem telefone,
-e-mail, endereço, horário de funcionamento nem canal alternativo para oferecer.
-Não mande o cliente procurar a loja por um caminho que você inventou.
-
-Nunca repita em texto o CPF, o e-mail ou o endereço que o cliente informar."""
+from vendinha.subagents import Subagent
 
 # Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
 # settings, and the endpoint passes it in. It exists so a test — or a script — can
@@ -78,9 +68,16 @@ def session_config(session_id: str) -> RunnableConfig:
 def build_graph(
     model: BaseChatModel,
     checkpointer: BaseCheckpointSaver[Any],
+    subagent: Subagent,
     budget_tokens: int = DEFAULT_BUDGET_TOKENS,
 ) -> CompiledStateGraph[ConversationState, Any, Any, Any]:
-    """Compile the conversation graph against an injected model and checkpointer."""
+    """Compile the conversation graph against an injected model, checkpointer and subagent."""
+
+    tools = subagent.tools
+    # `bind_tools` only when there are tools: a subagent with an empty list is a
+    # valid shape (it is what the budget and resume tests build), and binding an
+    # empty list would demand `bind_tools` support from every fake model.
+    falante = model.bind_tools(tools) if tools else model
 
     async def conversa(state: ConversationState) -> dict[str, list[AnyMessage]]:
         if not within_budget(state["messages"], budget_tokens):
@@ -92,11 +89,21 @@ def build_graph(
         # The system prompt is prepended for the call and never stored in state:
         # storing it would append a copy on every turn, and the checkpoint would
         # grow a prompt per message.
-        answer = await model.ainvoke([SystemMessage(content=SYSTEM_PROMPT), *state["messages"]])
+        answer = await falante.ainvoke([SystemMessage(content=subagent.prompt), *state["messages"]])
         return {"messages": [answer]}
 
     builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
     builder.add_node("conversa", conversa)
     builder.add_edge(START, "conversa")
-    builder.add_edge("conversa", END)
+
+    if not tools:
+        builder.add_edge("conversa", END)
+        return builder.compile(checkpointer=checkpointer)
+
+    builder.add_node("ferramentas", ToolNode(tools))
+    # `tools_condition` reads the last message: tool calls go to the tool node,
+    # anything else ends the turn. The edge back into `conversa` is what closes
+    # the loop — and what makes the budget check above run again on the way in.
+    builder.add_conditional_edges("conversa", tools_condition, {"tools": "ferramentas", END: END})
+    builder.add_edge("ferramentas", "conversa")
     return builder.compile(checkpointer=checkpointer)

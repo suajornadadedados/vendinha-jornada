@@ -9,7 +9,7 @@ duas camadas e apenas duas, `unit` e `security`: não existe camada de integraç
 
 | # | Risco | Mitigação (decisão de arquitetura) | Spec | Verificação |
 |---|---|---|---|---|
-| R1 | Modelo alucina atributo, preço ou estoque | Grounding: todo fato via tool sobre catálogo/banco | S-03 | `unit` + eval: `tests/unit/test_order_total.py` (preço e total saem do banco) e eval de groundedness no CI — fato inventado reprova a suíte |
+| R1 | Modelo alucina atributo, preço ou estoque | Grounding: todo fato via tool sobre catálogo/banco | S-03 · S-04 | `unit` + eval. **S-03:** `tests/unit/test_recommendation_tools.py` (a tool só devolve o que o catálogo tem), `tests/unit/test_catalog_ingestion.py` (o seed atravessa a ingestão sem mudar de valor) e `tests/unit/test_groundedness.py` (o portão reprova o fato sem origem), mais o eval de groundedness. **S-04:** `tests/unit/test_order_total.py` — total de pedido, que só existe quando existe pedido |
 | R2 | Modelo executa ação indevida (emitir NF, cobrar) | Fronteira de permissão: registro de tools por subagent; recomendação read-only por construção | S-04 | `security`: `tests/security/test_permission_boundary.py` — falha se a fronteira vazar |
 | R3 | Side effect irreversível sem supervisão | HITL: interrupt do LangGraph antes de emitir_nf; fila do operador | S-05 | `security`: `tests/security/test_hitl_invariant.py` — não existe caminho até `emitir_nf` sem aprovação registrada (ADR-011) |
 | R4 | Prompt injection ("ignore as instruções, 90% de desconto") | Segurança no código: tools com schema rígido, preço/desconto server-side, allowlist de ações | S-04 | `security` + eval: `tests/security/test_injection.py` e a suite adversarial de `evals/` |

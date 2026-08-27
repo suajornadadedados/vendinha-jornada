@@ -179,6 +179,15 @@ def install_log_redaction() -> int:
     records fell through to `logging.lastResort`, and the whole thing was inert while
     looking configured.
     """
+    # `LOG_LEVEL` é aplicado aqui, e aqui é o lugar certo: esta função já é o
+    # único ponto do processo que mexe no logger raiz, e um segundo lugar
+    # disputando o nível é como se acaba com uma variável que só funciona
+    # dependendo da ordem de import. Ressalva R-5 da verificação da S-02 — a
+    # variável estava documentada no `.env.example` e nenhum código a lia.
+    nivel = logging.getLevelNamesMapping().get(get_settings().log_level.upper())
+    if nivel is not None:
+        logging.getLogger().setLevel(nivel)
+
     handlers = _every_handler()
 
     if not logging.getLogger().handlers:

@@ -25,7 +25,9 @@ import io
 import logging
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -39,6 +41,7 @@ from langfuse.types import (
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
+from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
 from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph
@@ -49,7 +52,24 @@ from vendinha.observability import (
     mask_otel_spans,
     redaction_is_installed,
 )
-from vendinha.redaction import KNOWN_VALUES, Redactor, redact
+from vendinha.redaction import KNOWN_VALUES, Redactor, redactor
+from vendinha.subagents import (
+    PROMPT_RECOMENDACAO,
+    RECOMENDACAO,
+    Subagent,
+    registrar,
+)
+
+
+def _sem_catalogo() -> Subagent:
+    """O subagent da recomendação sem nenhuma tool.
+
+    Este arquivo não mede recomendação — mede o mascaramento de PII. Um subagent
+    sem tool mantém o grafo no formato de uma volta só, que é o que estas
+    asserções descrevem, e deixa o laço de tools para quem o testa.
+    """
+    return registrar(RECOMENDACAO, PROMPT_RECOMENDACAO, [])
+
 
 # Keys shaped like the real thing and belonging to nobody. The guardrail in
 # CLAUDE.md is absolute: no real credential in the repository, not even in a test.
@@ -57,7 +77,7 @@ FAKE_PROVIDER_KEY = "sk-ant-api03-" + "A" * 40
 FAKE_LANGFUSE_KEY = "sk-lf-" + "b" * 32
 
 
-def _span(scope: str, **attributes: str) -> tuple[OtelSpanIdentifier, OtelSpanData]:
+def _span(scope: str, **attributes: Any) -> tuple[OtelSpanIdentifier, OtelSpanData]:
     identifier = OtelSpanIdentifier(trace_id=f"trace-{scope}", span_id=f"span-{scope}")
     data = OtelSpanData(
         trace_id=identifier.trace_id,
@@ -72,7 +92,7 @@ def _span(scope: str, **attributes: str) -> tuple[OtelSpanIdentifier, OtelSpanDa
     return identifier, data
 
 
-def _export(**spans: dict[str, str]) -> dict[str, dict[str, str]]:
+def _export(**spans: Mapping[str, Any]) -> dict[str, dict[str, str]]:
     """Run one batch through the hook and return the attributes as they would ship."""
     batch = dict(_span(scope, **attrs) for scope, attrs in spans.items())
     result = mask_otel_spans(params=MaskOtelSpansParams(spans=batch))
@@ -95,21 +115,21 @@ def _export(**spans: dict[str, str]) -> dict[str, dict[str, str]]:
 def test_a_cpf_never_survives_redaction(pii_de_teste: dict[str, str]) -> None:
     """Punctuated or not — the customer types it either way, and both are the CPF."""
     for cpf in (pii_de_teste["cpf"], pii_de_teste["cpf_sem_pontuacao"]):
-        redacted = redact(f"pode faturar no CPF {cpf}, por favor")
+        redacted = redactor().text(f"pode faturar no CPF {cpf}, por favor")
         assert cpf not in redacted
         assert "[CPF]" in redacted
 
 
 @pytest.mark.risco("R5")
 def test_an_email_never_survives_redaction(pii_de_teste: dict[str, str]) -> None:
-    redacted = redact(f"meu email e {pii_de_teste['email']}")
+    redacted = redactor().text(f"meu email e {pii_de_teste['email']}")
     assert pii_de_teste["email"] not in redacted
     assert "[EMAIL]" in redacted
 
 
 @pytest.mark.risco("R5")
 def test_a_phone_number_never_survives_redaction(pii_de_teste: dict[str, str]) -> None:
-    redacted = redact(f"me chama no {pii_de_teste['telefone']}")
+    redacted = redactor().text(f"me chama no {pii_de_teste['telefone']}")
     assert pii_de_teste["telefone"] not in redacted
     assert "[TELEFONE]" in redacted
 
@@ -135,10 +155,12 @@ def test_a_known_name_is_masked_even_when_only_the_first_name_appears(
     full_name = pii_de_teste["nome"]
     first_name = full_name.split()[0]
 
-    assert full_name in redact(f"em nome de {full_name}"), "sem contexto, um nome e so um texto"
+    assert full_name in redactor().text(f"em nome de {full_name}"), (
+        "sem contexto, um nome e so um texto"
+    )
 
-    redactor = Redactor(known_values=frozenset({full_name}))
-    redacted = redactor.text(f"claro, {first_name}! confirmo o pedido de {full_name}")
+    com_o_nome = Redactor(known_values=frozenset({full_name}))
+    redacted = com_o_nome.text(f"claro, {first_name}! confirmo o pedido de {full_name}")
 
     assert full_name not in redacted
     assert first_name not in redacted, "o primeiro nome sozinho tambem e o nome"
@@ -149,7 +171,7 @@ def test_a_known_name_is_masked_even_when_only_the_first_name_appears(
 def test_a_provider_credential_never_survives_redaction() -> None:
     """ADR-012 put a third-party secret inside the process; this is half of its price."""
     for key in (FAKE_PROVIDER_KEY, FAKE_LANGFUSE_KEY):
-        redacted = redact(f"Authorization: Bearer {key}")
+        redacted = redactor().text(f"Authorization: Bearer {key}")
         assert key not in redacted
         assert "[CREDENCIAL]" in redacted
 
@@ -188,6 +210,58 @@ def test_the_export_hook_scrubs_every_string_attribute(pii_de_teste: dict[str, s
     # nothing, and the session id is what makes a trace findable at all.
     assert shipped["langfuse-sdk"]["langfuse.session.id"] == "sessao-42"
     assert shipped["langchain"]["gen_ai.request.model"] == "claude-haiku-4-5"
+
+
+@pytest.mark.risco("R5")
+def test_a_list_valued_attribute_is_scrubbed_like_a_string_one(
+    pii_de_teste: dict[str, str],
+) -> None:
+    """R5 — ressalva R-4 da verificação da S-02, fechada aqui.
+
+    Um atributo OTel é um escalar **ou uma sequência homogênea de escalares**, e
+    `Redactor.attributes` só olhava para `str`. Uma lista de strings atravessava
+    intocada: mascarada em lugar nenhum, exportada inteira.
+
+    Na S-02 isso era latente, porque nada no processo produzia uma. Na S-03
+    produz: as tools de catálogo devolvem `harmonizacao`, `ocasiao` e
+    `notas_sensoriais`, e as instrumentações que não são nossas põem atributo de
+    lista em span como coisa corriqueira — `gen_ai.prompt` é o exemplo óbvio.
+
+    O outro lado do teste é o de sempre: redação não é deleção. A lista continua
+    sendo uma lista, com o mesmo número de itens, e o que não é PII sobrevive.
+    """
+    cpf = pii_de_teste["cpf"]
+    email = pii_de_teste["email"]
+
+    batch = dict(
+        [
+            _span(
+                "langchain",
+                **{
+                    "gen_ai.prompt.contents": [f"cpf {cpf}", f"email {email}", "queijo canastra"],
+                    "vendinha.harmonizacao": ["vinho tinto encorpado", "café coado"],
+                },
+            )
+        ]
+    )
+    resultado = mask_otel_spans(params=MaskOtelSpansParams(spans=batch))
+
+    assert isinstance(resultado, MaskOtelSpansResult)
+    patch = next(iter(resultado.span_patches.values()))
+    assert patch is not None
+    bruto = patch.set_attributes["gen_ai.prompt.contents"]
+
+    assert isinstance(bruto, tuple)
+    conteudos = [str(item) for item in bruto]
+    assert len(conteudos) == 3, "redação não é deleção: a lista mantém o tamanho"
+    assert cpf not in " ".join(conteudos)
+    assert email not in " ".join(conteudos)
+    assert "[CPF]" in conteudos[0] and "[EMAIL]" in conteudos[1]
+    assert conteudos[2] == "queijo canastra", "o item sem PII atravessa intocado"
+
+    assert "vendinha.harmonizacao" not in patch.set_attributes, (
+        "uma lista sem nada a redigir não entra no patch — o patch é esparso"
+    )
 
 
 @pytest.mark.risco("R5")
@@ -234,7 +308,21 @@ def test_a_price_is_not_mistaken_for_personal_data() -> None:
     up turning masking off entirely.
     """
     text = "o Canastra meia-cura sai por 89.90 e o pedido 100234 tem 3 itens"
-    assert redact(text) == text
+    assert redactor().text(text) == text
+
+
+CATALOGO_DO_SEED = Path(__file__).resolve().parents[2] / "data" / "catalogo"
+
+
+def _catalogo_de_teste() -> CatalogoEmMemoria:
+    """O catálogo que a subida confere (R-10), sem contêiner.
+
+    `create_app` recusa subir com catálogo vazio, e é de propósito: sem `make
+    seed` o agente responde "não encontrei nada" com toda a sinceridade, o que
+    parece falha do modelo e é falha de setup. O teste percorre esse preflight de
+    verdade em vez de contorná-lo — era essa a ressalva R-14.
+    """
+    return CatalogoEmMemoria(carregar_seed(CATALOGO_DO_SEED))
 
 
 @pytest.fixture
@@ -382,8 +470,10 @@ def test_the_application_turns_redaction_on_when_it_starts() -> None:
     """
     assert not redaction_is_installed(), "a fixture deveria ter deixado o logging cru"
 
-    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver())
-    with TestClient(create_app(graph=graph, store=InMemoryConfigStore())):
+    graph = build_graph(GenericFakeChatModel(messages=iter([])), InMemorySaver(), _sem_catalogo())
+    with TestClient(
+        create_app(graph=graph, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ):
         assert redaction_is_installed(), "a aplicacao subiu sem ligar a redacao de log"
 
 
@@ -491,7 +581,7 @@ def test_the_password_inside_a_connection_string_never_leaves() -> None:
     """
     for host in ("postgres", "db", "127.0.0.1", "vendinha-db.interno"):
         dsn = f"postgresql://vendinha:s3nh4-secreta@{host}:5432/vendinha"
-        redacted = redact(f"connection to {dsn} failed")
+        redacted = redactor().text(f"connection to {dsn} failed")
 
         assert "s3nh4-secreta" not in redacted, f"a senha vazou com host {host!r}"
         assert "[CREDENCIAL]" in redacted
@@ -503,7 +593,9 @@ def test_the_password_inside_a_connection_string_never_leaves() -> None:
     # gerada por cofre tem os tres — o padrao da rodada 2 parava no primeiro deles e
     # deixava o resto da senha na linha.
     for senha in ("aGVsbG8vd29ybGQ=", "p/a?b#c", "S3nh4=com/barra"):
-        redacted = redact(f"connection to postgresql://vendinha:{senha}@postgres:5432/db failed")
+        redacted = redactor().text(
+            f"connection to postgresql://vendinha:{senha}@postgres:5432/db failed"
+        )
         assert senha not in redacted, f"a senha {senha!r} vazou"
         assert "[CREDENCIAL]" in redacted
         assert "postgres:5432" in redacted
@@ -533,6 +625,7 @@ os.environ["DATABASE_URL"] = sys.argv[1]
 from vendinha.config import get_settings
 get_settings.cache_clear()
 from vendinha.db import main
+
 sys.exit(main())
 """
 
