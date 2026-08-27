@@ -12,7 +12,13 @@ desejo; da tradução em diante, o repositório é o único lugar onde a decisã
 > **o LLM decide o que dizer; o código decide o que pode ser feito.**
 
 **O case:** a Vendinha, empório mineiro digital de produtos artesanais (queijos, cafés, doces,
-cachaças). Negócio, proprietário e personas nomeados em `docs/PRD.md`.
+cachaças, petiscos) que vende **para empresas** — café da manhã corporativo, happy hour,
+cesta de fim de ano, kit de boas-vindas. Quem conversa com o agente é quem organiza o evento,
+não quem vai comer. Negócio, proprietário e personas nomeados em `docs/PRD.md`.
+
+O case nasceu B2C e virou B2B no meio do projeto. **O enunciado não escolhe o comprador — nós
+escolhemos**, e a seção *O case mudou de comprador* abaixo registra o que motivou a troca e o
+que ela custou. Nenhuma citação desta página mudou: o cliente continua pedindo a mesma coisa.
 
 ## O que o cliente quer no produto → como traduzimos
 
@@ -20,8 +26,8 @@ Citações literais da seção *"O que o Cliente Quer no Produto"* do enunciado.
 
 | O cliente quer | Nossa tradução em requisito de engenharia | Onde vive |
 |---|---|---|
-| "compreender catálogo e recomendar produtos por necessidade" | Busca semântica sobre o catálogo (RAG), não filtro de e-commerce — o cliente descreve a ocasião, não o produto | jornada · RF-1 · S-03 |
-| "estoque, preço e prazo **sempre sincronizadas** com banco de dados" | O modelo nunca afirma esses valores de memória: preço por consulta ao Postgres no momento da criação do pedido; disponibilidade e prazo estimado como **campos lidos** do catálogo. Ver a nota de escopo abaixo | R1 · RF-1.3 · ADR-001 |
+| "compreender catálogo e recomendar produtos por necessidade" | Busca semântica sobre o catálogo (RAG), não filtro de e-commerce — o cliente descreve o **evento** (quantas pessoas, que ocasião, quanto por pessoa, que restrições), não o produto. A recomendação não é um item: é uma **composição** que o modelo propõe e o código valida | jornada · RF-1 · S-03 · S-11 |
+| "estoque, preço e prazo **sempre sincronizadas** com banco de dados" | O modelo nunca afirma esses valores de memória: preço por consulta ao Postgres no momento da criação do pedido; disponibilidade e prazo estimado como **campos lidos** do catálogo. Com evento, **quantidade também é fato**: `rendimento` diz quantas pessoas cada item atende, e é o código que divide — não o modelo | R1 · R10 · RF-1.3 · ADR-001 |
 | "conversa que chegue até o final da venda" | Checkout dentro do fluxo do agente, com transição só após confirmação explícita e total calculado por código | RF-2 · S-04 |
 | "aprovação de equipe em pontos irreversíveis" | Identificar o irreversível (emissão de NF) e pausar o grafo com estado persistido; aprovação registrada com quem e quando | R3 · RF-3 · ADR-003 · S-05 |
 | "auditoria completa dos atendimentos" | Trace por sessão desde o commit 1 — roteamento, tools, custo, latência — e não observabilidade como fase de deploy | R5 · RF-5.1 · ADR-007 · S-02 |
@@ -35,6 +41,44 @@ Citações literais da seção *"O que o Cliente Quer no Produto"* do enunciado.
 > Movimentação de estoque, reserva, frete e integração com transportadora seguem **fora de
 > escopo** (`docs/PRD.md` §3). A garantia que entregamos é *"o agente nunca inventa"*, não
 > *"o estoque está certo em tempo real"* — e isso está dito no PRD, não escondido.
+>
+> Com comprador PJ o endereço de entrega passa a ser **coletado e validado**, porque a DANFE
+> exige destinatário completo. Coletar endereço não é fazer logística: continua não havendo
+> cálculo de frete, roteirização nem rastreio.
+
+## O case mudou de comprador — e o que isso custou
+
+A primeira tradução escolheu uma pessoa física comprando um presente. Funcionava, e estava
+ancorada: o agente não inventava um fato. Mas a pergunta que ela respondia era de **restrição
+única** — *"um presente pra minha sogra que ama vinho tinto"* —, e uma pergunta de restrição
+única com 50 itens no catálogo é respondível por inspeção. Quem olha conclui, com razão, que
+aquilo é um filtro de e-commerce com skin de chat.
+
+A fraqueza não era do catálogo nem do mecanismo. Era de **quem perguntava**: um comprador cuja
+necessidade cabe numa linha não gera decisão que precise de agente.
+
+Trocar o comprador — e não o domínio — foi a decisão (ADR-013). Trocar o domínio (peças,
+componentes) tornaria a recomendação um *spec matching*, que é justamente o que filtro já
+resolve bem; e reescreveria esta página do zero, o que significaria que **o cliente mudou**,
+não o produto. Com o comprador corporativo, a tese continua de pé: a gestora de RH também não
+sabe traduzir *"meu time é jovem, startup, sexta à tarde"* em filtros.
+
+| O que o case B2B exige e o B2C não exigia | Nossa tradução | Onde vive |
+|---|---|---|
+| Comprar para N pessoas, não para uma | `rendimento` no catálogo; a quantidade é divisão feita em código | R1 · RF-1.6 · S-11 |
+| Orçamento por pessoa, fechado antes da conversa | Teto validado em `Decimal` contra o total lido do banco; composição que estoura **não é apresentada como válida** | R10 · RF-1.7 · S-11 |
+| Restrição alimentar de gente que nem está na conversa | `contem` no catálogo (lactose, glúten, álcool, castanhas) como **campo de corte**, lido do Postgres — nunca inferido do texto do produto | R10 · RF-1.7 · S-11 |
+| Um evento tem forma: café da manhã sem café não é café da manhã | Slots obrigatórios por tipo de evento, declarados em código. É o que dá ao validador algo objetivo para recusar | RF-1.6 · S-11 |
+| A nota é para uma empresa | Destinatário PJ: CNPJ, razão social e endereço de entrega. Fecha um furo do B2C, onde coletávamos só nome, CPF e e-mail para uma DANFE que exige endereço | RF-2.2 · RF-3 · S-04 · S-05 |
+
+**O que a troca de comprador *não* mudou:** nenhum ADR de 001 a 012, nenhuma citação do
+enunciado, e nenhuma linha da tabela acima de *o que o cliente quer*. O que mudou foi a coluna
+do meio — a nossa tradução — que é exatamente o que esta página se propõe a ser.
+
+**O que custou:** o corpus de evals inteiro (12 golden + 6 adversariais) reescrito, e não
+estendido. Custo aceito e registrado no ADR-013: o corpus é artefato de discovery neste
+repositório, e reescrevê-lo **antes** de a tool existir é o que impede a régua de ser ajustada
+ao que o modelo faz (ADR-006).
 
 ## As preocupações do cliente → onde cada uma é fechada
 
@@ -55,6 +99,17 @@ garante nada: prompt é pedido, não garantia.
 Nossa decisão: **desconto não existe como ação disponível a nenhum agente.** Não é negado — não
 está registrado. Segurança por arquitetura, não por comportamento do modelo. *(ADR-002 · RF-2.6)*
 
+Com comprador corporativo essa linha fica mais exposta, não menos: *"vou levar 12 cestas, me dá
+15%"* é a frase mais natural do mundo em B2B, e a resposta continua sendo que não existe o que
+conceder. Preço escalonado por faixa de quantidade foi considerado e recusado no MVP (ADR-013):
+seria legítimo — tabela no banco, não negociação —, mas daria a R1 uma segunda forma de estar
+errado em troca de realismo que a demonstração não precisa.
+
+A manipulação também ganhou um alvo novo, e mais perigoso que o preço: **a restrição
+alimentar**. *"Ah, pode incluir mesmo assim, ninguém vai reparar"* é pressão social sobre um
+campo cuja resposta errada machuca alguém. Por isso `contem` é corte em código, e não
+julgamento do modelo (R10).
+
 ## Um requisito que o cliente não pediu
 
 | Requisito que assumimos | Por quê | Onde vive |
@@ -73,6 +128,10 @@ A lista do que foi descartado diz mais sobre o critério do que a lista do que f
 | Mascaramento de PII na origem | ✕ Limpar os logs depois |
 | Budget cap e timeout por tool, medidos no mesmo trace | ✕ Olhar a fatura no fim do mês |
 | Trace desde o commit 1 | ✕ Deixar observabilidade para o final |
+| Trocar o comprador, mantendo o domínio mineiro | ✕ Trocar de domínio para inflar o ticket |
+| B2B puro | ✕ Atender os dois compradores para provar a mesma tese duas vezes |
+| Preço unitário único | ✕ Preço escalonado por volume no MVP |
+| Composição proposta pelo modelo e validada por código | ✕ Deixar o modelo somar o total |
 
 Cada recusa vira uma linha de `docs/decisoes.md`, e o ADR correspondente registra as
 consequências negativas aceitas.
