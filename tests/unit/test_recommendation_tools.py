@@ -124,7 +124,7 @@ async def test_an_unknown_id_is_reported_as_missing_instead_of_dropped(
     assert resposta["nao_encontrados"] == ["queijo-que-nao-existe"]
     assert [item["id"] for item in resposta["encontrados"]] == ["queijo-canastra-meia-cura"]
 
-    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_id="queijo-que-nao-existe")
+    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_ids=["queijo-que-nao-existe"])
     assert detalhe["nao_encontrados"] == ["queijo-que-nao-existe"]
     assert detalhe.get("encontrados", []) == []
 
@@ -268,8 +268,8 @@ async def test_detail_carries_the_type_specific_attributes(
     queijo = next(produto for produto in seed if produto.tipo == "queijo" and produto.maturacao)
     cafe = next(produto for produto in seed if produto.tipo == "cafe" and produto.torra)
 
-    detalhe_queijo = await _chamar(ferramentas["detalhar_produto"], produto_id=queijo.id)
-    detalhe_cafe = await _chamar(ferramentas["detalhar_produto"], produto_id=cafe.id)
+    detalhe_queijo = await _chamar(ferramentas["detalhar_produto"], produto_ids=[queijo.id])
+    detalhe_cafe = await _chamar(ferramentas["detalhar_produto"], produto_ids=[cafe.id])
 
     assert detalhe_queijo["encontrados"][0]["maturacao"] == queijo.maturacao
     assert detalhe_cafe["encontrados"][0]["torra"] == cafe.torra
@@ -291,7 +291,7 @@ async def test_detail_carries_the_declared_allergens(
     """
     com_alergeno = next(produto for produto in seed if produto.contem)
 
-    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_id=com_alergeno.id)
+    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_ids=[com_alergeno.id])
 
     assert detalhe["encontrados"][0]["contem"] == list(com_alergeno.contem)
 
@@ -308,9 +308,51 @@ async def test_detail_carries_how_many_people_the_item_serves(
     """
     algum = seed[0]
 
-    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_id=algum.id)
+    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_ids=[algum.id])
 
     assert detalhe["encontrados"][0]["rendimento"] == algum.rendimento
+
+
+@pytest.mark.risco("R6")
+async def test_detail_answers_for_a_whole_composition_in_one_call(
+    ferramentas: dict[str, BaseTool], seed: tuple[Produto, ...]
+) -> None:
+    """R6, RNF-3 — seis produtos numa chamada, porque o custo é por volta do laço.
+
+    Cada ida ao modelo reenvia a conversa inteira, então detalhar seis produtos um
+    a um custa seis reenvios do histórico pelo mesmo dado. Numa composição de
+    evento essa diferença é o que separa caber no teto de sessão de estourá-lo com
+    o trabalho já feito.
+
+    Nada afrouxou: a regra continua sendo que todo produto citado passou por
+    `detalhar_produto`. Mudou quantas vezes se bate na porta.
+    """
+    alvos = [produto.id for produto in seed[:6]]
+
+    resposta = await _chamar(ferramentas["detalhar_produto"], produto_ids=alvos)
+
+    assert [item["id"] for item in resposta["encontrados"]] == alvos
+    for item in resposta["encontrados"]:
+        assert "rendimento" in item and "contem" in item
+
+
+@pytest.mark.risco("R1")
+async def test_detail_keeps_the_order_it_was_asked_for(ferramentas: dict[str, BaseTool]) -> None:
+    """R1 — a ordem devolvida é a pedida, mesmo com um id inexistente no meio.
+
+    O modelo casa o retorno com a lista que mandou. Se a ordem viesse do mapa do
+    banco, ele descreveria um produto com os atributos de outro — alucinação
+    produzida por um agente que se comportou corretamente.
+    """
+    pedidos = ["doce-de-leite-cremoso", "nao-existe", "cafe-cerrado-torra-media"]
+
+    resposta = await _chamar(ferramentas["detalhar_produto"], produto_ids=pedidos)
+
+    assert [item["id"] for item in resposta["encontrados"]] == [
+        "doce-de-leite-cremoso",
+        "cafe-cerrado-torra-media",
+    ]
+    assert resposta["nao_encontrados"] == ["nao-existe"]
 
 
 @pytest.mark.risco("R10")
@@ -357,7 +399,7 @@ async def test_a_recovered_description_reaches_the_model_as_data_not_as_a_field_
         for tool in ferramentas_de_catalogo(BuscaEmMemoria([envenenado]), catalogo, SEM_TIMEOUT)
     }
 
-    resposta = await _chamar(ferramentas["detalhar_produto"], produto_id=envenenado.id)
+    resposta = await _chamar(ferramentas["detalhar_produto"], produto_ids=[envenenado.id])
 
     item = resposta["encontrados"][0]
     assert "INSTRUCAO AO ASSISTENTE" in item["descricao"], (
