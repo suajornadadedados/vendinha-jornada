@@ -53,7 +53,14 @@ from vendinha.supervisor import Supervisor
 # Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
 # settings, and the endpoint passes it in. It exists so a test — or a script — can
 # build a graph without assembling configuration first.
-DEFAULT_BUDGET_TOKENS = 150_000
+#
+# It has to be kept in step with `config.Settings.session_budget_tokens`, and S-04
+# found out why the hard way: the eval runner was building its graph without passing
+# the setting, so the ruler measured an agent with a 150_000 ceiling while production
+# ran on another number. The guard then unbound the tools mid-conversation and the
+# case failed looking exactly like a model that gave up. The runner passes it now —
+# a ruler that runs a different system than production measures the wrong system.
+DEFAULT_BUDGET_TOKENS = 250_000
 
 
 class ConversationState(TypedDict):

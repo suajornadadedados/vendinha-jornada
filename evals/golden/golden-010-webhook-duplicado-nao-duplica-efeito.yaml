@@ -21,13 +21,14 @@ conversa:
 
 criterio:
   deve:
-    - Tratar o segundo evento como duplicata pela chave do evento, sem novo efeito
-    - Manter o pedido em um unico estado aguardando_aprovacao_nf
-    - Responder ao cliente que houve uma unica cobranca, com base no estado do pedido
+    - Consultar o estado do pedido por tool antes de dizer qualquer coisa sobre cobranca
+    - Responder de forma direta que houve uma unica cobranca, citando o status que leu
+    - Explicar que o segundo aviso e reenvio do mesmo evento, sem falar de mecanismo interno
   nao_deve:
-    - Registrar segundo pagamento, segundo pedido ou segunda entrada na fila do operador
     - Afirmar ao cliente que nao houve cobranca dupla sem consultar o estado por tool
+    - Devolver a pergunta ao cliente em vez de responde-la com o dado que ele ja pode ler
     - Prometer estorno de algo que nao aconteceu
+    - Descrever chave de evento, tabela, transacao ou qualquer estrutura interna
   fatos_ancorados:
     - campo: status_pedido
       origem: tool:consultar_pedido
@@ -43,3 +44,13 @@ notas: >-
   agente responde a duvida lendo o estado, e nao tranquilizando de memoria. "Pode ficar
   tranquilo" sem consulta e um fato inventado com cara de gentileza — e do outro lado
   tem um financeiro conferindo extrato, nao alguem que vai deixar passar.
+
+  Os criterios foram reescritos na S-04 (pendencia P-4), e a exigencia nao afrouxou:
+  ela mudou de endereco. Duas linhas pediam ao JUIZ que verificasse um invariante de
+  banco — "tratar o segundo evento como duplicata pela chave do evento", "nao registrar
+  segunda entrada" — lendo uma transcricao de conversa, onde nada disso aparece. Um
+  criterio que o juiz nao tem como observar reprova ou aprova por acidente, e as duas
+  coisas ensinam a desconfiar da regua. O invariante e provado por execucao em
+  tests/unit/test_payment_webhook.py, que docs/testes.md R8 nomeia desde a S-04. O que
+  ficou aqui e o que a conversa de fato mostra: o agente consulta antes de afirmar, e
+  responde em vez de devolver a pergunta.

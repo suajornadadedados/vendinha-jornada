@@ -116,7 +116,27 @@ class Settings(BaseSettings):
     # It is also the right side of the economics after the ADR-013: the ticket went
     # from tens of reais to thousands, and a ceiling that saves a fraction of a cent
     # by dropping an order is not a saving.
-    session_budget_tokens: int = 150_000
+    #
+    # **Raised again in S-04, and measured the same way.** 150_000 was chosen for a
+    # flow that ENDED at the composition. The checkout adds turns after it — company
+    # data, a refusal and a correction, the order, the link — and `make evals-checkout`
+    # reported what that costs:
+    #
+    #     golden-010        18k    reads an existing order, one turn
+    #     golden-009        53k    composition, then a customer who pauses
+    #     golden-003       107k    composition, confirmation, company data, order, link
+    #     golden-008       135k    the same, plus a refused CNPJ and a correction
+    #     golden-015       146k    two compositions in one order
+    #
+    # The soft line takes the tools away at 80% of the cap (`budget.ANSWER_RESERVE`),
+    # which at 150_000 is 120k — below the top of the NORMAL range. The symptom is
+    # nasty precisely because it is not an error: the agent collects the data, says it
+    # is closing, and then cannot call `criar_pedido`, because the guard had already
+    # unbound it. It reads as a model that gave up.
+    #
+    # 250_000 puts the soft line at 200k, above the measured maximum with room for a
+    # longer order, and stays a hard bound on the loop `adversarial-006` builds.
+    session_budget_tokens: int = 250_000
 
     # Ceiling for one external call: a tool when they arrive in S-03, and today
     # the wait for the model's first token.
