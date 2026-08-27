@@ -40,8 +40,8 @@ modelo escolhe com gosto e o código recusa com aritmética.
       corporativa. `docs/PRD.md` com persona nova, RF-1.6/RF-1.7 (composição) e RF-2.2 em PJ.
       `docs/jornada.md` com a etapa nova — *montar composição: LLM propõe, código valida*.
 - [ ] REQ-3 **R10** na matriz de `docs/riscos.md` e na tabela risco→teste de `docs/testes.md`,
-      com o arquivo de verificação nomeado e a spec responsável. `docs/arquitetura.md` §3.1 e
-      §3.4 atualizados.
+      com o arquivo de verificação nomeado e a spec responsável. `docs/arquitetura.md` com a
+      §3.3 nova (*Onde o código recusa o modelo*) e §3.1, §3.4 e §3.5 atualizadas.
 - [ ] REQ-4 `data/catalogo/schema/produto.schema.json` com `rendimento` e `contem` obrigatórios
       e `petisco` no enum de `tipo`. `data/catalogo/README.md` explica por que cada um existe.
 - [ ] REQ-5 Seed enriquecido: todos os produtos com `rendimento` e `contem`, mais petiscos

@@ -62,12 +62,20 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 | **R7** Regressão silenciosa de prompt | eval | a suíte inteira, no job `evals` do CI | `evals/` |
 | **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface | `tests/unit/test_ports.py` |
 | **R9** Estado corrompido em conversa longa | `unit` + verificação manual | retomada a partir do checkpoint | `tests/unit/test_session_resume.py` |
+| **R10** Composição estoura orçamento ou viola restrição | `unit` (S-11) → **`security`** (S-04) | que o validador recusa; e depois, que não há caminho até pedido com composição inválida | `tests/unit/test_composicao.py` · `tests/security/test_composicao_invariants.py` |
 
 **Um risco pode ter mais de um arquivo, e a linha diz de qual spec é cada um.** A R1 é o
 primeiro caso: a S-03 prova que nenhum fato chega ao cliente sem ter vindo de tool, e a S-04
 prova que o total de um pedido sai do banco. As duas metades são o mesmo risco, e nenhuma
 sozinha o fecha. A verificação independente da S-03 pegou esta linha apontando para um arquivo
 que ainda não existia — cruzamento que falha em silêncio é pior do que lacuna declarada.
+
+**R10 nasce em `unit` e migra para `security`, de propósito.** Na S-11 ainda não existe
+`criar_pedido`: um teste de `security` afirmando *"nenhum pedido viola restrição declarada"*
+passaria por **vacuidade**, e a §3.3 é explícita sobre isso. O que dá para provar na S-11 é que o
+validador recusa. Quando a escrita existir, na S-04, o invariante ganha o teste de `security` que
+o fecha. É o mesmo argumento que fez o registro de permissão nascer na S-03 e
+`test_permission_boundary.py` só na S-04.
 
 **R2 e R3 não são negociáveis.** Não são cobertura, são o requisito. Um sistema em que o
 subagent de recomendação consegue escrever, ou em que existe caminho de emissão sem aprovação
