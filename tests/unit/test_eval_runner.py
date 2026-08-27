@@ -16,16 +16,19 @@ Sem rede, sem agente e sem chave de API: os casos são lidos do repositório e o
 juiz é um duplo.
 """
 
+import json
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
+from langchain_core.language_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 
-from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
+from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
@@ -34,6 +37,7 @@ from vendinha.evals.runner import (
     Resultado,
     _abertura_do_cenario,
     relatorio,
+    rodar_caso,
 )
 
 pytestmark = pytest.mark.requires_backend
@@ -356,6 +360,124 @@ def test_the_opening_falls_back_when_the_case_names_no_product() -> None:
     sem_produtos = caso.model_copy(update={"produtos_validos": ()})
 
     assert _abertura_do_cenario(sem_produtos, []) == "Oi! O que vocês têm por aí?"
+
+
+# ------------------------------------------------- a fiação, e não só as peças
+
+
+class ModeloQueBusca(BaseChatModel):
+    """Um agente de mentira que sempre busca e depois responde.
+
+    Precisa ser um `BaseChatModel` de verdade porque `rodar_caso` monta o grafo:
+    o `GenericFakeChatModel` perde as `tool_calls` ao streamar, e sem elas o
+    `ToolNode` nunca roda — o teste passaria sem exercitar nada.
+    """
+
+    @property
+    def _llm_type(self) -> str:
+        return "modelo-que-busca"
+
+    def bind_tools(self, tools: Any, *, tool_choice: Any = None, **kwargs: Any) -> Any:
+        del tools, tool_choice, kwargs
+        return self
+
+    def _generate(
+        self, messages: Any, stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
+        del stop, run_manager, kwargs
+        # Uma busca por turno do cliente, depois uma frase. Alternar pela presença
+        # de `ToolMessage` no histórico é o que faz o laço terminar.
+        ja_buscou = any(isinstance(mensagem, ToolMessage) for mensagem in messages)
+        if ja_buscou:
+            resposta = AIMessage(content="É esse aí mesmo.")
+        else:
+            resposta = AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "buscar_produtos",
+                        "args": {"necessidade": "cafe"},
+                        "id": f"c{len(messages)}",
+                    }
+                ],
+            )
+        return ChatResult(generations=[ChatGeneration(message=resposta)])
+
+
+async def _rodar(caso: Any) -> Any:
+    """Roda um caso pelo `rodar_caso` de verdade, sem rede e sem provedor."""
+    seed = carregar_seed(CATALOGO)
+    do_catalogo = [(p.id, p.nome, p.preco) for p in seed]
+    return await rodar_caso(
+        caso,
+        ModeloQueBusca(),
+        BuscaEmMemoria(seed),
+        CatalogoEmMemoria(seed),
+        30.0,
+        do_catalogo,
+        None,
+    )
+
+
+@pytest.mark.risco("R4")
+async def test_a_system_turn_actually_reaches_the_agent_as_a_poisoned_tool_return() -> None:
+    """R4 — NC-1 da verificação independente da S-03, e o achado mais caro dela.
+
+    `CatalogoEnvenenado` tem teste. `_abertura_do_cenario` tem teste. **Quem os
+    liga não tinha**, e o verificador mediu o preço: trocar o bloco de
+    envenenamento por `envenenamento = None` desligava o vetor de injeção inteiro
+    do `adversarial-004` e deixava a suíte com 446 testes verdes. O caso
+    continuaria aprovando — pelo motivo errado, e sem nada avisar.
+
+    É a mesma classe que a verificação da S-02 já tinha nomeado: *testo a função
+    que faz, e não que alguém a chama*. Este teste percorre `rodar_caso` inteiro e
+    exige as duas metades: a abertura de cenário aconteceu, e o texto injetado
+    chegou dentro de um retorno de tool.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03") if c.familia == "adversarial")
+    injetado = next(fala.texto for fala in caso.conversa if fala.de == "sistema")
+
+    resultado = await _rodar(caso)
+
+    retornos = json.dumps(
+        [chamada.retorno for chamada in resultado.transcricao.chamadas], ensure_ascii=False
+    )
+    assert "INSTRUCAO AO ASSISTENTE" in retornos, (
+        "o texto do turno `de: sistema` nao chegou ao agente: o CatalogoEnvenenado "
+        "nao foi ligado em rodar_caso"
+    )
+    assert injetado[:40] in retornos
+
+    # A abertura do cenário é a segunda metade, e o sinal dela é derivado do caso:
+    # o agente respondeu UM turno a mais do que o caso tem de falas do cliente.
+    # Sem a abertura, esses números seriam iguais.
+    falas_do_caso = [fala for fala in caso.conversa if fala.de == "cliente"]
+    assert len(resultado.transcricao.respostas) == len(falas_do_caso) + 1, (
+        "o agente respondeu um turno por fala do caso: a abertura de cenario nao rodou"
+    )
+
+
+@pytest.mark.risco("R4")
+async def test_a_case_without_a_system_turn_is_never_poisoned() -> None:
+    """R4 — a outra metade: o envenenamento não pode vazar para caso que não pediu.
+
+    Sem esta, `rodar_caso` poderia envenenar sempre e o teste acima continuaria
+    verde — e todo caso golden passaria a rodar contra um catálogo adulterado.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03") if c.familia == "golden")
+    assert all(fala.de != "sistema" for fala in caso.conversa)
+
+    resultado = await _rodar(caso)
+
+    retornos = json.dumps(
+        [chamada.retorno for chamada in resultado.transcricao.chamadas], ensure_ascii=False
+    )
+    assert "INSTRUCAO AO ASSISTENTE" not in retornos
+
+    falas_do_caso = [fala for fala in caso.conversa if fala.de == "cliente"]
+    assert len(resultado.transcricao.respostas) == len(falas_do_caso), (
+        "caso sem turno de sistema ganhou um turno a mais: a abertura vazou"
+    )
 
 
 # -------------------------------------------------------------------- o relatório

@@ -15,11 +15,20 @@ O modelo conversa; o catálogo afirma. Subagent de recomendação com tools read
 Qdrant e banco, e o primeiro eval de groundedness pegando alucinação.
 
 ## Requisitos
-- [ ] REQ-1 Ingestão do seed no Qdrant (embeddings + payload estruturado para filtros).
-- [ ] REQ-2 Tools read-only: `buscar_produtos` (semântica+filtros), `detalhar_produto`, `consultar_preco` (Postgres).
-- [ ] REQ-3 Subagent `recomendacao` registrado com exclusivamente tools read-only.
-- [ ] REQ-4 Prompt proíbe afirmar fato sem origem em tool; preço citado = preço retornado por `consultar_preco`.
-- [ ] REQ-5 Eval de groundedness executável localmente (`make evals-groundedness`) sobre 6 casos golden.
+- [x] REQ-1 Ingestão do seed no Qdrant (embeddings + payload estruturado para filtros).
+- [x] REQ-2 Tools read-only: `buscar_produtos` (semântica+filtros), `detalhar_produto`, `consultar_preco` (Postgres).
+- [x] REQ-3 Subagent `recomendacao` registrado com exclusivamente tools read-only.
+- [x] REQ-4 Prompt proíbe afirmar fato sem origem em tool; preço citado = preço retornado por `consultar_preco`.
+- [x] REQ-5 Eval de groundedness executável localmente (`make evals-groundedness`) sobre os **6 casos
+      que declaram `spec: S-03`** — 5 golden mais o `adversarial-004`.
+
+> O REQ-5 dizia "6 casos golden". O corpus tem cinco golden com `spec: S-03` e um adversarial, e o
+> sexto é justamente o que prova a injeção vinda do próprio catálogo — o vetor específico do RAG.
+> Texto alinhado ao corpus real na correção do NC-9; a contagem nunca mudou.
+>
+> **REQ conforme não é métrica atingida.** Os cinco requisitos estão entregues e o relatório de
+> verificação os declara conformes; a métrica da tabela abaixo **não** foi atingida (NC-3), e o
+> motivo está isolado na DESC-1.
 
 ## Fora de escopo
 Checkout, supervisor completo (roteamento binário simples é suficiente aqui).
@@ -60,7 +69,54 @@ Cenário: alucinação plantada é detectada
 - Confirmar no registro de subagents que `recomendacao` não possui tool de escrita.
 
 ## Definition of Done
-- [ ] Checklist padrão do template
+- [x] Todos os requisitos CONFORMES no relatório de verificação — REQ-1 a REQ-5 conformes
+      (§3 do relatório). O que ficou fora foi **métrica**, não requisito: ver NC-3 e DESC-1.
+- [x] CI verde (lint, typecheck, testes) — `make lint`, `make typecheck` e `make test` verdes.
+      **`evals` não é check de CI nesta spec**: o job está pulado por decisão do workflow e liga
+      na S-06, com o `scripts/evals-ci.sh` que sobe a infraestrutura. Ver NC-5 e a correção no
+      `.github/workflows/ci.yml`.
+- [ ] PR com evidência (screenshot + trace Langfuse) — pendente, é o próximo passo
+- [x] Relatório `/verificar-spec` anexado — `docs/specs/relatorios/S-03-verificacao.md`,
+      veredito **APROVADO COM RESSALVAS**. As condições de fechamento 1 a 5 foram corrigidas
+      nesta branch, antes do PR; a 6 e a 7 são decisão do PO e estão registradas abaixo.
+
+## Correções aplicadas depois da verificação independente
+
+O relatório listou sete condições de fechamento, em ordem de importância. As três primeiras
+eram "correção antes do PR"; as demais admitiam registro escrito como alternativa.
+
+| # | Condição | O que foi feito |
+|---|---|---|
+| 1 | **NC-1** — testar a fiação do envenenamento em `rodar_caso` | Corrigido. `rodar_caso` passou a receber um `BaseChatModel` pronto em vez de `(nome, api_key)` — sem essa costura nenhum teste conseguia percorrer a função. Dois testes novos em `test_eval_runner.py`: um exige que o texto do turno `de: sistema` chegue dentro de um retorno de tool **e** que a abertura de cenário tenha rodado; o outro exige que caso sem turno de sistema **não** seja envenenado. Falsifiquei nos dois sentidos — `envenenamento = None` (a quebra B36 do relatório) e "envenena sempre" reprovam |
+| 2 | **NC-2** — as seis lacunas de `buscar_produtos` | Corrigido. Seis testes novos em `test_recommendation_tools.py`, com um `Busca` de ordem fixa como costura. Rodei as seis quebras exatas do relatório: **B20, B21, B25, B26, B27 e B28 reprovam** |
+| 3 | **NC-4** — a linha R1 aponta arquivo que não existe | Corrigido. `docs/riscos.md` e `docs/testes.md` §2 passaram a nomear os arquivos que provam o R1 hoje (S-03) e o que falta (S-04, `test_order_total.py`). O `docs/testes.md` ganhou a nota de que um risco pode ter mais de um arquivo. Os dois são CODEOWNERS — a mudança passa pelo PO na revisão, que é o desenho |
+| 4 | **NC-5** — o job `evals` do CI | Corrigido, e o gatilho mudou de natureza. Ele apontava para `backend/evals/runner.py`, caminho que nunca existiu: teria ficado `false` para sempre, parecendo "ainda não chegou". Agora aponta para `scripts/evals-ci.sh`, que é o que **de fato** falta — o runner já existe, e mesmo assim o job não pode ligar sem Postgres, Qdrant e catálogo semeado. O módulo e a flag inexistente também foram corrigidos |
+| 5 | **NC-7 / NC-9** — caixas e texto do REQ-5 | Corrigido nesta seção e no REQ-5 |
+| 6 | **RS-1 / RS-2** — ADR-013 e o contrato de `buscar_produtos` | **Decisão do PO, registrada e não tomada por mim.** Ver "Pendências do PO" abaixo |
+| 7 | **NC-6** — código de saída do `make evals-groundedness` | **Medido.** Caso reprovado → `EXIT=1`; caso aprovado → `EXIT=0`. O alvo é gate de verdade; a S-06 só precisa ligar o job |
+
+### O que continua aberto, e por escolha
+
+**NC-3 — a métrica da spec não foi atingida.** 4 de 6 casos, e os dois que reprovam trocam
+entre execuções. A causa está isolada (DESC-1 / D-3) e a decisão de seguir é do PO, tomada com
+a medição na mão. O relatório aceitou pelo mesmo motivo: *"uma spec que entrega o eval vermelho
+com a causa isolada vale mais do que uma que entrega verde sem ninguém saber por quê"*.
+
+**NC-8 — o DDL `numeric(8,2)` não é verificável por teste.** É a consequência declarada de não
+existir camada de integração (`docs/testes.md` §1). O verificador conferiu à mão contra Postgres
+real: `('numeric', 8, 2)` no `information_schema`, 50/50 preços em `Decimal` exato. A garantia é
+humana e precisa ser refeita a cada rodada — está registrado, não escondido.
+
+## Pendências do PO (RS-1 e RS-2 do relatório)
+
+Duas decisões que não são minhas e que a S-04 encosta:
+
+1. **RS-1 — o D-1 vira ADR-013, ou a recusa fica registrada.** Exigir `OPENAI_API_KEY` para
+   `make seed` numa instância que conversa só por Anthropic contraria a letra do RNF-1. Está
+   declarado em três lugares e nunca passou por ADR.
+2. **RS-2 — decidir o contrato de `buscar_produtos` ANTES da S-04.** O conserto nomeado na
+   DESC-1 (tirar `preco` e `disponivel` do retorno) muda um contrato Pydantic que a S-04 vai
+   consumir. Decidir depois custa retrabalho nas duas specs.
 
 ---
 

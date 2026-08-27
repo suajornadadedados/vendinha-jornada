@@ -53,7 +53,7 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 
 | Risco | Camada | O que se prova | Arquivo |
 |---|---|---|---|
-| **R1** Alucina atributo, preço ou estoque | `unit` + eval | preço e total saem de código/banco, nunca de texto | `tests/unit/test_order_total.py` |
+| **R1** Alucina atributo, preço ou estoque | `unit` + eval | preço e total saem de código/banco, nunca de texto | S-03: `test_recommendation_tools.py`, `test_catalog_ingestion.py`, `test_groundedness.py` · S-04: `test_order_total.py` |
 | **R2** Executa ação indevida | **`security`** | o registro `subagent → tools` não tem escrita na recomendação | `tests/security/test_permission_boundary.py` |
 | **R3** Side effect irreversível sem supervisão | **`security`** | não há caminho até `emitir_nf` sem aprovação registrada | `tests/security/test_hitl_invariant.py` |
 | **R4** Prompt injection | **`security`** + eval | payload injetado não alcança tool com side effect | `tests/security/test_injection.py` |
@@ -62,6 +62,12 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 | **R7** Regressão silenciosa de prompt | eval | a suíte inteira, no job `evals` do CI | `evals/` |
 | **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface | `tests/unit/test_ports.py` |
 | **R9** Estado corrompido em conversa longa | `unit` + verificação manual | retomada a partir do checkpoint | `tests/unit/test_session_resume.py` |
+
+**Um risco pode ter mais de um arquivo, e a linha diz de qual spec é cada um.** A R1 é o
+primeiro caso: a S-03 prova que nenhum fato chega ao cliente sem ter vindo de tool, e a S-04
+prova que o total de um pedido sai do banco. As duas metades são o mesmo risco, e nenhuma
+sozinha o fecha. A verificação independente da S-03 pegou esta linha apontando para um arquivo
+que ainda não existia — cruzamento que falha em silêncio é pior do que lacuna declarada.
 
 **R2 e R3 não são negociáveis.** Não são cobertura, são o requisito. Um sistema em que o
 subagent de recomendação consegue escrever, ou em que existe caminho de emissão sem aprovação

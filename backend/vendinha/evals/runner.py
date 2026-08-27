@@ -41,7 +41,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha import runtime
-from vendinha.catalogo import Catalogo, PostgresCatalogo, Produto, QdrantBusca
+from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, Produto, QdrantBusca
 from vendinha.config import REPO_ROOT, get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
@@ -163,15 +163,30 @@ def _abertura_do_cenario(caso: Caso, do_catalogo: Sequence[tuple[str, str, Decim
 
 async def rodar_caso(
     caso: Caso,
-    modelo_do_agente: str,
-    api_key_do_agente: str | None,
-    busca: QdrantBusca,
+    modelo_do_agente: BaseChatModel,
+    busca: Busca,
     catalogo: Catalogo,
     timeout_seconds: float,
     do_catalogo: Sequence[tuple[str, str, Decimal]],
     juiz_modelo: BaseChatModel | None,
 ) -> Resultado:
-    """Reproduz a conversa do caso contra o agente e aplica as duas metades da régua."""
+    """Reproduz a conversa do caso contra o agente e aplica as duas metades da régua.
+
+    **O modelo chega pronto, e as portas são as interfaces e não as implementações.**
+    Isto era `(nome_do_modelo, api_key)` com um `resolve_model` aqui dentro, e
+    aquela forma não tinha costura: nenhum teste conseguia percorrer esta função,
+    então a fiação entre o turno `de: sistema`, o `CatalogoEnvenenado` e o
+    `_abertura_do_cenario` não era provada por ninguém.
+
+    A verificação independente da S-03 mediu o preço disso (NC-1): trocar o bloco
+    de envenenamento por `envenenamento = None` **desligava o vetor de injeção
+    inteiro do `adversarial-004`** e deixava a suíte com 446 testes verdes — o caso
+    continuaria "aprovando", pelo motivo errado, sem nada avisar. As duas peças
+    tinham teste isolado; **quem as liga, não**. É a classe de erro que o relatório
+    da S-02 já tinha nomeado: *testo a função que faz e não que alguém a chama*.
+
+    `resolve_model` subiu para `rodar`, que é onde a credencial já vive.
+    """
     envenenamento = next(
         (fala.texto for fala in caso.conversa if fala.de == "sistema"),
         None,
@@ -181,7 +196,7 @@ async def rodar_caso(
     )
 
     graph = build_graph(
-        resolve_model(modelo_do_agente, api_key_do_agente),
+        modelo_do_agente,
         InMemorySaver(),
         recomendacao(busca, catalogo_do_caso, timeout_seconds),
     )
@@ -303,8 +318,7 @@ async def rodar(spec: str = SPEC_PADRAO, apenas: str | None = None) -> list[Resu
             resultados.append(
                 await rodar_caso(
                     caso,
-                    modelo_do_agente,
-                    credenciais.get(provider_do_agente),
+                    resolve_model(modelo_do_agente, credenciais.get(provider_do_agente)),
                     busca,
                     catalogo,
                     settings.tool_timeout_seconds,

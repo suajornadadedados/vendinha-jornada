@@ -23,7 +23,12 @@ import pytest
 from langchain_core.tools import BaseTool
 
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, Produto, carregar_seed
-from vendinha.tools.catalogo import NOMES, ProdutoDetalhado, ferramentas_de_catalogo
+from vendinha.tools.catalogo import (
+    FOLGA_DE_RANQUEAMENTO,
+    NOMES,
+    ProdutoDetalhado,
+    ferramentas_de_catalogo,
+)
 
 pytestmark = pytest.mark.requires_backend
 
@@ -308,3 +313,190 @@ async def test_a_recovered_description_reaches_the_model_as_data_not_as_a_field_
     assert set(item) <= set(ProdutoDetalhado.model_fields), (
         f"o retorno ganhou campo fora do contrato: {set(item) - set(ProdutoDetalhado.model_fields)}"
     )
+
+
+# ------------------------------------ o que a verificação independente achou solto
+#
+# NC-2 do relatório da S-03: seis quebras deliberadas em `buscar_produtos`
+# sobreviveram à suíte inteira. `preco_minimo` não tinha um único teste, e a
+# preservação da ordem do ranqueador — que o comentário do próprio código defende
+# como "a única coisa que a busca semântica produziu" — era um invariante
+# declarado em prosa e sustentado por ninguém.
+#
+# A costura destes testes é um `Busca` de mentira com ordem fixa. `Busca` é um
+# Protocol, então isto é uma segunda implementação e não um mock de colaborador
+# interno (ADR-004, `docs/testes.md` §4). Ordem fixa é o que torna "a ordem foi
+# preservada" uma afirmação verificável em vez de uma coincidência.
+
+
+class BuscaComOrdemFixa:
+    """Devolve exatamente os ids que recebeu, e anota o limite que lhe pediram."""
+
+    def __init__(self, ids: list[str]) -> None:
+        self._ids = ids
+        self.limite_pedido: int | None = None
+
+    async def ids_similares(
+        self, necessidade: str, *, tipo: str | None, apenas_disponiveis: bool, limite: int
+    ) -> list[str]:
+        del necessidade, tipo, apenas_disponiveis
+        self.limite_pedido = limite
+        return self._ids[:limite]
+
+
+def _com_ordem(
+    ids: list[str], seed: tuple[Produto, ...]
+) -> tuple[dict[str, BaseTool], BuscaComOrdemFixa]:
+    busca = BuscaComOrdemFixa(ids)
+    ferramentas = ferramentas_de_catalogo(busca, CatalogoEmMemoria(seed), SEM_TIMEOUT)
+    return {tool.name: tool for tool in ferramentas}, busca
+
+
+# A ordem é escolhida à mão e de propósito NÃO é a ordem de preço nem a de id:
+# só assim "reordenou por id" e "inverteu" são distinguíveis de "preservou".
+ORDEM_DO_RANQUEADOR = [
+    "queijo-canastra-curado",
+    "queijo-minas-frescal",
+    "queijo-parmesao-mineiro",
+    "queijo-canastra-fresco",
+    "queijo-serro-envelhecido",
+    "queijo-minas-padrao",
+]
+
+
+@pytest.mark.risco("R1")
+async def test_the_ranker_order_survives_the_trip_through_postgres(
+    seed: tuple[Produto, ...],
+) -> None:
+    """R1 — a ordem do ranqueador é a única coisa que a busca semântica produziu.
+
+    O Postgres devolve um mapa, não uma sequência: reordenar por id ou por preço
+    ao hidratar jogaria fora o ranqueamento inteiro e ninguém notaria, porque a
+    resposta continuaria cheia de produtos plausíveis. Era o achado NC-2 da
+    verificação independente — invariante que o código declarava em prosa e nenhum
+    teste sustentava.
+    """
+    ferramentas, _ = _com_ordem(ORDEM_DO_RANQUEADOR, seed)
+
+    resposta = await _chamar(
+        ferramentas["buscar_produtos"],
+        necessidade="queijo mineiro",
+        limite=len(ORDEM_DO_RANQUEADOR),
+    )
+
+    assert [item["id"] for item in resposta["encontrados"]] == ORDEM_DO_RANQUEADOR
+
+
+@pytest.mark.risco("R1")
+async def test_a_price_floor_excludes_what_costs_less(seed: tuple[Produto, ...]) -> None:
+    """R1 — `preco_minimo` não tinha nenhum teste, e é metade do filtro de faixa.
+
+    Está no contrato Pydantic e documentado ao modelo. Invertê-lo ou removê-lo
+    passava despercebido pela suíte inteira — então o cliente que pede "algo mais
+    encorpado, a partir de uns cem reais" poderia receber o mais barato da loja.
+    """
+    piso = Decimal("100.00")
+    do_seed = {produto.id: produto.preco for produto in seed}
+
+    ferramentas, _ = _com_ordem(ORDEM_DO_RANQUEADOR, seed)
+    resposta = await _chamar(
+        ferramentas["buscar_produtos"],
+        necessidade="queijo mineiro",
+        preco_minimo=piso,
+        limite=8,
+    )
+
+    encontrados = [item["id"] for item in resposta["encontrados"]]
+    assert encontrados, "o catálogo tem queijo acima de 100 reais; a busca devolveu vazio"
+    for identificador in encontrados:
+        assert do_seed[identificador] >= piso
+    # E o corte é de verdade: os baratos da ordem ficaram de fora.
+    assert "queijo-minas-frescal" not in encontrados
+
+
+@pytest.mark.risco("R1")
+async def test_a_price_window_keeps_only_what_falls_inside_it(
+    seed: tuple[Produto, ...],
+) -> None:
+    """R1 — piso e teto juntos, que é como um cliente descreve faixa de preço."""
+    ferramentas, _ = _com_ordem(ORDEM_DO_RANQUEADOR, seed)
+
+    resposta = await _chamar(
+        ferramentas["buscar_produtos"],
+        necessidade="queijo mineiro",
+        preco_minimo=Decimal("60.00"),
+        preco_maximo=Decimal("120.00"),
+        limite=8,
+    )
+
+    encontrados = {item["id"] for item in resposta["encontrados"]}
+    assert encontrados == {
+        "queijo-canastra-curado",  # 118,00
+        "queijo-canastra-fresco",  # 68,00
+    }, f"a janela 60-120 devolveu {encontrados}"
+
+
+@pytest.mark.risco("R1")
+async def test_the_ranker_is_asked_for_more_than_the_limit_so_the_price_filter_has_slack(
+    seed: tuple[Produto, ...],
+) -> None:
+    """R1 — a faixa de preço é aplicada DEPOIS do ranqueamento, no Postgres.
+
+    Sem folga, um pedido de "algo mais em conta" voltaria vazio sempre que os
+    primeiros do ranking fossem todos caros — e o modelo concluiria que a loja não
+    vende nada barato do gênero. `FOLGA_DE_RANQUEAMENTO` existe com essa
+    justificativa escrita, e zerá-la não reprovava nada.
+    """
+    ferramentas, busca = _com_ordem(ORDEM_DO_RANQUEADOR, seed)
+
+    await _chamar(ferramentas["buscar_produtos"], necessidade="queijo mineiro", limite=2)
+
+    assert busca.limite_pedido == 2 + FOLGA_DE_RANQUEAMENTO
+
+
+@pytest.mark.risco("R1")
+async def test_the_slack_is_what_finds_a_cheap_product_below_the_top_of_the_ranking(
+    seed: tuple[Produto, ...],
+) -> None:
+    """R1 — a consequência da folga, medida em vez de argumentada.
+
+    Os dois primeiros do ranqueamento custam 118,00 e 168,00. Pedindo `limite=2`
+    com teto de 70,00, só a folga alcança o Canastra fresco (68,00) lá embaixo.
+    Sem ela a resposta seria vazia — e vazia sem motivo é o convite para o modelo
+    oferecer algo de memória.
+    """
+    caros_primeiro = [
+        "queijo-canastra-curado",  # 118,00
+        "queijo-parmesao-mineiro",  # 168,00
+        "queijo-serro-envelhecido",  # 142,00
+        "queijo-defumado-da-mantiqueira",  # 108,00
+        "queijo-canastra-fresco",  # 68,00 — só a folga chega aqui
+    ]
+    ferramentas, _ = _com_ordem(caros_primeiro, seed)
+
+    resposta = await _chamar(
+        ferramentas["buscar_produtos"],
+        necessidade="queijo mineiro",
+        preco_maximo=Decimal("70.00"),
+        limite=2,
+    )
+
+    assert [item["id"] for item in resposta["encontrados"]] == ["queijo-canastra-fresco"]
+
+
+@pytest.mark.risco("R6")
+async def test_the_limit_caps_how_many_products_reach_the_model(
+    seed: tuple[Produto, ...],
+) -> None:
+    """R6 — devolver todos os candidatos enche o contexto e paga tokens por nada.
+
+    A folga faz o ranqueador ser consultado por mais do que o pedido; o corte
+    final tem que voltar ao `limite`, senão o cliente recebe um catálogo despejado
+    (RF-1.2) e a sessão gasta o teto mais rápido.
+    """
+    ferramentas, _ = _com_ordem(ORDEM_DO_RANQUEADOR, seed)
+
+    resposta = await _chamar(ferramentas["buscar_produtos"], necessidade="queijo mineiro", limite=2)
+
+    assert len(resposta["encontrados"]) == 2
+    assert [item["id"] for item in resposta["encontrados"]] == ORDEM_DO_RANQUEADOR[:2]
