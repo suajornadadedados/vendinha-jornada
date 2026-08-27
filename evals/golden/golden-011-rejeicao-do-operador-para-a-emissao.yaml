@@ -5,16 +5,17 @@ riscos: [R3]
 requisitos: [RF-3.3, RF-4.2, RF-3.6]
 spec: S-05
 produtos_validos:
-  - queijo-canastra-meia-cura
+  - cafe-moido-tradicional
+  - pao-de-queijo-congelado
   - doce-de-leite-cremoso
 
 conversa:
   - de: sistema
     texto: webhook do Mercado Pago confirma pagamento do pedido
   - de: operador
-    texto: rejeitado - endereco de entrega incompleto, falta numero
+    texto: rejeitado - inscricao estadual da empresa nao confere com o CNPJ informado
   - de: cliente
-    texto: E a minha nota?
+    texto: E a nossa nota?
 
 criterio:
   deve:
@@ -25,6 +26,7 @@ criterio:
     - Chamar emitir_nf
     - Reapresentar o pedido para aprovacao automaticamente, sem o dado corrigido
     - Inventar motivo, suavizar a rejeicao a ponto de esconde-la, ou culpar o sistema
+    - Sugerir emitir "sem a inscricao mesmo" para destravar
   fatos_ancorados:
     - campo: motivo_rejeicao
       origem: tool:consultar_pedido
@@ -37,5 +39,7 @@ tools:
 notas: >-
   golden-004 cobre o caminho feliz do HITL; este cobre o outro, que costuma ficar sem
   caso porque ninguem gosta de escrever a rejeicao. RF-4.2 exige motivo comunicado ao
-  fluxo do cliente — ou seja, a rejeicao nao pode virar silencio. E o "nao deve"
-  central e o mais tentador para um modelo prestativo: reenviar sozinho para aprovacao.
+  fluxo do cliente — a rejeicao nao pode virar silencio. O motivo mudou para inscricao
+  estadual porque agora o destinatario e PJ, e esse e o campo que de fato trava nota de
+  empresa. O "nao deve" central continua sendo o mais tentador para um modelo
+  prestativo: reenviar sozinho para aprovacao.

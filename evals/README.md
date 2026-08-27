@@ -17,8 +17,8 @@ ao lado do exemplo que o motivou — quem abre um caso entende por que ele falha
 
 | Pasta | O que cobre | Riscos citados pelos casos |
 |---|---|---|
-| `golden/` | O atendimento fazendo o que deveria: qualificar antes de recomendar, ancorar preço no banco, dizer o que está indisponível, recusar dado inválido, fechar a venda, pausar antes da nota, aceitar a rejeição do operador, ler o pós-venda sem escrever | R1, R2, R3, R8 |
-| `adversarial/` | O atendimento sob ataque: injeção pelo chat e pelo próprio catálogo, engenharia social contra o HITL e contra o preço, extração de PII, abuso de custo | R1, R2, R3, R4, R5, R6 |
+| `golden/` | O atendimento fazendo o que deveria: qualificar antes de recomendar, ancorar preço, alérgeno e rendimento no banco, dizer o que está indisponível, montar composição dentro do orçamento e dos slots do evento, recusar dado inválido, fechar a venda, pausar antes da nota, aceitar a rejeição do operador, ler o pós-venda sem escrever | R1, R2, R3, R8, R10 |
+| `adversarial/` | O atendimento sob ataque: injeção pelo chat e pelo próprio catálogo, engenharia social contra o HITL, contra o preço e contra a restrição alimentar, extração de PII, abuso de custo | R1, R2, R3, R4, R5, R6, R10 |
 
 **R7 e R9 não têm caso, e não é lacuna.** R7 é a suíte inteira rodando — nenhum caso individual o
 cobre, por definição. R9 é estado corrompido em conversa longa, que exige reiniciar o processo:
@@ -50,17 +50,17 @@ negadas por instrução; não estão lá. O caso serve para provar que continuam
 
 ## Dependência do seed
 
-Os casos citam produtos pelo nome exato do catálogo (Canastra meia-cura, doce de leite). O seed de
-50 produtos em `data/catalogo/` **precisa conter esses itens**, senão o caso reprova por motivo
-errado — falta de dado, não falha do agente. E essa é a pior reprovação possível, porque parece
-problema do modelo.
+Os casos citam produtos pelo nome exato do catálogo (Canastra meia-cura, pão de queijo). O seed
+de 65 produtos em `data/catalogo/` **precisa conter esses itens**, senão o caso reprova por
+motivo errado — falta de dado, não falha do agente. E essa é a pior reprovação possível, porque
+parece problema do modelo.
 
 Desde a S-01 essa dependência deixou de ser um acordo em prosa e virou um campo:
 
 ```yaml
 produtos_validos:
   - queijo-canastra-meia-cura
-  - doce-de-leite-cremoso
+  - pao-de-queijo-congelado
 ```
 
 São **ids** do seed, não nomes — o id é estável, o nome de vitrine não. `tests/unit/test_eval_corpus_is_traceable.py`
@@ -73,6 +73,28 @@ adversarial é sobre a superfície de ataque, e nem sempre passa por produto —
 
 **Ao mexer no seed, rode `make test`.** É o cruzamento que impede os dois diretórios de divergirem
 em silêncio.
+
+## Em que spec um caso mora, e por quê
+
+O campo `spec` não é etiqueta de assunto: é **a lista de tools contra a qual o caso roda**.
+`make evals-groundedness` executa `--spec S-03`, e o agente da S-03 tem três tools read-only
+sobre o catálogo e mais nada. Um caso que precise de `validar_composicao` não pode declarar
+`S-03` — ele reprovaria por tool ausente, que é reprovação por motivo errado, exatamente como
+citar produto inexistente.
+
+Foi esse o critério da repartição feita na S-10, quando o comprador virou corporativo:
+
+| Spec | O que os casos dela exigem |
+|---|---|
+| `S-02` | nada do catálogo — PII e custo |
+| `S-03` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`. **Groundedness pura**: preço, disponibilidade, `contem` e `rendimento` saem do banco, nunca da memória nem do nome do produto |
+| `S-11` | mais `validar_composicao` — orçamento, slots do evento e corte por restrição |
+| `S-04` | mais as tools de escrita — pedido, pagamento, dados da empresa |
+| `S-05` | emissão e fila do operador |
+
+É por isso que *"o biscoito de polvilho tem glúten?"* é um caso da S-03 e *"monte um café da
+manhã sem glúten para 15 pessoas"* é um caso da S-11. A pergunta é parecida; o que responde
+cada uma não é.
 
 ## Como rodar
 

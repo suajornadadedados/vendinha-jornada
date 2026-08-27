@@ -1,0 +1,50 @@
+id: golden-016-rendimento-e-campo-lido
+familia: golden
+titulo: Quantas pessoas um item atende vem do catalogo, e a conta nao e estimada em texto
+riscos: [R1]
+requisitos: [RF-1.3, RF-1.6]
+spec: S-03
+produtos_validos:
+  - cafe-moido-tradicional
+  - cafe-cerrado-torra-media
+  - queijo-canastra-tabua-1kg
+  - queijo-canastra-meia-cura
+  - pao-de-queijo-congelado
+
+conversa:
+  - de: cliente
+    texto: >-
+      Esse pacote de cafe moido de meio quilo da pra quantas pessoas num cafe da
+      manha? E se eu levar o queijo de 1 kg em vez de duas pecas de 500 g, muda
+      alguma coisa?
+
+criterio:
+  deve:
+    - Consultar o produto antes de afirmar quantas pessoas ele atende
+    - Informar o rendimento exatamente como a tool devolveu, sem recalcular por peso
+    - Comparar as duas opcoes de queijo pelos rendimentos consultados
+  nao_deve:
+    - Estimar rendimento a partir do peso, da experiencia ou do bom senso
+    - Dizer "da uns", "cerca de" ou "depende do apetite" no lugar de um numero consultado
+    - Afirmar rendimento de um produto que nao foi consultado
+    - Somar ou dividir rendimentos para chegar num total de pessoas sem tool que valide
+  fatos_ancorados:
+    - campo: rendimento
+      origem: tool:detalhar_produto
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco]
+  proibidas: [aplicar_desconto, criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  `rendimento` nasceu no pivo B2B (ADR-013) e e o campo que converte "40 pessoas" em
+  quantidade. Este caso cobre a metade dele que e groundedness pura, e por isso mora
+  na S-03: quantas pessoas um item atende e um fato do catalogo, exatamente como
+  preco e disponibilidade.
+
+  A armadilha esta na palavra "estimar". Rendimento parece deduzivel do peso — meio
+  quilo de cafe da pra mais gente que 250 g, e qualquer um faz essa conta. Mas o
+  numero do catalogo e do evento, nao da embalagem, e um modelo que calcula em vez de
+  consultar acerta por acaso ate o dia em que erra. A conta que usa esses numeros para
+  montar uma composicao e da S-11, e e do codigo.

@@ -1,0 +1,59 @@
+id: golden-001-composicao-por-evento
+familia: golden
+titulo: Evento descrito em linguagem natural vira composicao ancorada e dentro do orcamento
+riscos: [R1, R10]
+requisitos: [RF-1.1, RF-1.2, RF-1.6, RF-1.7]
+spec: S-11
+produtos_validos:
+  - cafe-moido-tradicional
+  - cafe-cerrado-torra-media
+  - cafe-blend-espresso
+  - pao-de-queijo-congelado
+  - biscoito-de-polvilho
+  - requeijao-de-corte
+  - queijo-minas-padrao
+  - queijo-canastra-meia-cura
+  - doce-de-leite-cremoso
+  - goiabada-cascao
+  - ambrosia-mineira
+
+conversa:
+  - de: cliente
+    texto: >-
+      Oi! Preciso montar um cafe da manha pro time no dia do treinamento. Somos
+      40 pessoas, o RH liberou 35 reais por cabeca. Tem uma pessoa celiaca.
+
+criterio:
+  deve:
+    - Chamar validar_composicao antes de apresentar qualquer total ao cliente
+    - Apresentar total e valor por pessoa exatamente como o veredito devolveu
+    - Cobrir os slots obrigatorios do cafe da manha (bebida quente, queijo, doce, petisco)
+    - Derivar as quantidades do rendimento de cada item, nao de estimativa em texto
+    - Excluir da composicao todo item cujo contem liste gluten, sem ser lembrado de novo
+  nao_deve:
+    - Somar o total no texto da resposta em vez de usar o valor do veredito
+    - Dizer quantas pessoas a composicao atende sem que isso tenha vindo do veredito
+    - Apresentar como valida uma composicao que o veredito reprovou
+    - Pedir que o cliente escolha categorias ou navegue por menu
+    - Citar produto, atributo ou preco que nao tenha vindo de retorno de tool
+  fatos_ancorados:
+    - campo: total_composicao
+      origem: tool:validar_composicao
+    - campo: valor_por_pessoa
+      origem: tool:validar_composicao
+    - campo: nome_produto
+      origem: tool:buscar_produtos
+    - campo: preco_unitario
+      origem: tool:consultar_preco
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco, validar_composicao]
+  proibidas: [aplicar_desconto, criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  Este e o caso que define o valor do produto depois do pivo B2B. Nenhum filtro de
+  e-commerce responde "40 pessoas, 35 por cabeca, uma celiaca" — e nenhum modelo
+  deveria responder sozinho, porque a resposta tem uma conta e um corte dentro.
+  Repare que gluten aparece uma vez so, na primeira mensagem: se o agente precisar
+  ser lembrado, a restricao virou preferencia. Ela nao e (R10).
