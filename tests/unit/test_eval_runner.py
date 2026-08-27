@@ -123,7 +123,7 @@ def test_the_transcript_pairs_each_tool_call_with_its_own_return() -> None:
             content="",
             tool_calls=[
                 {"name": "consultar_preco", "args": {"produto_ids": ["a"]}, "id": "c1"},
-                {"name": "detalhar_produto", "args": {"produto_id": "b"}, "id": "c2"},
+                {"name": "detalhar_produto", "args": {"produto_ids": ["b"]}, "id": "c2"},
             ],
         ),
         ToolMessage(content='{"encontrados": [{"id": "a", "preco": "89.90"}]}', tool_call_id="c1"),

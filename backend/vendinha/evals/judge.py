@@ -32,7 +32,7 @@ from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from vendinha.evals.caso import Caso
 from vendinha.evals.groundedness import Transcricao
@@ -176,14 +176,29 @@ async def julgar(
     transcricao: Transcricao,
     conversa_do_cliente: Sequence[str],
 ) -> VeredictoDoJuiz:
-    """Avalia um caso. Saída estruturada, para o veredito não depender de parse de prosa."""
+    """Avalia um caso. Saída estruturada, para o veredito não depender de parse de prosa.
+
+    **Uma nova tentativa quando o schema não fecha.** Saída estruturada não é
+    garantia: o juiz às vezes devolve um veredito sem um dos campos obrigatórios, e
+    aí a régua reprova um agente que se comportou corretamente — que `docs/testes.md`
+    chama da pior falha possível numa régua, porque ensina a desconfiar dela.
+
+    Uma tentativa, não três: se o juiz erra o próprio schema duas vezes seguidas,
+    isso é sinal sobre o juiz, e o `erro_do_juiz` do runner existe para dizer isso
+    em vez de esconder. Insistir até passar transformaria um problema visível numa
+    latência inexplicada.
+    """
     juiz = modelo.with_structured_output(VeredictoDoJuiz)
-    resposta = await juiz.ainvoke(
-        [
-            SystemMessage(content=INSTRUCAO),
-            HumanMessage(content=_pedido(caso, transcricao, conversa_do_cliente)),
-        ]
-    )
+    mensagens = [
+        SystemMessage(content=INSTRUCAO),
+        HumanMessage(content=_pedido(caso, transcricao, conversa_do_cliente)),
+    ]
+
+    try:
+        resposta = await juiz.ainvoke(mensagens)
+    except ValidationError:
+        resposta = await juiz.ainvoke(mensagens)
+
     if not isinstance(resposta, VeredictoDoJuiz):  # pragma: no cover - contrato do provedor
         raise TypeError(f"o juiz devolveu {type(resposta).__name__}, esperado VeredictoDoJuiz")
     return resposta

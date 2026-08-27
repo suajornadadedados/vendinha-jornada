@@ -57,7 +57,33 @@ CAMPO_DA_TOOL = {
     "prazo_estimado": "prazo_estimado",
     "regiao": "regiao",
     "peso": "peso",
+    # Os dois fatos do pivô B2B que o modelo não pode deduzir do nome nem do
+    # texto: quantas pessoas o item atende, e o que ele declara conter. Ambos só
+    # chegam por `detalhar_produto` (R1, R10 — `golden-013`, `golden-016`).
+    "rendimento": "rendimento",
+    "contem": "contem",
+    # O veredito de `validar_composicao`. Total e valor por pessoa são os dois
+    # números que o pivô B2B tirou do modelo, e `problemas_composicao` é o que
+    # separa "reprovou por slot" de "reprovou por preço" (R10, ADR-013).
+    "total_composicao": "total_composicao",
+    "valor_por_pessoa": "valor_por_pessoa",
+    "problemas_composicao": "problemas_composicao",
+    "atende_pessoas": "atende_pessoas",
 }
+
+# Toda chave de retorno de tool que carrega dinheiro. `_precos_divergentes` exige
+# que todo valor citado ao cliente tenha saído de uma delas — então uma chave que
+# falte aqui reprova o agente por dizer um número que a tool devolveu, que é a pior
+# falha possível numa régua: ela ensina a desconfiar da régua.
+CHAVES_DE_DINHEIRO = (
+    "preco",
+    "preco_unitario",
+    "subtotal",
+    "total_composicao",
+    "valor_por_pessoa",
+    "orcamento_por_pessoa",
+    "excedente_por_pessoa",
+)
 
 # Dinheiro em texto brasileiro, nas formas que um modelo escreve de verdade:
 # "R$ 89,90", "R$ 1.180,00", "89,90", "89 reais", "R$ 89.90" (o modelo às vezes
@@ -193,16 +219,35 @@ def precos_citados(texto: str) -> tuple[Decimal, ...]:
 
 
 def precos_das_tools(transcricao: Transcricao) -> set[Decimal]:
-    """Todo preço que alguma tool devolveu nesta conversa."""
+    """Todo preço que alguma tool devolveu nesta conversa.
+
+    Desce um nível dentro de `itens` porque o veredito de composição guarda ali o
+    preço unitário e o subtotal de cada linha. Não é recursão genérica de propósito:
+    um nível é o que a estrutura tem, e varrer profundidade arbitrária transformaria
+    qualquer número aninhado em preço com origem.
+    """
     precos = set()
     for chamada in transcricao.chamadas:
         for item in chamada.encontrados:
-            bruto = item.get("preco")
-            if isinstance(bruto, str | int):
-                valor = _decimal(str(bruto))
-                if valor is not None:
-                    precos.add(valor)
+            precos |= _dinheiro_de(item)
+            linhas = item.get("itens")
+            if isinstance(linhas, list):
+                for linha in linhas:
+                    if isinstance(linha, dict):
+                        precos |= _dinheiro_de(linha)
     return precos
+
+
+def _dinheiro_de(item: dict[str, object]) -> set[Decimal]:
+    """Os valores em dinheiro de um item de retorno, pelas chaves declaradas."""
+    valores = set()
+    for chave in CHAVES_DE_DINHEIRO:
+        bruto = item.get(chave)
+        if isinstance(bruto, str | int) and not isinstance(bruto, bool):
+            valor = _decimal(str(bruto))
+            if valor is not None:
+                valores.add(valor)
+    return valores
 
 
 def produtos_das_tools(transcricao: Transcricao, tool: str | None = None) -> set[str]:

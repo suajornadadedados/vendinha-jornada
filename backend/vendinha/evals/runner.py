@@ -41,6 +41,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha import runtime
+from vendinha.budget import tokens_spent
 from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, Produto, QdrantBusca
 from vendinha.config import REPO_ROOT, get_settings
 from vendinha.config_store import PostgresConfigStore
@@ -99,6 +100,12 @@ class Resultado:
     portao: Veredito
     juiz: VeredictoDoJuiz | None
     erro_do_juiz: str | None = None
+
+    # O que a conversa gastou, contado como o teto de sessão conta (`budget.py`).
+    # Está aqui porque o teto é escolhido a partir deste número e não havia onde
+    # lê-lo: a S-11 descobriu que o valor herdado da S-02 cortava composição
+    # legítima, e "sobe um pouco" teria sido o mesmo chute outra vez (R6, RNF-3).
+    tokens: int = 0
 
     @property
     def aprovado(self) -> bool:
@@ -221,7 +228,7 @@ async def rodar_caso(
         if fala.de == "operador":
             raise InfraestruturaAusente(
                 f"{caso.id} tem fala de operador, e a fila do operador é entregável da S-05. "
-                f"Este runner cobre os casos com `spec: S-03`."
+                f"Este runner cobre as specs sem fila humana — hoje a S-03 e a S-11."
             )
         if fala.de != "cliente":
             continue
@@ -250,6 +257,7 @@ async def rodar_caso(
         portao=portao,
         juiz=veredito_do_juiz,
         erro_do_juiz=erro_do_juiz,
+        tokens=tokens_spent(mensagens),
     )
 
 
@@ -337,7 +345,14 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
-        linhas += [f"## {resultado.caso.id} — {marca}", "", f"_{resultado.caso.titulo}_", ""]
+        linhas += [
+            f"## {resultado.caso.id} — {marca}",
+            "",
+            f"_{resultado.caso.titulo}_",
+            "",
+            f"Gasto da conversa: **{resultado.tokens:,} tokens**.",
+            "",
+        ]
 
         if resultado.portao.achados:
             linhas += ["### Fatos sem origem em tool", ""]
@@ -403,6 +418,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--caso", default=None, help="prefixo do id, para rodar um só")
     parser.add_argument("--saida", type=Path, default=None, help="grava o relatório num arquivo")
     args = parser.parse_args(argv)
+
+    # O relatório é markdown com acento, seta e travessão, e no Windows o stdout
+    # nasce em cp1252 — um `→` vindo da evidência do juiz derruba o `print` com
+    # `UnicodeEncodeError` **depois** de a suíte inteira ter rodado, perdendo o
+    # resultado de uma corrida que custou dinheiro. `--saida` já gravava em utf-8;
+    # faltava o console.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     try:
