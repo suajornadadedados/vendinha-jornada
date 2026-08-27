@@ -3,7 +3,7 @@ id: S-11
 titulo: Composição de evento
 status: aprovada
 branch: spec/s-11-composicao
-issue: #12
+issue: #18
 adrs: [ADR-001, ADR-002, ADR-013]
 riscos_cobertos: [R1, R10]
 ---

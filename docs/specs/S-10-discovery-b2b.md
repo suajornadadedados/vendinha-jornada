@@ -3,7 +3,7 @@ id: S-10
 titulo: Discovery B2B — comprador corporativo e composição de evento
 status: em-revisao
 branch: spec/s-10-discovery-b2b
-issue: #11
+issue: #17
 adrs: [ADR-013]
 riscos_cobertos: []
 ---
