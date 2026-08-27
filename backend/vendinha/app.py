@@ -41,7 +41,7 @@ from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
-from vendinha.graph import build_graph, session_config
+from vendinha.graph import build_graph, fala_com_o_cliente, session_config
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.providers import (
     PROVIDERS,
@@ -447,7 +447,7 @@ def create_app(
                         config=config,
                         stream_mode="messages",
                     )
-                    async for chunk, _ in _bounded_first_token(token_stream, timeout):
+                    async for chunk, meta in _bounded_first_token(token_stream, timeout):
                         # Só o que o ATENDENTE diz. `stream_mode="messages"` emite
                         # também os `ToolMessage`, e o retorno das tools desta spec
                         # é JSON — sem este filtro o cliente recebia o payload
@@ -456,6 +456,14 @@ def create_app(
                         # `adversarial-006` reprovam uma execução que revela
                         # qualquer um dos dois.
                         if not isinstance(chunk, AIMessage | AIMessageChunk):
+                            continue
+                        # E só o que o atendente diz NO NÓ DE CONVERSA. A S-04 pôs
+                        # um segundo modelo dentro do grafo — o roteador do
+                        # supervisor, que devolve JSON de rota —, e
+                        # `stream_mode="messages"` emite de qualquer chamada de
+                        # modelo. Filtrar por tipo pegava a metade errada: o
+                        # roteador também produz `AIMessage`.
+                        if not fala_com_o_cliente((meta or {}).get("langgraph_node")):
                             continue
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a

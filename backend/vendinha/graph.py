@@ -23,8 +23,18 @@ no teto e para com uma frase que o cliente entende, em vez de girar (R6).
 **O modelo é injetado, nunca construído aqui.** `BaseChatModel` é a porta
 (ADR-012), que é o que permite ao módulo não conhecer Anthropic nem OpenAI, e aos
 testes colocarem um duplo no mesmo lugar.
+
+Na S-04 o módulo ganhou uma segunda forma, e nenhuma chave de estado. `build_graph`
+continua sendo uma lane só entrando direto do START; `build_supervised_graph` põe
+duas lanes lado a lado e decide na porta qual atende o turno. O que as duas versões
+compartilham é `_adicionar_lane`, e o que a segunda **não** compartilha é o nó de
+tools: cada lane tem o seu. É a fronteira do ADR-002 dentro do grafo — enquanto o
+turno corre na recomendação, as tools de escrita não estão ligadas no modelo que
+fala. Um `ToolNode` só, com a união das tools, seria um vazamento que os dois
+registros continuariam descrevendo como correto.
 """
 
+from collections.abc import Hashable
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -38,6 +48,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from vendinha.budget import LIMIT_REACHED_MESSAGE, tools_still_affordable, within_budget
 from vendinha.subagents import Subagent
+from vendinha.supervisor import Supervisor
 
 # Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
 # settings, and the endpoint passes it in. It exists so a test — or a script — can
@@ -65,13 +76,36 @@ def session_config(session_id: str) -> RunnableConfig:
     return {"configurable": {"thread_id": session_id}}
 
 
-def build_graph(
+# The prefix of every node that speaks to the customer. `app.py` filters the token
+# stream by it: `stream_mode="messages"` emits from every chat model called inside
+# the graph, and the supervisor's router is one of them (S-04). Without the filter
+# the router's JSON would arrive in the middle of a sentence — the same leak the
+# `ToolMessage` filter already prevents on the other side (`adversarial-006`).
+CONVERSA = "conversa"
+
+
+def fala_com_o_cliente(no: str | None) -> bool:
+    """Whether a node's output belongs in the customer's stream."""
+    return bool(no) and str(no).startswith(CONVERSA)
+
+
+def _adicionar_lane(
+    builder: "StateGraph[ConversationState, Any, Any, Any]",
     model: BaseChatModel,
-    checkpointer: BaseCheckpointSaver[Any],
     subagent: Subagent,
-    budget_tokens: int = DEFAULT_BUDGET_TOKENS,
-) -> CompiledStateGraph[ConversationState, Any, Any, Any]:
-    """Compile the conversation graph against an injected model, checkpointer and subagent."""
+    budget_tokens: int,
+    sufixo: str = "",
+) -> str:
+    """Add one subagent's lane — speak, call tools, speak again — and return its entry node.
+
+    A lane is `conversa[-nome]` plus its own `ferramentas[-nome]`, wired in a loop.
+    Extracted in S-04 so the supervisor can hold two of them side by side without
+    the two sharing a tool node: sharing one would bind both subagents' tools into
+    the same `ToolNode`, and the permission boundary of ADR-002 would have leaked
+    through the graph while both registries still looked correct.
+    """
+    conversa_no = f"{CONVERSA}{sufixo}"
+    ferramentas_no = f"ferramentas{sufixo}"
 
     tools = subagent.tools
     # `bind_tools` only when there are tools: a subagent with an empty list is a
@@ -102,18 +136,74 @@ def build_graph(
         )
         return {"messages": [answer]}
 
-    builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
-    builder.add_node("conversa", conversa)
-    builder.add_edge(START, "conversa")
+    builder.add_node(conversa_no, conversa)
 
     if not tools:
-        builder.add_edge("conversa", END)
-        return builder.compile(checkpointer=checkpointer)
+        builder.add_edge(conversa_no, END)
+        return conversa_no
 
-    builder.add_node("ferramentas", ToolNode(tools))
+    builder.add_node(ferramentas_no, ToolNode(tools))
     # `tools_condition` reads the last message: tool calls go to the tool node,
     # anything else ends the turn. The edge back into `conversa` is what closes
     # the loop — and what makes the budget check above run again on the way in.
-    builder.add_conditional_edges("conversa", tools_condition, {"tools": "ferramentas", END: END})
-    builder.add_edge("ferramentas", "conversa")
+    builder.add_conditional_edges(conversa_no, tools_condition, {"tools": ferramentas_no, END: END})
+    builder.add_edge(ferramentas_no, conversa_no)
+    return conversa_no
+
+
+def build_graph(
+    model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver[Any],
+    subagent: Subagent,
+    budget_tokens: int = DEFAULT_BUDGET_TOKENS,
+) -> CompiledStateGraph[ConversationState, Any, Any, Any]:
+    """Compile the conversation graph against an injected model, checkpointer and subagent.
+
+    One lane, entered straight from START. This is the shape S-02 and S-03 built and
+    the one the eval runner still uses when a case exercises a single subagent.
+    """
+    builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
+    entrada = _adicionar_lane(builder, model, subagent, budget_tokens)
+    builder.add_edge(START, entrada)
+    return builder.compile(checkpointer=checkpointer)
+
+
+def build_supervised_graph(
+    model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver[Any],
+    supervisor: Supervisor,
+    budget_tokens: int = DEFAULT_BUDGET_TOKENS,
+) -> CompiledStateGraph[ConversationState, Any, Any, Any]:
+    """Two lanes, and a routing decision at the door — the S-04 shape (REQ-1).
+
+    **The routing is a conditional edge from START, not a node.** A node would have
+    to write its decision somewhere for the edge to read, and the only place is the
+    state — which is how `ConversationState` would grow an `etapa` key holding a
+    fact that `messages` already carries (RNF-6, R9). As an edge it decides and
+    routes in one step, and the state stays the two keys
+    `tests/unit/test_session_resume.py` pins.
+
+    **Each lane owns its tool node.** That is the structural half of ADR-002 inside
+    the graph: while the turn runs in the recommendation lane, the checkout tools
+    are not bound to the model that is speaking — they are not denied, they are not
+    there. See `tests/security/test_injection.py`.
+    """
+    builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
+    # `Hashable` e não `str` porque é o que `add_conditional_edges` declara, e um
+    # dicionário é invariante na chave: `dict[str, str]` não é um `dict[Hashable, str]`.
+    portas: dict[Hashable, str] = {
+        subagent.nome: _adicionar_lane(
+            builder, model, subagent, budget_tokens, sufixo=f"-{subagent.nome}"
+        )
+        for subagent in (supervisor.recomendacao, supervisor.checkout)
+    }
+
+    async def escolher_lane(state: ConversationState) -> str:
+        return (await supervisor.rota(state["messages"], budget_tokens)).nome
+
+    # `portas` é o mapa do que `escolher_lane` devolve para o nó de entrada da
+    # lane. Declará-lo, em vez de devolver o nome do nó direto, é o que faz o
+    # LangGraph conhecer os destinos possíveis — e o que faz um nome de subagent
+    # sem lane virar erro de compilação em vez de aresta pendurada.
+    builder.add_conditional_edges(START, escolher_lane, portas)
     return builder.compile(checkpointer=checkpointer)
