@@ -31,6 +31,12 @@ dependencies = [
     # `mask_otel_spans`, o hook onde a redação de PII acontece antes do export.
     "langfuse>=4.14",
 
+    # O cliente HTTP do adapter de pagamento (S-04). Estava só no grupo dev, para
+    # o TestClient do FastAPI; com o Mercado Pago sandbox ele passou a ser
+    # dependência de produto, e um port que só funciona com as dependências de
+    # teste instaladas não é um port.
+    "httpx>=0.28",
+
     # Postgres: domínio, checkpointer do grafo e a configuração cifrada.
     "psycopg[binary,pool]>=3.2",
     "cryptography>=43",
@@ -56,7 +62,6 @@ dev = [
     # precisa das mesmas dependências que eles importam.
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
-    "httpx>=0.28",
     "types-PyYAML>=6.0",
     "jsonschema>=4.21",
     "types-jsonschema>=4.26.0.20260518",

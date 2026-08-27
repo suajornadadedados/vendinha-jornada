@@ -10,6 +10,8 @@ produtos_validos:
   - cafe-cerrado-torra-media
   - pao-de-queijo-congelado
 
+cenario: composicao_aprovada
+
 conversa:
   - de: cliente
     texto: Essa composicao ficou boa mesmo. Acho que e essa, ne?

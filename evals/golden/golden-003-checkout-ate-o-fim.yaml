@@ -10,14 +10,16 @@ produtos_validos:
   - requeijao-de-corte
   - doce-de-leite-cremoso
 
+cenario: composicao_aprovada
+
 conversa:
   - de: cliente
     texto: Fechou, pode seguir com essa composicao do cafe da manha.
   - de: cliente
     texto: >-
       Empresa e Aurora Servicos Digitais, CNPJ 11.222.333/0001-81. Entrega na
-      Rua das Acacias 240, sala 12, Savassi, Belo Horizonte. Falo eu, Marta
-      Ribeiro, marta@exemplo.com.br
+      Rua das Acacias 240, sala 12, Savassi, Belo Horizonte, MG, CEP 30140-071.
+      Falo eu, Marta Ribeiro, marta@exemplo.com.br
 
 criterio:
   deve:
@@ -42,6 +44,11 @@ tools:
   proibidas: [aplicar_desconto, emitir_nf]
 
 notas: >-
+  UF e CEP entraram na fala do cliente na S-04 (pendencia P-2). A DANFE modelo 55
+  exige os dois no destinatario, e `pedidos.Endereco` os exige: sem eles o agente
+  pedia o dado que faltava - comportamento correto - e o caso terminava antes de
+  chegar ao pedido, medindo a coleta em vez do checkout. Nenhum criterio mudou; o
+  que estava incompleto era o dado do proprio caso.
   "Conversa que chegue ate o final da venda" e o pedido literal do cliente. O que
   este caso protege e a fronteira: o modelo conduz, o codigo soma. A revalidacao em
   criar_pedido esta no "nao deve" de proposito — a composicao ja passou por

@@ -20,6 +20,13 @@ conversa:
     texto: >-
       Quero 12 cestas de fim de ano pros nossos clientes, 150 reais cada. Duas
       delas nao podem ter alcool.
+  - de: cliente
+    texto: >-
+      Ficou bom. Pode fechar as duas assim e registrar o pedido - o link de
+      pagamento eu peco depois, preciso passar no financeiro antes. Empresa e
+      Aurora Servicos Digitais, CNPJ 11.222.333/0001-81, entrega na Rua das
+      Acacias 240, sala 12, Savassi, Belo Horizonte, MG, CEP 30140-071. Falo eu,
+      Marta Ribeiro, marta@exemplo.com.br
 
 criterio:
   deve:
@@ -44,6 +51,13 @@ tools:
   proibidas: [aplicar_desconto, gerar_link_pagamento, emitir_nf]
 
 notas: >-
+  O segundo turno entrou na S-04 (pendencia P-3). Sem ele o caso pedia um pedido
+  criado sem nenhuma confirmacao explicita, o que a RF-2.1 proibe e o golden-009
+  reprova - dois casos da mesma suite exigindo coisas opostas. Ele carrega tambem os
+  dados da empresa, pela mesma razao do golden-003: o caso ancora `total_pedido` em
+  `criar_pedido`, e nao existe pedido sem comprador. Faltava o dado, nao o criterio. O que este caso existe
+  para provar nao mudou: continua sendo que o subgrupo vira uma segunda composicao, e
+  nao uma excecao em texto livre.
   "Doze cestas, duas sem alcool" e a frase mais natural do comprador corporativo, e o
   ADR-013 escolheu resolve-la sem entidade nova: sao duas composicoes no mesmo pedido.
   Este caso e o que prova que a escolha funciona na conversa, e nao so no modelo de

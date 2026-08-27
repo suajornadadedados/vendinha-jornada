@@ -69,6 +69,14 @@ CAMPO_DA_TOOL = {
     "valor_por_pessoa": "valor_por_pessoa",
     "problemas_composicao": "problemas_composicao",
     "atende_pessoas": "atende_pessoas",
+    # O checkout, na S-04. `total_pedido` e `url_pagamento` sao os dois fatos que o
+    # `golden-003` e o `golden-015` ancoram, e `cnpj_valido` e o do `golden-008`:
+    # quem decide se um documento e valido e o schema, e o caso exige que a
+    # afirmacao do agente aponte para o retorno da tool que decidiu.
+    "total_pedido": "total_pedido",
+    "url_pagamento": "url_pagamento",
+    "status_pedido": "status_pedido",
+    "cnpj_valido": "cnpj_valido",
 }
 
 # Toda chave de retorno de tool que carrega dinheiro. `_precos_divergentes` exige
@@ -83,6 +91,10 @@ CHAVES_DE_DINHEIRO = (
     "valor_por_pessoa",
     "orcamento_por_pessoa",
     "excedente_por_pessoa",
+    # O total do pedido, que na S-04 passa a ser o numero que o cliente ouve antes
+    # de pagar. Faltando aqui, o agente reprovaria por dizer um valor que
+    # `criar_pedido` devolveu — a pior falha possivel numa regua.
+    "total_pedido",
 )
 
 # Dinheiro em texto brasileiro, nas formas que um modelo escreve de verdade:

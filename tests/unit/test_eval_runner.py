@@ -30,11 +30,12 @@ from langchain_core.runnables import Runnable, RunnableLambda
 
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
-from vendinha.evals.groundedness import Transcricao, Veredito, transcrever
+from vendinha.evals.groundedness import Transcricao, Veredito, precos_citados, transcrever
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
 from vendinha.evals.runner import (
     CatalogoEnvenenado,
     Resultado,
+    _abertura_da_composicao,
     _abertura_do_cenario,
     relatorio,
     rodar_caso,
@@ -619,3 +620,75 @@ def test_a_price_gate_finding_is_reported_with_the_decimal_that_was_cited() -> N
 
     assert "79.90" in str(achado)
     assert "preco" in str(achado)
+
+
+# ------------------------------------------- o cenário declarado (S-04, D-5)
+
+
+@pytest.mark.risco("R1")
+def test_the_case_scenario_is_a_declared_field_not_a_guess_about_a_system_turn() -> None:
+    """R1 — quem manda no runner é `cenario`, e o turno `de: sistema` é prosa.
+
+    Até a S-04 o runner inferia "envenenar o catálogo" da presença de um turno de
+    sistema. A regra funcionava porque um caso só a usava, e quebraria em silêncio
+    no segundo: o turno de sistema do `golden-010` descreve um **webhook**, e seria
+    lido como envenenamento — um caso de idempotência de pagamento medindo injeção.
+    """
+    casos = {caso.id: caso for caso in carregar_casos(EVALS)}
+
+    envenenado = casos["adversarial-004-injecao-vinda-do-catalogo"]
+    pago = casos["golden-010-webhook-duplicado-nao-duplica-efeito"]
+
+    assert envenenado.cenario == "catalogo_envenenado"
+    assert pago.cenario == "pedido_pago"
+    # Os dois têm turno `de: sistema`, e o campo é o que os separa.
+    assert any(fala.de == "sistema" for fala in envenenado.conversa)
+    assert any(fala.de == "sistema" for fala in pago.conversa)
+
+
+@pytest.mark.risco("R1")
+def test_the_composition_opening_plants_no_price_in_the_conversation() -> None:
+    """R1 — o cenário não pode contaminar a régua que ele prepara.
+
+    Uma versão anterior dizia "uns 40 reais por pessoa". O agente repetia o número,
+    nenhuma tool o havia devolvido, e o portão de groundedness — corretamente — o
+    tratou como preço sem origem: o `adversarial-005` reprovava por um valor que o
+    próprio runner tinha plantado.
+    """
+    caso = next(c for c in carregar_casos(EVALS) if c.cenario == "composicao_aprovada")
+
+    abertura = _abertura_da_composicao(caso)
+
+    assert not precos_citados(abertura), f"a abertura plantou dinheiro: {abertura!r}"
+    # E responde as quatro perguntas de qualificação, para não gastar os turnos do
+    # cenário com perguntas que o prompt manda o agente fazer.
+    assert "pessoas" in abertura
+    assert "restricao" in abertura and "orcamento" in abertura
+
+
+@pytest.mark.risco("R1")
+def test_a_scenario_that_did_not_materialise_reproves_its_case_and_spares_the_others() -> None:
+    """R1, ADR-006 — cenário que não montou não declara falha dura sobre a suíte.
+
+    O caso reprova — a suíte não fica verde por omissão —, mas ele **não foi
+    avaliado**, e dizer "ação fora da allowlist" sobre uma conversa que nunca
+    aconteceu é o relatório mentindo sobre o motivo. Isso já custou caro uma vez:
+    cinco casos de `fato_inventado` apareceram como `acao_fora_da_allowlist` e
+    mandaram consertar a coisa errada.
+    """
+    caso = next(c for c in carregar_casos(EVALS) if c.cenario == "composicao_aprovada")
+
+    sem_cenario = Resultado(
+        caso=caso,
+        transcricao=Transcricao(respostas=(), chamadas=()),
+        portao=Veredito(achados=()),
+        juiz=None,
+        erro_do_cenario="o agente não chegou a uma composição aprovada",
+    )
+
+    assert not sem_cenario.aprovado
+    assert not sem_cenario.reprova_a_suite
+
+    texto = relatorio([sem_cenario])
+    assert "não montou" in texto
+    assert "não chegaram a ser avaliados" in texto

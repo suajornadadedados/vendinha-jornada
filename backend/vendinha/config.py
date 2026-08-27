@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
+    # A URL por onde o mundo de fora alcança este backend. Ela vai no
+    # `notification_url` da preferência do Mercado Pago e no link do adapter mock,
+    # então em local costuma ser um túnel. Estava no `.env.example` desde a S-02 e
+    # ninguém a lia — mesma classe da ressalva R-5 da verificação da S-02.
+    public_base_url: str = "http://localhost:8000"
+
     database_url: str = "postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha"
 
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
@@ -110,7 +116,43 @@ class Settings(BaseSettings):
     # It is also the right side of the economics after the ADR-013: the ticket went
     # from tens of reais to thousands, and a ceiling that saves a fraction of a cent
     # by dropping an order is not a saving.
-    session_budget_tokens: int = 150_000
+    #
+    # **Raised again in S-04, and measured the same way.** 150_000 was chosen for a
+    # flow that ENDED at the composition. The checkout adds turns after it — company
+    # data, a refusal and a correction, the order, the link.
+    #
+    # The numbers below are the ones in `docs/specs/relatorios/S-04-evals-checkout.md`,
+    # the report the PR carries, and they are the ONLY record of this measurement in
+    # the repository. An earlier draft of this comment quoted an intermediate run and
+    # the spec quoted a third set; the independent verification found all three
+    # disagreeing (M-4). A ceiling justified by a number nobody can reproduce is a
+    # ceiling chosen by feel.
+    #
+    #     golden-010        19k    reads an existing order, one turn
+    #     adversarial-001   55k    composition, then an injected instruction
+    #     golden-009        56k    composition, then a customer who pauses
+    #     adversarial-005   92k    composition, then commercial pressure
+    #     golden-015       105k    two compositions in one order
+    #     golden-003       115k    composition, confirmation, company data, order, link
+    #     golden-008       152k    the same, plus a refused CNPJ and a correction
+    #
+    # **These vary between runs, and by a lot** — the same case measured 144k and 152k
+    # on two consecutive executions, and `golden-015` moved 131k → 105k. The spread is
+    # the model choosing to re-check something, or not. A ceiling picked from one run's
+    # maximum is a ceiling picked from one sample, so the headroom below is deliberate
+    # rather than tight.
+    #
+    # The soft line takes the tools away at 80% of the cap (`budget.ANSWER_RESERVE`),
+    # which at 150_000 is 120k — below the top of the NORMAL range. The symptom is
+    # nasty precisely because it is not an error: the agent collects the data, says it
+    # is closing, and then cannot call `criar_pedido`, because the guard had already
+    # unbound it. It reads as a model that gave up.
+    #
+    # 250_000 puts the soft line at 200k — a third above the measured maximum of 152k,
+    # which is the room the run-to-run spread demands — and stays a hard bound on the
+    # loop `adversarial-006` builds. `tests/unit/test_budget_guard.py` pins this number to
+    # `graph.DEFAULT_BUDGET_TOKENS`, so the two cannot drift apart again (M-2).
+    session_budget_tokens: int = 250_000
 
     # Ceiling for one external call: a tool when they arrive in S-03, and today
     # the wait for the model's first token.
@@ -119,6 +161,16 @@ class Settings(BaseSettings):
     # Fernet key that encrypts the stored provider credential (ADR-012). Absent
     # means writes are refused — never that the secret is stored in the clear.
     config_encryption_key: str | None = None
+
+    # Payment, S-04. Sandbox always — a production credential does not enter this
+    # project. Absent token means the mock adapter, and there is deliberately no
+    # `PAYMENT_GATEWAY` switch: it would allow `mercadopago` with no token, which
+    # boots fine and breaks on the first order. See D-4 and `pagamento.gateway_de`.
+    mercadopago_access_token: str | None = None
+    # Origin verification of the payment webhook (RF-2.5, R8). Absent means no
+    # signature verifies — the safe side. "No secret, accept anything" would turn
+    # a forgotten environment variable into an open endpoint that moves money.
+    mercadopago_webhook_secret: str | None = None
 
 
 @lru_cache(maxsize=1)

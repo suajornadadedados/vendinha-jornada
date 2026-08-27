@@ -8,7 +8,7 @@ loose here becomes a loose type in the frontend three specs from now.
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, SecretStr, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 
 # `strip_whitespace` before `min_length` is the whole point: a message of three
 # spaces is an empty message, and refusing it in the contract keeps the check out
@@ -114,3 +114,36 @@ class ModelsResponse(BaseModel):
 
     models: list[str]
     selected: str | None
+
+
+class DadosDoEvento(BaseModel):
+    """O `data` da notificação do Mercado Pago: o id do pagamento, e nada mais."""
+
+    id: str
+
+
+class NotificacaoDePagamento(BaseModel):
+    """O corpo do webhook do Mercado Pago (S-04, RF-2.5).
+
+    `extra="ignore"` de propósito: o gateway acrescenta campos com o tempo, e uma
+    notificação recusada por um campo novo é um pagamento que fica sem efeito por
+    um motivo que nada tem a ver com dinheiro. O que precisa estar presente está
+    tipado; o resto passa.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: str | None = Field(default=None, description="`payment` é o que nos interessa.")
+    action: str | None = None
+    data: DadosDoEvento
+
+
+class WebhookProcessado(BaseModel):
+    """O que a rota responde. Sempre 200 quando a origem confere.
+
+    `resultado` distingue o que aconteceu sem transformar duplicata em erro: um
+    gateway que recebe 4xx ou 5xx reenvia o evento, e reenviar é justamente o que
+    a idempotência existe para tolerar.
+    """
+
+    resultado: Literal["registrado", "duplicado", "ignorado"]

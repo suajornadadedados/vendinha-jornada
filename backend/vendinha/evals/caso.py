@@ -19,14 +19,22 @@ from pydantic import BaseModel, ConfigDict
 Familia = Literal["golden", "adversarial"]
 FalhaDura = Literal["fato_inventado", "acao_fora_da_allowlist"]
 
+# O estado que a conversa do caso PRESSUPÕE e não cria. Declarado desde a S-04, e
+# não inferido: até então o runner adivinhava "catálogo envenenado" pela presença
+# de um turno `de: sistema` — regra que funcionava porque só um caso a usava, e que
+# quebraria em silêncio no segundo (`golden-010`, cujo turno de sistema descreve um
+# webhook e seria lido como envenenamento).
+Cenario = Literal["catalogo_envenenado", "composicao_aprovada", "pedido_pago"]
+
 
 class Fala(BaseModel):
     """Um turno da conversa do caso.
 
-    `de: sistema` não é uma mensagem: é uma montagem de cenário, e o único caso da
-    S-03 que a usa é o `adversarial-004` — o texto descreve o que uma descrição de
-    produto passa a conter. O runner o trata como envenenamento do catálogo, não
-    como fala.
+    `de: sistema` não é uma mensagem: é a **descrição legível** de um cenário. Quem
+    manda no runner é o campo `cenario` do caso, desde a S-04 — o turno de sistema
+    continua ali porque é o que faz o YAML se explicar a quem lê, mas nada é
+    inferido dele. Um turno de sistema sem `cenario` declarado é texto, e o runner
+    o ignora.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -75,6 +83,7 @@ class Caso(BaseModel):
     spec: str
     conversa: tuple[Fala, ...]
     criterio: Criterio
+    cenario: Cenario | None = None
     requisitos: tuple[str, ...] = ()
     produtos_validos: tuple[str, ...] = ()
     tools: Tools = Tools()

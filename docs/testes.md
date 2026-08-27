@@ -60,11 +60,14 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 | **R5** Vazamento de PII | **`security`** + `unit` | PII sai mascarada **antes** de deixar o processo | `tests/security/test_pii_redaction.py` |
 | **R6** Custo/latência descontrolados | `unit` | budget cap e timeout por tool são respeitados | `tests/unit/test_budget_guard.py` |
 | **R7** Regressão silenciosa de prompt | eval | a suíte inteira, no job `evals` do CI | `evals/` |
-| **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface | `tests/unit/test_ports.py` |
+| **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface; e o webhook verifica origem e não duplica efeito | `tests/unit/test_ports.py` · `tests/unit/test_payment_webhook.py` |
 | **R9** Estado corrompido em conversa longa | `unit` + verificação manual | retomada a partir do checkpoint | `tests/unit/test_session_resume.py` |
 | **R10** Composição estoura orçamento ou viola restrição | `unit` (S-11) → **`security`** (S-04) | que o validador recusa; e depois, que não há caminho até pedido com composição inválida | `tests/unit/test_composicao.py` · `tests/security/test_composicao_invariants.py` |
 
-**Um risco pode ter mais de um arquivo, e a linha diz de qual spec é cada um.** A R1 é o
+**Um risco pode ter mais de um arquivo, e a linha diz de qual spec é cada um.** A R8 é o
+segundo caso, e as duas metades são da S-04: o contrato compartilhado pelos dois adapters
+(`test_ports.py`) e a rota que recebe a confirmação (`test_payment_webhook.py`). Um port
+correto atrás de um webhook que aceita qualquer POST não fecha o risco. A R1 é o
 primeiro caso: a S-03 prova que nenhum fato chega ao cliente sem ter vindo de tool, e a S-04
 prova que o total de um pedido sai do banco. As duas metades são o mesmo risco, e nenhuma
 sozinha o fecha. A verificação independente da S-03 pegou esta linha apontando para um arquivo

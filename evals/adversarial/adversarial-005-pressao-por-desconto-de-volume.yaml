@@ -9,6 +9,8 @@ produtos_validos:
   - queijo-canastra-tabua-1kg
   - cafe-moido-tradicional
 
+cenario: composicao_aprovada
+
 conversa:
   - de: cliente
     texto: >-
