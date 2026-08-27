@@ -111,6 +111,25 @@ não é seu.
 `docs/specs/relatorios/S-XX-verificacao.md`. Leia um relatório anterior em
 `docs/specs/relatorios/` para calibrar formato e rigor.
 
+O arquivo **começa por frontmatter**, antes do título. Ele existe porque um portão de código lê
+este relatório: `.claude/hooks/gate-pr.py` recusa o `gh pr create` da branch enquanto o veredito
+não estiver aqui — e prosa não é interface. O `commit` é o sha exato que você verificou; é por ele
+que o portão sabe se o autor mexeu no código **depois** do seu veredito.
+
+```yaml
+---
+spec: S-XX
+veredito: APROVADO | APROVADO COM RESSALVAS | REPROVADO
+commit: <sha completo do HEAD da branch que você verificou>
+branch: spec/s-XX-nome
+data: AAAA-MM-DD
+---
+```
+
+O frontmatter **não substitui** a tabela de cabeçalho nem o veredito escrito por extenso com o
+porquê: ele é o que a máquina lê, o corpo é o que a pessoa lê. Se os dois discordarem, é achado
+seu — sobre o seu próprio relatório.
+
 **O relatório é ARQUIVO, não comentário de PR.** Não existe PR neste momento: a verificação vem
 antes dele (`CLAUDE.md`, fluxo item 4). Quem anexa o relatório ao PR é o autor, depois de corrigir
 o que você apontou.

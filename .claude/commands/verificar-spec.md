@@ -29,6 +29,10 @@ olhar apenas a evidência, sem o contexto mental de quem implementou.
 5. Gerar `docs/specs/relatorios/S-XX-verificacao.md` com: resumo, tabela de conformidade,
    métricas medidas vs alvo, riscos observados, veredito (APROVADO / APROVADO COM RESSALVAS /
    REPROVADO) e o porquê.
+   O arquivo começa por frontmatter — `spec`, `veredito`, `commit` (o sha exato que você
+   verificou), `branch`, `data` — porque `.claude/hooks/gate-pr.py` lê o veredito daqui para
+   recusar ou liberar o `gh pr create` da branch. Prosa não é interface. O frontmatter não
+   substitui o veredito escrito por extenso com o porquê.
 6. Entregar o relatório como **arquivo**. Não existe PR neste momento: a verificação vem antes
    dele (`CLAUDE.md`, fluxo item 4). Quem anexa o relatório ao PR é o autor, depois de corrigir
    o que a verificação apontou.
