@@ -22,6 +22,7 @@ from vendinha.catalogo import PostgresCatalogo
 from vendinha.config import get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
+from vendinha.pedidos import PostgresPedidos
 from vendinha.redaction import redact
 
 # Without it, libpq waits forever on a host that accepts the packet and never
@@ -65,6 +66,9 @@ async def setup() -> None:
     # The table only — filling it is `make seed`, because a schema migration and a
     # data load fail for different reasons and are fixed by different people.
     await PostgresCatalogo(dsn).setup()
+    # Order, compositions, lines and the payment-event table whose primary key IS
+    # the webhook's idempotency (S-04, RF-2.5). Nothing fills these but the agent.
+    await PostgresPedidos(dsn).setup()
 
 
 def main() -> int:
@@ -83,7 +87,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("checkpointer, instance_config and produto ready. next: `make seed`.")
+    print("checkpointer, instance_config, produto and pedido ready. next: `make seed`.")
     return 0
 
 
