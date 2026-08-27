@@ -41,6 +41,7 @@ MOCK = "mock"
 MERCADOPAGO = "mercadopago"
 
 PREFERENCIAS = "https://api.mercadopago.com/checkout/preferences"
+PAGAMENTOS = "https://api.mercadopago.com/v1/payments"
 
 # Um pedido tem um cliente esperando a resposta do outro lado. Mais generoso que o
 # teto de tool porque um gateway lento não é um gateway travado — e menos generoso
@@ -67,12 +68,30 @@ class LinkDePagamento(BaseModel):
     gateway: str
 
 
+class Pagamento(BaseModel):
+    """O que o gateway diz sobre um pagamento — e a única fonte de "foi pago".
+
+    O webhook chega dizendo *"olhe o pagamento 123"*, e não *"o pedido X foi
+    pago"*. Marcar o pedido como pago porque um POST chegou seria confiar no
+    mensageiro; quem afirma é o gateway, consultado por referência. É a regra de
+    ouro aplicada ao dinheiro: o código decide o que pode ser feito.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pedido_id: str
+    aprovado: bool
+    referencia: str
+
+
 class PaymentGateway(Protocol):
-    """A porta. Uma operação, porque é uma operação que o produto precisa."""
+    """A porta. Duas operações: cobrar, e perguntar se foi pago."""
 
     nome: str
 
     async def criar_preferencia(self, pedido: Pedido) -> LinkDePagamento: ...
+
+    async def consultar_pagamento(self, referencia: str) -> Pagamento: ...
 
 
 class MockPaymentAdapter:
@@ -99,6 +118,18 @@ class MockPaymentAdapter:
             referencia=f"{MOCK}-{pedido.id}",
             gateway=self.nome,
         )
+
+    async def consultar_pagamento(self, referencia: str) -> Pagamento:
+        """A referência do mock carrega o id do pedido, e é só isso que ele sabe.
+
+        Um pagamento que o mock não reconhece não vira "aprovado por padrão": ele
+        volta `aprovado=False`, e o pedido não anda. Mock que aprova o que não
+        conhece é o stub que faz o teste passar e a demo mentir.
+        """
+        prefixo = f"{MOCK}-"
+        if not referencia.startswith(prefixo) or not referencia[len(prefixo) :]:
+            return Pagamento(pedido_id="", aprovado=False, referencia=referencia)
+        return Pagamento(pedido_id=referencia[len(prefixo) :], aprovado=True, referencia=referencia)
 
 
 class MercadoPagoSandboxAdapter:
@@ -159,6 +190,33 @@ class MercadoPagoSandboxAdapter:
                 "o Mercado Pago respondeu sem link de checkout; a credencial é de sandbox?"
             )
         return LinkDePagamento(url=str(url), referencia=str(dados.get("id", "")), gateway=self.nome)
+
+    async def consultar_pagamento(self, referencia: str) -> Pagamento:
+        """Pergunta ao Mercado Pago o que aconteceu com aquele pagamento.
+
+        `external_reference` volta com o id do pedido — é o campo que a preferência
+        levou na ida, e o que fecha o círculo sem uma tabela de tradução nossa. Só
+        `approved` conta: `pending` e `in_process` também geram notificação, e
+        tratá-los como pago liberaria a nota antes de o dinheiro existir.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT_SEGUNDOS) as client:
+                resposta = await client.get(
+                    f"{PAGAMENTOS}/{referencia}",
+                    headers={"Authorization": f"Bearer {self._token}"},
+                )
+                resposta.raise_for_status()
+                dados = resposta.json()
+        except httpx.HTTPError as falhou:
+            raise GatewayIndisponivel(
+                f"não consegui consultar o pagamento no Mercado Pago: {type(falhou).__name__}"
+            ) from falhou
+
+        return Pagamento(
+            pedido_id=str(dados.get("external_reference") or ""),
+            aprovado=dados.get("status") == "approved",
+            referencia=referencia,
+        )
 
 
 def _titulo(tipo_de_evento: str, pessoas: int) -> str:
@@ -222,6 +280,7 @@ __all__ = [
     "LinkDePagamento",
     "MercadoPagoSandboxAdapter",
     "MockPaymentAdapter",
+    "Pagamento",
     "PaymentGateway",
     "assinatura_confere",
     "gateway_de",

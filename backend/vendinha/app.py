@@ -27,9 +27,11 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Literal
+from html import escape
+from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
 from langchain.embeddings import init_embeddings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
@@ -43,8 +45,14 @@ from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.observability import callback_handler, install_log_redaction
-from vendinha.pagamento import PaymentGateway, gateway_de
-from vendinha.pedidos import Pedidos, PostgresPedidos
+from vendinha.pagamento import (
+    MOCK,
+    GatewayIndisponivel,
+    PaymentGateway,
+    assinatura_confere,
+    gateway_de,
+)
+from vendinha.pedidos import PedidoInexistente, Pedidos, PostgresPedidos
 from vendinha.providers import (
     PROVIDERS,
     credentials_from_environment,
@@ -61,9 +69,11 @@ from vendinha.schemas import (
     ErrorEvent,
     HealthResponse,
     ModelsResponse,
+    NotificacaoDePagamento,
     ProviderStatus,
     SessionEvent,
     TokenEvent,
+    WebhookProcessado,
 )
 from vendinha.subagents import checkout, recomendacao
 from vendinha.supervisor import Supervisor, roteador_do_modelo
@@ -528,7 +538,147 @@ def create_app(
 
         return EventSourceResponse(stream())
 
+    @app.post("/webhooks/pagamento", response_model=WebhookProcessado)
+    async def webhook_de_pagamento(
+        notificacao: NotificacaoDePagamento,
+        request: Request,
+        x_signature: Annotated[str | None, Header()] = None,
+        x_request_id: Annotated[str | None, Header()] = None,
+    ) -> WebhookProcessado:
+        """A confirmação de pagamento. Zero IA neste caminho (RF-2.5, R8).
+
+        Três decisões, e cada uma existe por causa de uma falha concreta.
+
+        **Origem verificada antes de qualquer coisa.** Sem assinatura válida, 401 e
+        nada acontece — inclusive quando o segredo não está configurado. O oposto
+        transformaria uma variável de ambiente esquecida num endpoint aberto que
+        muda o estado de um pedido pago.
+
+        **Quem afirma que foi pago é o gateway, não o POST.** A notificação diz
+        *"olhe o pagamento 123"*; o servidor pergunta ao gateway o que aconteceu
+        com ele e só então age. Confiar no corpo da requisição seria deixar o
+        mensageiro decidir sobre dinheiro.
+
+        **Duplicata responde 200.** Ela é comportamento normal de gateway, não
+        falha, e um 4xx faria o Mercado Pago reenviar para sempre o evento que já
+        teve efeito. A idempotência de verdade está uma camada abaixo, na chave
+        primária de `evento_de_pagamento` — não num `SELECT` antes do `INSERT`,
+        que é a corrida que dois webhooks simultâneos ganham.
+        """
+        if not assinatura_confere(
+            segredo=settings.mercadopago_webhook_secret,
+            cabecalho=x_signature,
+            request_id=x_request_id,
+            data_id=notificacao.data.id,
+        ):
+            # Sem detalhe do que faltou: quem manda assinatura errada não precisa
+            # saber se errou o `ts`, o `v1` ou o segredo.
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "assinatura inválida")
+
+        if notificacao.type not in (None, "payment"):
+            return WebhookProcessado(resultado="ignorado")
+
+        try:
+            pagamento = await request.app.state.gateway.consultar_pagamento(notificacao.data.id)
+        except GatewayIndisponivel as fora_do_ar:
+            # 503 e não 200: aqui o reenvio é exatamente o que queremos. Responder
+            # 200 sem ter conseguido consultar faria o gateway parar de tentar, e o
+            # pedido ficaria pago lá fora e pendente aqui.
+            logger.warning(
+                "não consegui consultar o pagamento %s: %s", notificacao.data.id, fora_do_ar
+            )
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "não consegui confirmar o pagamento agora"
+            ) from fora_do_ar
+
+        if not pagamento.aprovado or not pagamento.pedido_id:
+            # `pending` e `in_process` também notificam. Tratá-los como pago
+            # liberaria a fila da nota antes de o dinheiro existir.
+            return WebhookProcessado(resultado="ignorado")
+
+        try:
+            aplicado = await request.app.state.pedidos.registrar_pagamento(
+                pagamento.pedido_id, pagamento.referencia
+            )
+        except PedidoInexistente:
+            logger.warning("webhook para um pedido que não existe: %s", pagamento.pedido_id)
+            return WebhookProcessado(resultado="ignorado")
+
+        return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+    _rotas_do_mock(app)
+
     return app
+
+
+def _rotas_do_mock(app: FastAPI) -> None:
+    """A página de checkout falsa — e ela só existe quando o gateway é o mock.
+
+    O ADR-004 pede o mock como cidadão de primeira classe, e um link que termina em
+    404 não é isso. Estas rotas fecham o quickstart sem conta externa (RNF-1): o
+    link abre uma página com o total do pedido e um botão que confirma o pagamento.
+
+    **A confirmação não passa pelo webhook do gateway.** Ela não teria como: a
+    assinatura exige o segredo, que não pode ir para o navegador. Então ela chama
+    `registrar_pagamento` diretamente — a MESMA função, com a MESMA idempotência.
+    O que muda é quem avisa, nunca o que acontece.
+
+    **Elas não existem quando há um gateway de verdade configurado.** A checagem é
+    no início de cada rota e não no registro porque o gateway é escolhido no
+    lifespan, depois de as rotas existirem. Uma rota que confirma pagamento sem
+    assinatura não pode estar de pé num ambiente com credencial real, e "está
+    404" é a única resposta honesta.
+    """
+
+    def _mock_ativo(request: Request) -> None:
+        if getattr(request.app.state, "gateway", None) is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "não encontrado")
+        if request.app.state.gateway.nome != MOCK:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "não encontrado")
+
+    @app.get("/pagamento/mock/{pedido_id}", response_class=HTMLResponse)
+    async def pagina_de_pagamento_falsa(pedido_id: str, request: Request) -> HTMLResponse:
+        _mock_ativo(request)
+        pedido = await request.app.state.pedidos.por_id(pedido_id)
+        if pedido is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido não encontrado")
+
+        # Nada de razão social, CNPJ ou e-mail nesta página: ela é aberta por link,
+        # sem autenticação nenhuma. O que ela mostra é o que o pagador precisa ver
+        # para reconhecer a cobrança — o valor (ADR-007, R5).
+        return HTMLResponse(
+            "<!doctype html><meta charset='utf-8'>"
+            "<title>Pagamento (simulado) — Vendinha</title>"
+            "<body style='font-family:system-ui;max-width:32rem;margin:4rem auto'>"
+            "<h1>Pagamento simulado</h1>"
+            "<p><strong>SEM VALOR FINANCEIRO.</strong> Esta página existe porque "
+            "nenhum gateway real está configurado nesta instância.</p>"
+            f"<p>Pedido <code>{escape(pedido.id)}</code> — total "
+            f"<strong>R$ {escape(str(pedido.total))}</strong>.</p>"
+            f"<form method='post' action='/pagamento/mock/{escape(pedido.id)}/confirmar'>"
+            "<button type='submit'>Confirmar pagamento</button></form></body>"
+        )
+
+    @app.post("/pagamento/mock/{pedido_id}/confirmar", response_model=WebhookProcessado)
+    async def confirmar_pagamento_falso(pedido_id: str, request: Request) -> WebhookProcessado:
+        _mock_ativo(request)
+        link = await request.app.state.gateway.criar_preferencia(
+            await _pedido_ou_404(request, pedido_id)
+        )
+        try:
+            aplicado = await request.app.state.pedidos.registrar_pagamento(
+                pedido_id, link.referencia
+            )
+        except PedidoInexistente:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido não encontrado") from None
+        return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+
+async def _pedido_ou_404(request: Request, pedido_id: str) -> Any:
+    pedido = await request.app.state.pedidos.por_id(pedido_id)
+    if pedido is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido não encontrado")
+    return pedido
 
 
 app = create_app()
