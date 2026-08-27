@@ -177,6 +177,22 @@ class Settings(BaseSettings):
     nf_emitter: str = "mock"
     nf_emitter_api_key: str | None = None
     nf_emitter_base_url: str | None = None
+
+    # A porta da fila do operador (S-05, REQ-2). Ela lista dados completos da nota —
+    # CNPJ, contato, endereço de entrega — e autoriza uma emissão irreversível, então
+    # não pode ficar aberta.
+    #
+    # **Sem token configurado, nada confere**, exatamente como o segredo do webhook:
+    # a alternativa — "sem token, aceita tudo" — transformaria esquecer uma variável
+    # de ambiente num endpoint aberto que emite documento fiscal. Quem roda o
+    # quickstart e quer aprovar uma nota define esta linha; é a única coisa a mais
+    # que o fluxo completo pede (RNF-1).
+    #
+    # O `operador` do corpo da requisição é gravado como veio. Este projeto não tem
+    # autenticação (é a mesma razão de `PUT /config` só aceitar escrita em
+    # `APP_ENV=local`), então o campo é uma **declaração**, não uma identidade
+    # provada — e está dito assim na rota, em vez de fingir o contrário.
+    operador_api_token: str | None = None
     # Origin verification of the payment webhook (RF-2.5, R8). Absent means no
     # signature verifies — the safe side. "No secret, accept anything" would turn
     # a forgotten environment variable into an open endpoint that moves money.

@@ -22,6 +22,7 @@ Shipping that route open to a public host and planning to fix it later is how it
 never gets fixed. See D-8 in the spec.
 """
 
+import hmac
 import logging
 import time
 import uuid
@@ -37,6 +38,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.budget import run_with_timeout
@@ -45,9 +47,19 @@ from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
-from vendinha.fiscal import Fiscal, PostgresFiscal, abrir_fila_da_nota, build_emissao_graph
+from vendinha.documentos import formatar_cnpj
+from vendinha.fiscal import (
+    Aprovacao,
+    Decisao,
+    Fiscal,
+    PostgresFiscal,
+    abrir_fila_da_nota,
+    build_emissao_graph,
+    decidir,
+    pendentes,
+)
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
-from vendinha.nota import NFEmitter, emissor_de
+from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.pagamento import (
     MOCK,
@@ -56,7 +68,13 @@ from vendinha.pagamento import (
     assinatura_confere,
     gateway_de,
 )
-from vendinha.pedidos import PedidoInexistente, Pedidos, PostgresPedidos
+from vendinha.pedidos import (
+    Pedido,
+    PedidoInexistente,
+    Pedidos,
+    PostgresPedidos,
+    StatusDoPedido,
+)
 from vendinha.providers import (
     PROVIDERS,
     credentials_from_environment,
@@ -69,11 +87,16 @@ from vendinha.schemas import (
     ChatRequest,
     ConfigResponse,
     ConfigUpdate,
+    DecisaoDoOperador,
+    DecisaoRegistrada,
+    DestinatarioDaNota,
     DoneEvent,
     ErrorEvent,
+    FilaDoOperador,
     HealthResponse,
     ModelsResponse,
     NotificacaoDePagamento,
+    PedidoNaFila,
     ProviderStatus,
     SessionEvent,
     TokenEvent,
@@ -640,6 +663,149 @@ def create_app(
         if aplicado:
             await _abrir_fila_da_nota(request.app, pagamento.pedido_id)
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+    # ------------------------------------------------------ a fila do operador
+
+    def _operador_autenticado(token: str | None) -> None:
+        """O portao da fila (S-05, REQ-2), e ele e o mesmo do webhook do gateway.
+
+        **Sem `OPERADOR_API_TOKEN` configurado, nada confere.** E o lado seguro: a
+        alternativa — "sem token, aceita tudo" — transformaria esquecer uma variavel
+        de ambiente num endpoint aberto que lista CNPJ e endereco de compradoras e
+        autoriza uma emissao irreversivel.
+
+        `compare_digest` e nao `==`: comparar segredo com `==` vaza o prefixo correto
+        pelo tempo de resposta, e a rota do outro lado da comparacao e a que emite
+        documento fiscal.
+
+        Um 401 sem detalhe, pelo mesmo motivo do webhook: quem mandou o token errado
+        nao precisa saber se ele estava ausente, curto ou trocado.
+        """
+        esperado = settings.operador_api_token
+        if not esperado or not token or not hmac.compare_digest(esperado, token):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "credencial de operador invalida")
+
+    def _na_fila(pedido: Pedido) -> PedidoNaFila:
+        """O pedido como o operador o ve: dados da nota, e a composicao item a item.
+
+        As composicoes vao como estao gravadas, sem reprojecao. E o que o RF-3.2
+        pede — *"dados completos da nota, incluindo destinatario PJ e a composicao
+        item a item"* — e e tambem o que garante que o que ele aprova e o que o
+        emissor vai ler.
+        """
+        return PedidoNaFila(
+            pedido_id=pedido.id,
+            criado_em=pedido.criado_em,
+            total=pedido.total,
+            destinatario=DestinatarioDaNota(
+                razao_social=pedido.empresa.razao_social,
+                cnpj=formatar_cnpj(pedido.empresa.cnpj),
+                inscricao_estadual=inscricao_do_destinatario(pedido),
+                contato_nome=pedido.empresa.contato_nome,
+                contato_email=pedido.empresa.contato_email,
+                endereco=pedido.empresa.endereco,
+            ),
+            composicoes=pedido.composicoes,
+        )
+
+    @app.get("/operador/fila", response_model=FilaDoOperador)
+    async def fila_do_operador(
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> FilaDoOperador:
+        """Os pedidos pagos esperando decisao (RF-3.2, REQ-2).
+
+        A fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja
+        pausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o
+        grafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que
+        perde pedido em silencio.
+        """
+        _operador_autenticado(x_operador_token)
+        na_fila = await pendentes(request.app.state.pedidos)
+        return FilaDoOperador(pendentes=tuple(_na_fila(pedido) for pedido in na_fila))
+
+    async def _registrar_decisao(
+        request: Request, pedido_id: str, decisao: Decisao, corpo: DecisaoDoOperador
+    ) -> DecisaoRegistrada:
+        """Grava a decisao e conduz o grafo. O corpo comum de aprovar e rejeitar.
+
+        **A resposta e a decisao VIGENTE, que pode nao ser esta.** A primeira vence
+        (chave primaria de `aprovacao_de_nf`), entao um segundo operador clicando em
+        "aprovar" num pedido ja rejeitado recebe de volta a rejeicao — com quem,
+        quando e por que — em vez de um 200 que o faria acreditar que aprovou.
+        """
+        pedido = await request.app.state.pedidos.por_id(pedido_id)
+        if pedido is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido nao encontrado")
+        if pedido.status is StatusDoPedido.AGUARDANDO_PAGAMENTO:
+            # O unico estado em que decidir seria errado — e o erro seria caro:
+            # emitir nota de um pedido que ninguem pagou. A fila so existe depois da
+            # confirmacao do pagamento (RF-3.1).
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "este pedido ainda nao foi pago; a nota so entra na fila depois da "
+                "confirmacao do pagamento",
+            )
+
+        try:
+            pedida = Aprovacao(
+                pedido_id=pedido_id,
+                decisao=decisao,
+                operador=corpo.operador,
+                motivo=corpo.motivo,
+            )
+        except ValidationError as sem_motivo:
+            # A regra mora no modelo, nao aqui (RF-4.2). A rota so traduz a recusa
+            # para o codigo HTTP que o cliente da S-07 vai tratar.
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "rejeicao exige motivo: ele e o que o cliente recebe no chat",
+            ) from sem_motivo
+
+        vigente = await decidir(request.app.state.emissao, pedida, fiscal=request.app.state.fiscal)
+        emitida = await request.app.state.fiscal.nota_de(pedido_id)
+        return DecisaoRegistrada(
+            pedido_id=pedido_id,
+            decisao=vigente.decisao.value,
+            operador=vigente.operador,
+            decidido_em=vigente.decidido_em,
+            motivo=vigente.motivo,
+            numero_nota=emitida.nota.numero if emitida else None,
+            chave_da_nota=emitida.nota.chave if emitida else None,
+        )
+
+    @app.post("/operador/pedidos/{pedido_id}/aprovar", response_model=DecisaoRegistrada)
+    async def aprovar_a_nota(
+        pedido_id: str,
+        corpo: DecisaoDoOperador,
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> DecisaoRegistrada:
+        """Aprova e retoma o grafo, que entao emite (RF-3.3, REQ-3).
+
+        Repare no que esta rota **nao** faz: ela nao emite. Ela grava a decisao e
+        conduz o grafo; quem emite e `fiscal.emitir`, que rele a decisao do banco
+        antes de agir. Parece um rodeio e e a garantia inteira — a autorizacao e o
+        registro, nunca a chamada.
+        """
+        _operador_autenticado(x_operador_token)
+        return await _registrar_decisao(request, pedido_id, Decisao.APROVADA, corpo)
+
+    @app.post("/operador/pedidos/{pedido_id}/rejeitar", response_model=DecisaoRegistrada)
+    async def rejeitar_a_nota(
+        pedido_id: str,
+        corpo: DecisaoDoOperador,
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> DecisaoRegistrada:
+        """Rejeita com motivo, e tira o pedido do caminho de emissao (RF-4.2).
+
+        O motivo nao e burocracia: ele e o que o cliente le no chat quando pergunta
+        pela nota, por `consultar_pedido`. Uma rejeicao sem motivo vira silencio para
+        quem pagou, e e o que o `golden-011` existe para nao deixar acontecer.
+        """
+        _operador_autenticado(x_operador_token)
+        return await _registrar_decisao(request, pedido_id, Decisao.REJEITADA, corpo)
 
     _rotas_do_mock(app)
 
