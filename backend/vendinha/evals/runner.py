@@ -404,6 +404,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--saida", type=Path, default=None, help="grava o relatório num arquivo")
     args = parser.parse_args(argv)
 
+    # O relatório é markdown com acento, seta e travessão, e no Windows o stdout
+    # nasce em cp1252 — um `→` vindo da evidência do juiz derruba o `print` com
+    # `UnicodeEncodeError` **depois** de a suíte inteira ter rodado, perdendo o
+    # resultado de uma corrida que custou dinheiro. `--saida` já gravava em utf-8;
+    # faltava o console.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     try:
         resultados = runtime.run(rodar(spec=args.spec, apenas=args.caso))

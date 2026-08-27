@@ -1,7 +1,7 @@
 ---
 id: S-11
 titulo: Composição de evento
-status: aprovada
+status: em-revisao
 branch: spec/s-11-composicao
 issue: #18
 adrs: [ADR-001, ADR-002, ADR-013]
@@ -18,21 +18,21 @@ de evento e recusa o que estoura orçamento ou viola restrição alimentar. É a
 deixando de ser prosa e virando um ida-e-volta visível no trace.
 
 ## Requisitos
-- [ ] REQ-1 `rendimento` e `contem` atravessando `Produto`, o schema do Postgres e o seed em
+- [x] REQ-1 `rendimento` e `contem` atravessando `Produto`, o schema do Postgres e o seed em
       memória, sem que `contem` entre no payload do Qdrant nem no texto embedado (ver §Decisões).
-- [ ] REQ-2 `TipoDeEvento` com slots obrigatórios declarados em código: `cafe_da_manha`,
+- [x] REQ-2 `TipoDeEvento` com slots obrigatórios declarados em código: `cafe_da_manha`,
       `happy_hour`, `cesta_de_fim_de_ano`, `kit_boas_vindas`.
-- [ ] REQ-3 Motor de regras em `backend/vendinha/composicao.py` — **função pura sobre `Produto`**,
+- [x] REQ-3 Motor de regras em `backend/vendinha/composicao.py` — **função pura sobre `Produto`**,
       sem I/O, para a suíte `unit` rodar sem container (`docs/testes.md` §1).
-- [ ] REQ-4 Tool `validar_composicao`, **read-only**, registrada no subagent `recomendacao`.
+- [x] REQ-4 Tool `validar_composicao`, **read-only**, registrada no subagent `recomendacao`.
       Devolve veredito com total, valor por pessoa, quantas pessoas a composição atende e a
       lista de problemas em linguagem que o modelo consiga agir em cima.
-- [ ] REQ-5 Prompt do subagent reescrito para o comprador corporativo: qualifica por evento,
+- [x] REQ-5 Prompt do subagent reescrito para o comprador corporativo: qualifica por evento,
       pessoas, orçamento por pessoa e restrições antes de montar; nunca afirma total sem
       `validar_composicao`; desconto continua não existindo.
-- [ ] REQ-6 `tests/unit/test_composicao.py`: o validador recusa orçamento estourado, slot
+- [x] REQ-6 `tests/unit/test_composicao.py`: o validador recusa orçamento estourado, slot
       faltando e restrição violada (R10 — ver §Por que R10 nasce em `unit`).
-- [ ] REQ-7 Casos de composição do corpus rodando localmente (`make evals-composicao`).
+- [x] REQ-7 Casos de composição do corpus rodando localmente (`make evals-composicao`).
 
 ## Fora de escopo
 `criar_pedido` e a revalidação server-side (S-04, e é lá que R10 ganha o teste de `security`).
@@ -78,7 +78,9 @@ argumento que o docstring de `subagents.py` já usou para o registro de permiss�
 e o teste de `security` só na S-04. O precedente está no repositório.
 
 ## Tasks (cada uma vira um commit)
-1. `feat(s-11): rendimento and contem across catalog and postgres`
+1. `feat(s-11): rendimento and contem reach the tool surface`
+   — o título mudou na execução: catálogo e Postgres já vieram da S-10, e o que faltava
+   era a fronteira da tool e o portão de groundedness (ver D-1 em Descobertas).
 2. `feat(s-11): event types and composition rules`
 3. `feat(s-11): validar_composicao read-only tool`
 4. `feat(s-11): corporate buyer prompt`
@@ -122,7 +124,80 @@ Cenário: slot obrigatório faltando
 - Conferir que `contem` não aparece no payload do Qdrant nem no texto embedado.
 
 ## Descobertas (preenchido durante a execução)
-- (vazio)
+
+**D-1 — a task 1 já estava feita pela metade, e a metade que faltava não estava
+declarada em lugar nenhum.** A S-10 levou `rendimento` e `contem` até o `Produto`, o
+DDL do Postgres e o seed (descoberta D-1 dela). O que ela não podia prever é que os
+dois campos **param na fronteira da tool**: `ProdutoEncontrado.de` filtra por
+`model_fields`, e `ProdutoDetalhado` não os declarava — então eles eram descartados em
+silêncio no caminho até o modelo. Somado a isso, `CAMPO_DA_TOOL` do portão de
+groundedness não sabia traduzir nenhum dos dois. Consequência: `golden-013` (alérgeno)
+e `golden-016` (rendimento), ambos `spec: S-03`, não tinham como passar na `main`.
+
+Decisão do PO no pre-flight: fechar como task 1 desta spec. É o REQ-1 ("atravessando
+`Produto`") lido até o fim, e pré-condição do REQ-4 — `contem` que não chega ao modelo
+não corta nada.
+
+**D-2 — `docs/riscos.md` atribui o R1 a "S-03 · S-04" e não cita a S-11**, enquanto o
+frontmatter desta spec declara `riscos_cobertos: [R1, R10]`. `/verificar-spec` cruza as
+duas coisas. Não foi alterado: mudança em documento normativo é decisão de PO e merece
+diff próprio, não um commit de código carregando junto.
+
+**D-3 — a S-10 está mergeada na `main` com `status: em-revisao`**, Definition of Done
+toda desmarcada e sem `docs/specs/relatorios/S-10-verificacao.md`. A S-11 executa
+exatamente sobre a base normativa que ela escreveu. Decisão do PO no pre-flight: seguir,
+registrar, e não tocar na S-10 nesta branch.
+
+**D-4 — o veredito precisou devolver o teto e o excedente, e não só o total.** Não é
+enfeite: `groundedness._precos_divergentes` reprova todo valor em dinheiro citado ao
+cliente que nenhuma tool tenha devolvido. O BDD manda o veredito *"dizer de quanto foi o
+estouro"*, e `golden-007` espera que o agente fale do teto — os dois seriam preço sem
+origem se não voltassem no retorno. `precos_das_tools` passou a ler as chaves de dinheiro
+do veredito, inclusive um nível dentro de `itens`.
+
+**D-5 — recusa por indisponibilidade entrou no validador.** A spec nomeia orçamento,
+slots e restrição; disponibilidade não está na lista. Foi incluída assim mesmo, e o
+motivo é que a alternativa é pior: aprovar uma composição com item fora do ar devolve um
+total exato para uma cesta invendável, e o `data/catalogo/README.md` já diz que no B2B
+esse caminho *"obriga o agente a recompor, não só a pedir desculpa"*. Fica registrado
+como julgamento de execução, para o PO derrubar se discordar.
+
+**D-6 — `Resultado.encontrados` passou a tipar sobre uma base com `SerializeAsAny`.**
+O veredito tem que viajar dentro do envelope, porque é o único lugar em que o portão de
+groundedness procura. Com a união literal que existia, `tools/composicao.py` precisaria
+ser importada por `tools/catalogo.py` e o ciclo de import apareceria no primeiro arquivo
+de tool que não fosse aquele.
+
+**D-8 — o teto de sessão de 60.000 tokens trunca o fluxo de composição, e não é
+desta spec mudá-lo.** `session_budget_tokens` (`backend/vendinha/config.py:92`) foi
+dimensionado na S-02 para o fluxo B2C de três tools. A composição é mais longa por
+desenho: buscar, detalhar cada produto, consultar preço, validar — e, quando o
+veredito reprova, **tudo de novo**. Em `golden-007` e `golden-014` o agente chegou a
+uma composição aprovada e foi cortado pelo `LIMIT_REACHED_MESSAGE` antes de escrever
+a resposta, com o mecanismo funcionando e o cliente sem ver nada.
+
+A S-11 empurrou o consumo para cima nas duas pontas: o prompt ficou mais longo e o
+fluxo ganhou uma chamada (`consultar_preco`, exigida pelo `fatos_ancorados` do
+`golden-001`). Mas o teto é **R6/RNF-3**, decisão da S-02, e trocar um limite de
+custo é decisão de PO — não commit de spec de código. Registrado e **parado aqui**.
+
+**D-9 — `--saida` gravava em utf-8, o `print` do relatório não.** No Windows o
+stdout nasce em cp1252 e um `→` vindo da evidência do juiz derrubava o comando com
+`UnicodeEncodeError` **depois** de a suíte inteira ter rodado — perdendo o resultado
+de uma corrida paga. Corrigido em `runner.py` porque bloqueava o REQ-7 ("rodando
+localmente"); é portabilidade do runner, não mudança de régua.
+
+**D-10 — três reparos de prompt saíram da primeira rodada de evals, e nenhum é
+ajuste de régua.** O `consultar_preco` faltava na receita de composição e o modelo
+pulava a tool que o `golden-001` ancora; o modelo calculava a sobra do orçamento
+("sobram R$ 25,27") e o rendimento por item, que são conta e caem na mesma regra do
+ADR-001; e um veredito reprovado resolvido em silêncio deixa o cliente com uma
+composição que ele não reconhece. Nenhum caso de `evals/` foi tocado (ADR-006).
+
+**D-7 — o `Makefile` não roda no shell deste ambiente sem ajuste.**
+`scripts/run-tests.sh` escolhe `python3`, que aqui resolve para um shim do pyenv sem as
+dependências do backend; a suíte foi rodada com o interpretador de `backend/.venv`. É
+questão de ambiente local, não do repositório — nada foi alterado.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
