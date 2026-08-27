@@ -9,7 +9,12 @@ Entrada esperada: id da spec (ex.: S-04). Pré-condição: sessão nova, branch 
    - implementar → lint + typecheck + testes → commit (Conventional Commits, escopo = spec).
    - Se algo fora do escopo aparecer: registrar em "Descobertas" na spec e NÃO implementar.
 4. Ao final: rodar a suite completa + evals. Atualizar status da spec para `em-revisao`.
-5. Abrir PR para main com o template preenchido: spec relacionada, o que muda, como testar,
-   evidência (screenshot da feature + link do trace Langfuse), checklist.
-6. Solicitar ao PO que dispare `/verificar-spec` em uma sessão NOVA. Não fazer merge sem o
-   relatório da verificação anexado ao PR.
+5. **Parar aqui e chamar `/fechar-spec S-XX`.** O encerramento — verificação independente,
+   correção, e só então o PR — é dele, e não deste comando.
+
+   > Este passo já mandou abrir o PR antes da verificação. Estava errado: o `CLAUDE.md`,
+   > fluxo item 4, põe a verificação **antes** do PR, e o PR nasce com a correção dentro.
+   > Não é mais só convenção — `.claude/hooks/gate-pr.py` recusa `gh pr create` numa branch
+   > `spec/s-XX-*` sem relatório aprovado. Implementar e encerrar são sessões diferentes de
+   > propósito: quem acabou de escrever o código é a pior pessoa para decidir que ele está
+   > pronto.
