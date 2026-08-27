@@ -36,7 +36,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from vendinha.budget import LIMIT_REACHED_MESSAGE, within_budget
+from vendinha.budget import LIMIT_REACHED_MESSAGE, tools_still_affordable, within_budget
 from vendinha.subagents import Subagent
 
 # Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
@@ -86,10 +86,20 @@ def build_graph(
             # fails a run that leaks any of it.
             return {"messages": [AIMessage(content=LIMIT_REACHED_MESSAGE)]}
 
+        # Past the soft line the tools come off, which ends the loop: with nothing
+        # to call, `tools_condition` routes to END and the model has to answer from
+        # what the conversation already holds. It is a worse answer than the one it
+        # was building, and it is infinitely better than the turn that fetched
+        # everything and said nothing (see `budget.tools_still_affordable`).
+        pode_chamar_tools = tools and tools_still_affordable(state["messages"], budget_tokens)
+        quem_fala = falante if pode_chamar_tools else model
+
         # The system prompt is prepended for the call and never stored in state:
         # storing it would append a copy on every turn, and the checkpoint would
         # grow a prompt per message.
-        answer = await falante.ainvoke([SystemMessage(content=subagent.prompt), *state["messages"]])
+        answer = await quem_fala.ainvoke(
+            [SystemMessage(content=subagent.prompt), *state["messages"]]
+        )
         return {"messages": [answer]}
 
     builder: StateGraph[ConversationState, Any, Any, Any] = StateGraph(ConversationState)
