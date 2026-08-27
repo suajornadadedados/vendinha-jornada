@@ -36,8 +36,8 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 2. Cada spec = uma branch `spec/s-XX-nome` a partir da `main` + uma sessão nova do Claude Code.
 3. Cada task da spec = um commit (Conventional Commits, em inglês).
 4. **Verificação independente ANTES do PR, não antes do merge.** Terminou a implementação, a
-   sessão autora para e dispara o subagente **`verificador-de-spec`** passando o id da spec —
-   e nada além disso. Ele gera `docs/specs/relatorios/S-XX-verificacao.md`. Quem implementou já
+   sessão autora para e roda **`/fechar-spec S-XX`**, que dispara o subagente
+   **`verificador-de-spec`** passando o id da spec — e nada além disso. Ele gera `docs/specs/relatorios/S-XX-verificacao.md`. Quem implementou já
    sabe que está certo: é esse saber que faz o revisor não olhar. O relatório é **arquivo, não
    comentário de PR** — o PR ainda não existe. Sem veredito, não existe PR.
    > O prompt do revisor vive em `.claude/agents/verificador-de-spec.md`, **versionado**. O autor
@@ -68,3 +68,6 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 - Toda mudança de prompt exige rodar os evals localmente antes do PR (`make evals`).
 - Ao terminar cada task: rodar lint + typecheck + testes antes do commit.
 - Atualizar o status da spec (frontmatter) ao concluir.
+- Toda spec é encerrada **exclusivamente** por `/fechar-spec`. Numa branch `spec/s-XX-*`, o hook
+  `.claude/hooks/gate-pr.py` recusa `gh pr create` sem relatório de verificação aprovado — este
+  guardrail é código, não pedido, e é a única linha daqui que não depende de você a ter lido.
