@@ -221,7 +221,7 @@ async def rodar_caso(
         if fala.de == "operador":
             raise InfraestruturaAusente(
                 f"{caso.id} tem fala de operador, e a fila do operador é entregável da S-05. "
-                f"Este runner cobre os casos com `spec: S-03`."
+                f"Este runner cobre as specs sem fila humana — hoje a S-03 e a S-11."
             )
         if fala.de != "cliente":
             continue
