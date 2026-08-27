@@ -44,7 +44,7 @@ from vendinha.config_store import InMemoryConfigStore
 from vendinha.documentos import formatar_cnpj
 from vendinha.fiscal import Decisao, FiscalEmMemoria
 from vendinha.graph import build_graph
-from vendinha.nota import ISENTO, MockNFAdapter
+from vendinha.nota import ISENTO, TARJA, MockNFAdapter
 from vendinha.pedidos import (
     ComposicaoDoPedido,
     Empresa,
@@ -512,3 +512,69 @@ def test_a_payment_confirmed_on_the_mock_page_puts_the_order_in_the_queue(
     ]
     assert [pedido["pedido_id"] for pedido in fila] == [PEDIDO_ID]
     assert fiscal.notas == {}, "o pagamento não emite nada; ele só põe na fila"
+
+
+# ------------------------------------------------- os documentos, para o cliente
+
+
+@pytest.mark.risco("R3")
+@pytest.mark.usefixtures("com_token")
+def test_the_documents_do_not_exist_before_the_operator_approves(client: TestClient) -> None:
+    """R3, RF-3.5 — não há DANFE nem XML de uma nota que não saiu.
+
+    Um 404 e não um 409: de fora, "este pedido não existe" e "a nota dele ainda não
+    saiu" têm que ser a mesma resposta. As rotas são abertas por link, e distinguir
+    os dois casos transformaria a rota num oráculo que diz quais ids de pedido
+    existem.
+    """
+    for caminho in (f"/pedidos/{PEDIDO_ID}/nota.pdf", f"/pedidos/{PEDIDO_ID}/nota.xml"):
+        assert client.get(caminho).status_code == 404
+
+    assert client.get("/pedidos/nao-existe/nota.pdf").status_code == 404
+
+
+@pytest.mark.risco("R3")
+@pytest.mark.usefixtures("com_token")
+def test_after_approval_the_customer_can_fetch_the_danfe_and_the_xml(
+    client: TestClient,
+) -> None:
+    """R3, RF-3.6, REQ-6 — os dois artefatos ficam disponíveis, e são os de verdade.
+
+    O XML parseia e o PDF abre; a tarja está nos dois. É o que separa "a rota
+    responde 200" de "o contador da empresa compradora consegue usar o arquivo" — a
+    mesma diferença que a D-6 da S-04 nomeou no link de pagamento que terminava em
+    404.
+    """
+    aprovado = client.post(
+        f"/operador/pedidos/{PEDIDO_ID}/aprovar",
+        json={"operador": OPERADOR},
+        headers=AUTORIZADO,
+    ).json()
+
+    pdf = client.get(f"/pedidos/{PEDIDO_ID}/nota.pdf")
+    xml = client.get(f"/pedidos/{PEDIDO_ID}/nota.xml")
+
+    assert pdf.status_code == xml.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert xml.headers["content-type"] == "application/xml"
+    assert pdf.content.startswith(b"%PDF-")
+    assert xml.text.startswith("<?xml")
+    assert TARJA in xml.text
+    assert TARJA.encode() in pdf.content
+    # É a nota DESTE pedido, e não uma qualquer: a chave que a decisão anunciou é a
+    # que está dentro do XML.
+    assert aprovado["chave_da_nota"] in xml.text
+
+
+@pytest.mark.risco("R3")
+@pytest.mark.usefixtures("com_token")
+def test_a_rejected_order_never_produces_a_document(client: TestClient) -> None:
+    """R3, `golden-011` — rejeitado é rejeitado: não há documento a servir."""
+    client.post(
+        f"/operador/pedidos/{PEDIDO_ID}/rejeitar",
+        json={"operador": OPERADOR, "motivo": MOTIVO},
+        headers=AUTORIZADO,
+    )
+
+    assert client.get(f"/pedidos/{PEDIDO_ID}/nota.pdf").status_code == 404
+    assert client.get(f"/pedidos/{PEDIDO_ID}/nota.xml").status_code == 404

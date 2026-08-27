@@ -56,7 +56,7 @@ from langgraph.types import Command, interrupt
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from vendinha.nota import Autorizacao, NFEmitter, NotaEmitida, NotaFiscal
-from vendinha.pedidos import Pedido, PedidoInexistente, Pedidos
+from vendinha.pedidos import Pedido, PedidoInexistente, Pedidos, StatusDoPedido
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,38 @@ class Decisao(StrEnum):
 
     APROVADA = "aprovada"
     REJEITADA = "rejeitada"
+
+
+class StatusDaNota(StrEnum):
+    """Em que pé está a nota — o vocabulário que o cliente ouve no chat.
+
+    **Derivado do status do pedido, e não uma segunda coluna.** É a mesma máquina de
+    estados vista pelo lado fiscal: um valor guardado à parte seria o fato com duas
+    moradas de sempre, e a segunda ficaria velha no dia em que alguém atualizasse só
+    uma. `status_da_nota` faz a tradução, e é a única.
+
+    `nao_aplicavel` é o pedido que ainda não foi pago: a nota não está atrasada nem
+    pendente — ela ainda não entrou na fila, e dizer "aguardando aprovação" ali seria
+    prometer ao cliente uma etapa que nem começou (RF-3.1).
+    """
+
+    NAO_APLICAVEL = "nao_aplicavel"
+    AGUARDANDO_APROVACAO = "aguardando_aprovacao"
+    EMITIDA = "emitida"
+    REJEITADA = "rejeitada"
+
+
+def status_da_nota(status: StatusDoPedido) -> StatusDaNota:
+    """O status do pedido, lido pelo lado fiscal. Uma tradução, num lugar só."""
+    match status:
+        case StatusDoPedido.AGUARDANDO_APROVACAO_NF:
+            return StatusDaNota.AGUARDANDO_APROVACAO
+        case StatusDoPedido.NOTA_EMITIDA:
+            return StatusDaNota.EMITIDA
+        case StatusDoPedido.NOTA_REJEITADA:
+            return StatusDaNota.REJEITADA
+        case _:
+            return StatusDaNota.NAO_APLICAVEL
 
 
 class Aprovacao(BaseModel):
@@ -639,11 +671,13 @@ __all__ = [
     "Fiscal",
     "FiscalEmMemoria",
     "PostgresFiscal",
+    "StatusDaNota",
     "abrir_fila_da_nota",
     "build_emissao_graph",
     "conduzir_ate_o_fim",
     "decidir",
     "emitir",
     "pendentes",
+    "status_da_nota",
     "thread_da_nota",
 ]

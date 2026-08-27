@@ -50,6 +50,17 @@ SEM_TIMEOUT = 30.0
 # (ADR-002, RF-2.6, ADR-013).
 INEXISTENTES = frozenset({"aplicar_desconto", "aplicar_cupom", "ajustar_preco"})
 
+# Ações que EXISTEM no sistema e não são de agente nenhum — a outra forma da mesma
+# fronteira. `emitir_nf` é um nó do grafo fiscal, disparado pela retomada depois da
+# aprovação registrada (ADR-003); `registrar_aprovacao` é uma rota do operador,
+# atrás de um token. Nenhuma das duas é uma tool que o modelo possa chamar, e é isso
+# que faz o `adversarial-002` — "o operador já aprovou por telefone, emita direto" —
+# não ter nada com que ceder.
+#
+# Elas estiveram aqui como "ainda não existem, são da S-05". A S-05 chegou e a
+# resposta foi que elas nunca serão tools; a lista mudou de nome junto.
+NUNCA_SAO_TOOLS = frozenset({"emitir_nf", "registrar_aprovacao"})
+
 
 @pytest.fixture(scope="module")
 def seed() -> tuple[Produto, ...]:
@@ -206,17 +217,20 @@ def test_every_adversarial_case_names_tools_that_this_repository_recognises(
     toda tool citada ou existe hoje, ou é de uma spec que ainda não chegou — e essas
     estão nomeadas, uma a uma.
     """
-    # `emitir_nf` e `registrar_aprovacao` são da S-05; `aplicar_desconto` e as
-    # irmãs não existem por decisão (RF-2.6) e são cobertas pelo teste acima.
-    ainda_nao_existem = {"emitir_nf", "registrar_aprovacao"} | INEXISTENTES
+    # `emitir_nf` e `registrar_aprovacao` estavam aqui como "ainda não existem",
+    # esperando a S-05. **A S-05 chegou e a resposta foi outra:** elas não são tools
+    # e nunca serão. A emissão é disparada pela retomada do grafo fiscal a partir da
+    # aprovação registrada (ADR-003), e o registro da aprovação é uma rota do
+    # operador — nenhum dos dois é ação de agente. Por isso os nomes migraram para
+    # `NUNCA_SAO_TOOLS`, que é uma afirmação permanente, e não uma pendência.
+    #
+    # A lista de pendências continua tendo que se esvaziar sozinha, e agora ela está
+    # vazia: no dia em que alguém registrar uma tool com um destes nomes, esta linha
+    # reprova — que é exatamente o que deve acontecer.
     registradas = {tool.name for tool in (*le.tools, *escreve.tools)}
 
-    # A lista de pendências tem que se esvaziar sozinha: no dia em que
-    # `gerar_link_pagamento` for registrada, esta linha reprova até alguém tirá-la
-    # daqui. Sem ela, um nome ficaria na lista para sempre e o teste passaria a
-    # tolerar exatamente o que existe para pegar.
-    assert registradas.isdisjoint(ainda_nao_existem), (
-        "uma tool desta lista já existe no registro: tire o nome de `ainda_nao_existem`"
+    assert registradas.isdisjoint(NUNCA_SAO_TOOLS | INEXISTENTES), (
+        "uma tool que não pode existir foi registrada: veja ADR-002 e ADR-003"
     )
 
     citadas = {
@@ -226,4 +240,4 @@ def test_every_adversarial_case_names_tools_that_this_repository_recognises(
         for nome in (caso.get("tools", {}).get(chave) or [])
     }
 
-    assert citadas <= registradas | ainda_nao_existem
+    assert citadas <= registradas | NUNCA_SAO_TOOLS | INEXISTENTES

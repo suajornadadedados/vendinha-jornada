@@ -32,7 +32,7 @@ from html import escape
 from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from langchain.embeddings import init_embeddings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
@@ -394,13 +394,22 @@ def create_app(
             model,
             app.state.checkpointer,
             Supervisor(
-                recomendacao=recomendacao(busca, app.state.catalogo, app.state.pedidos, timeout),
+                recomendacao=recomendacao(
+                    busca,
+                    app.state.catalogo,
+                    app.state.pedidos,
+                    timeout,
+                    app.state.fiscal,
+                    settings.public_base_url,
+                ),
                 checkout=checkout(
                     busca,
                     app.state.catalogo,
                     app.state.pedidos,
                     app.state.gateway,
                     timeout,
+                    app.state.fiscal,
+                    settings.public_base_url,
                 ),
                 perguntar=roteador_do_modelo(model),
             ),
@@ -806,6 +815,53 @@ def create_app(
         """
         _operador_autenticado(x_operador_token)
         return await _registrar_decisao(request, pedido_id, Decisao.REJEITADA, corpo)
+
+    # ------------------------------------------------ o documento, para o cliente
+
+    async def _nota_ou_404(request: Request, pedido_id: str) -> Any:
+        """A nota emitida, ou 404.
+
+        **Um 404 e nao um 409 para "ainda nao emitida".** De fora, "este pedido nao
+        existe" e "a nota dele ainda nao saiu" tem que ser a mesma resposta: a URL e
+        aberta, e distinguir os dois casos transformaria a rota num oraculo que diz
+        quais ids de pedido existem.
+        """
+        emitida = await request.app.state.fiscal.nota_de(pedido_id)
+        if emitida is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "nota nao encontrada")
+        return emitida
+
+    @app.get("/pedidos/{pedido_id}/nota.xml", response_class=Response)
+    async def xml_da_nota(pedido_id: str, request: Request) -> Response:
+        """O XML da NF-e, para o contador da empresa compradora (RF-3.6, REQ-6).
+
+        **Aberta por link, e o link e o id opaco do pedido** — mesmo raciocinio do
+        link de pagamento (S-04). Diferente da pagina do mock, este documento
+        *carrega* dados do destinatario: e da natureza dele, e a alternativa seria
+        autenticar o comprador, que e um sistema que este projeto ainda nao tem. O
+        `uuid4` de `pedidos.novo_id` e o que sustenta a decisao, e ela esta escrita
+        aqui em vez de escondida.
+        """
+        emitida = await _nota_ou_404(request, pedido_id)
+        return Response(
+            content=emitida.xml,
+            media_type="application/xml",
+            headers={
+                "Content-Disposition": (f'inline; filename="nfe-{emitida.nota.numero:09d}.xml"')
+            },
+        )
+
+    @app.get("/pedidos/{pedido_id}/nota.pdf", response_class=Response)
+    async def danfe_da_nota(pedido_id: str, request: Request) -> Response:
+        """A DANFE em PDF. `inline` para abrir no navegador, com nome ao salvar."""
+        emitida = await _nota_ou_404(request, pedido_id)
+        return Response(
+            content=emitida.danfe,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (f'inline; filename="danfe-{emitida.nota.numero:09d}.pdf"')
+            },
+        )
 
     _rotas_do_mock(app)
 
