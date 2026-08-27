@@ -57,11 +57,31 @@ Um **supervisor** roteia a conversa e **dois subagents** executam. A divisão n�
 |---|---|---|
 | `supervisor` | roteamento | não |
 | `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`, `validar_composicao` | **não** — só read-only |
-| `checkout` | `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
+| `checkout` | as quatro acima, mais `validar_dados_cliente`, `consultar_pedido`, `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
 
 `desconto` **não existe** como tool em nenhum registro. Não é uma ação negada por prompt: ela
 não está lá. Um teste da camada `security` falha se qualquer tool de escrita vazar para o
 registro do subagent de recomendação (R2, R4).
+
+**O checkout também lê, e isso não move a fronteira.** O que o ADR-002 protege é a *ação*,
+nunca a *consulta*: a invariante é "`recomendacao` não escreve", jamais "`checkout` não lê".
+Um turno de checkout em que o cliente troca um item precisa reconferir preço e revalidar a
+composição — sem as tools de leitura ele teria que voltar de lane, e o cliente veria a conversa
+recuar. É o que o corpus já declarava: o `tools.permitidas` de `golden-003` e `golden-015`
+lista as quatro de leitura ao lado de `criar_pedido` (S-04, D-1).
+
+**Só a lane que atende o turno tem as tools ligadas.** O supervisor escolhe uma das duas na
+porta do grafo, e cada lane carrega o próprio `ToolNode`: enquanto o turno corre na
+recomendação, as tools de escrita não estão ligadas no modelo que fala. Um nó de tools
+compartilhado ligaria a união das duas listas e a fronteira teria vazado pelo grafo com os
+dois registros ainda descrevendo-a como correta.
+
+**A transição para o checkout tem pré-condição de código.** O supervisor só consulta o modelo
+sobre a rota depois que a transcrição já contém um veredito `aprovada: true` de
+`validar_composicao` — fato produzido por `composicao.validar` sobre produtos lidos do
+Postgres. E o roteador é obrigado a **citar** a fala que confirmou, conferida literalmente
+contra as mensagens do cliente: um "pode fechar" plantado na descrição de um produto não é
+fala de cliente e não abre nada (RF-2.1, R4).
 
 `validar_composicao` fica no subagent **read-only** e isso não é descuido: propor não é side
 effect. Ela não persiste nada — recebe uma lista de produtos e devolve um veredito com total,

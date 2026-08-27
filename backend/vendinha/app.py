@@ -41,8 +41,9 @@ from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
-from vendinha.graph import build_graph, fala_com_o_cliente, session_config
+from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.observability import callback_handler, install_log_redaction
+from vendinha.pedidos import Pedidos, PostgresPedidos
 from vendinha.providers import (
     PROVIDERS,
     credentials_from_environment,
@@ -63,7 +64,8 @@ from vendinha.schemas import (
     SessionEvent,
     TokenEvent,
 )
-from vendinha.subagents import recomendacao
+from vendinha.subagents import checkout, recomendacao
+from vendinha.supervisor import Supervisor, roteador_do_modelo
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,7 @@ def create_app(
     graph: Any | None = None,
     store: ConfigStore | None = None,
     catalogo: Catalogo | None = None,
+    pedidos: Pedidos | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -153,6 +156,10 @@ def create_app(
         app.state.catalogo = catalogo or PostgresCatalogo(
             with_connect_timeout(settings.database_url)
         )
+        # A porta do pedido é injetável pela mesma razão que o catálogo: a S-04
+        # trouxe escrita, e um teste que não consegue substituir o que escreve só
+        # consegue testar o caminho que não escreve.
+        app.state.pedidos = pedidos or PostgresPedidos(with_connect_timeout(settings.database_url))
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -301,10 +308,21 @@ def create_app(
 
         provider, _ = split_model(model_name)
         api_key = (await _credentials(app)).get(provider)
-        built = build_graph(
-            resolve_model(model_name, api_key),
+        model = resolve_model(model_name, api_key)
+        busca = await _busca(app)
+        timeout = settings.tool_timeout_seconds
+        # O mesmo modelo atende as duas lanes e o roteador. Um modelo barato só
+        # para rotear foi considerado e recusado: seria uma segunda credencial e
+        # uma segunda lista de modelos permitidos no caminho do atendimento, e o
+        # roteador só é consultado quando já existe composição aprovada (S-04).
+        built = build_supervised_graph(
+            model,
             app.state.checkpointer,
-            recomendacao(await _busca(app), app.state.catalogo, settings.tool_timeout_seconds),
+            Supervisor(
+                recomendacao=recomendacao(busca, app.state.catalogo, timeout),
+                checkout=checkout(busca, app.state.catalogo, app.state.pedidos, timeout),
+                perguntar=roteador_do_modelo(model),
+            ),
             budget_tokens=settings.session_budget_tokens,
         )
         app.state.graphs[model_name] = built
