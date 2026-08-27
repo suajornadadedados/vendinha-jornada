@@ -32,8 +32,17 @@ CATALOGO = REPO_ROOT / "data" / "catalogo"
 SCHEMA = CATALOGO / "schema" / "produto.schema.json"
 
 # docs/specs/S-01: "~50 produtos", metrica ">= 50, 100% com preco e >=4 atributos".
-MINIMO_DE_PRODUTOS = 50
+# S-10 subiu o piso para 60: o seed B2B tem 65, e um piso de 50 deixaria a suite
+# verde depois de perder os petiscos e o topo de faixa inteiros — que sao
+# exatamente o que faz uma composicao de evento ter escolha (ADR-013).
+MINIMO_DE_PRODUTOS = 60
 MINIMO_DE_ATRIBUTOS = 4
+
+# Espelha o enum de `contem` em data/catalogo/schema/produto.schema.json e o
+# Literal `Alergeno` em backend/vendinha/catalogo.py. Os tres precisam concordar:
+# um alergeno que existe no seed e nao no Literal derruba a ingestao, e um que
+# existe no Literal e nao no schema passa pela validacao e nunca e cortado.
+ALERGENOS = frozenset({"lactose", "gluten", "ovos", "castanhas", "amendoim", "alcool", "acucar"})
 
 # Os campos que descrevem o produto para a busca semantica da S-03 — o que faz o
 # catalogo responder "presente pra minha sogra" em vez de exigir um filtro.
@@ -157,6 +166,7 @@ def test_product_type_matches_the_file_it_lives_in(
         "cafes": {"cafe"},
         "doces": {"doce"},
         "cachacas-e-licores": {"cachaca", "licor"},
+        "petiscos": {"petisco"},
     }
     assert seed_file.stem in esperado, (
         f"{seed_file.name} is not a known catalogue file — add it to this map "
@@ -165,3 +175,40 @@ def test_product_type_matches_the_file_it_lives_in(
     assert produto["tipo"] in esperado[seed_file.stem], (
         f"{produto['id']}: tipo '{produto['tipo']}' does not belong in {seed_file.name}"
     )
+
+
+@pytest.mark.parametrize("produto", PRODUCT_ROWS, ids=PRODUCT_IDS)
+def test_every_product_declares_how_many_people_it_serves(produto: dict[str, Any]) -> None:
+    """R10/R1 — `rendimento` is what turns "40 people" into a quantity.
+
+    Without it the agent would have to guess how many guests a 250 g bag of coffee
+    covers, and a guessed quantity is a made-up fact wearing a number (RF-1.6).
+    The schema already pins the type; this pins that nobody parked a placeholder.
+    """
+    rendimento = produto["rendimento"]
+    assert isinstance(rendimento, int) and not isinstance(rendimento, bool), (
+        f"{produto['id']}: rendimento is {type(rendimento).__name__}, must be an int"
+    )
+    assert rendimento >= 1, f"{produto['id']}: rendimento must be >= 1, got {rendimento}"
+
+
+@pytest.mark.parametrize("produto", PRODUCT_ROWS, ids=PRODUCT_IDS)
+def test_every_product_declares_its_allergens(produto: dict[str, Any]) -> None:
+    """R10 — `contem` is a declared cut, and it cannot be inferred from the text.
+
+    Doce de leite does not announce lactose and broa de fuba does not warn about
+    wheat. An undeclared allergen is the one catalogue gap whose cost is not a bad
+    recommendation but someone getting hurt, so the field is required and closed:
+    a typo like "gluteN" would be a restriction no search ever matches.
+    """
+    contem = produto["contem"]
+    assert isinstance(contem, list), (
+        f"{produto['id']}: contem is {type(contem).__name__}, must be a list "
+        "(an empty list means 'nothing to declare', which is not the same as absent)"
+    )
+    desconhecidos = sorted(set(contem) - ALERGENOS)
+    assert not desconhecidos, (
+        f"{produto['id']}: allergens outside the closed list: {desconhecidos}. "
+        f"Known: {sorted(ALERGENOS)}"
+    )
+    assert len(set(contem)) == len(contem), f"{produto['id']}: contem repeats an allergen: {contem}"

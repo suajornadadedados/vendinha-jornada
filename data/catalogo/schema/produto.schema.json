@@ -71,7 +71,7 @@
       "description": "Alergenos declarados. Campo de CORTE, nao de ranqueamento: nao entra no payload do Qdrant nem no texto embedado, porque um alergeno com duas moradas e a falha de R1 com consequencia fisica (R10, ADR-013). Lista vazia significa \"nada a declarar\".",
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["lactose", "gluten", "alcool", "castanhas", "acucar"] }
+      "items": { "enum": ["lactose", "gluten", "ovos", "castanhas", "amendoim", "alcool", "acucar"] }
     },
     "maturacao": { "type": "string", "minLength": 3 },
     "torra": { "type": "string", "minLength": 3 },

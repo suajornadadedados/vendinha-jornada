@@ -35,16 +35,16 @@ PRD §1. Trocar o comprador preserva a tese e destrava a **composição sob rest
 modelo escolhe com gosto e o código recusa com aritmética.
 
 ## Requisitos
-- [ ] REQ-1 ADR-013 registrado (com as alternativas recusadas) e D16 em `docs/decisoes.md`.
-- [ ] REQ-2 `docs/requisitos.md` reescrito: a tradução do pedido do cliente passa a ser
+- [x] REQ-1 ADR-013 registrado (com as alternativas recusadas) e D16 em `docs/decisoes.md`.
+- [x] REQ-2 `docs/requisitos.md` reescrito: a tradução do pedido do cliente passa a ser
       corporativa. `docs/PRD.md` com persona nova, RF-1.6/RF-1.7 (composição) e RF-2.2 em PJ.
       `docs/jornada.md` com a etapa nova — *montar composição: LLM propõe, código valida*.
-- [ ] REQ-3 **R10** na matriz de `docs/riscos.md` e na tabela risco→teste de `docs/testes.md`,
+- [x] REQ-3 **R10** na matriz de `docs/riscos.md` e na tabela risco→teste de `docs/testes.md`,
       com o arquivo de verificação nomeado e a spec responsável. `docs/arquitetura.md` com a
       §3.3 nova (*Onde o código recusa o modelo*) e §3.1, §3.4 e §3.5 atualizadas.
-- [ ] REQ-4 `data/catalogo/schema/produto.schema.json` com `rendimento` e `contem` obrigatórios
+- [x] REQ-4 `data/catalogo/schema/produto.schema.json` com `rendimento` e `contem` obrigatórios
       e `petisco` no enum de `tipo`. `data/catalogo/README.md` explica por que cada um existe.
-- [ ] REQ-5 Seed enriquecido: todos os produtos com `rendimento` e `contem`, mais petiscos
+- [x] REQ-5 Seed enriquecido: todos os produtos com `rendimento` e `contem`, mais petiscos
       mineiros (torresmo, biscoito de polvilho, pão de queijo) e itens de topo de faixa.
       `make test` verde — o teste do seed é o portão.
 - [ ] REQ-6 Corpus de evals reescrito para o comprador corporativo: os 12 golden e os 6
@@ -64,7 +64,8 @@ Boleto/faturamento B2B. Merch no kit de boas-vindas. `tipo: embalagem`.
 3. `docs(s-10): retranslate the client request for b2b`
 4. `docs(s-10): risk r10 and its verification`
 5. `feat(s-10): catalog schema with rendimento and contem`
-6. `feat(s-10): enrich seed and add mineiro petiscos`
+6. `feat(s-10): enrich seed and add mineiro petiscos` — leva junto o mínimo de
+   `backend/vendinha/catalogo.py` para o seed continuar legível (D-1)
 7. `eval(s-10): rewrite corpus for the corporate buyer`
 8. `spec(s-10): rewrite s-04, s-05 and s-07 for b2b`
 
@@ -100,7 +101,49 @@ Cenário: nenhum caso de eval cita produto que não existe
   id citado existe.
 
 ## Descobertas (preenchido durante a execução)
-- (vazio)
+
+**D-1 · O seed e o modelo `Produto` são uma mudança só, não duas.**
+O plano previa `rendimento` e `contem` no seed (S-10) e no `backend/vendinha/catalogo.py`
+(S-11, task 1). Não dá: `Produto` é `extra="forbid"`, então o primeiro campo novo no JSON
+derruba `carregar_seed` — e com ele `test_catalog_ingestion.py`, que roda em `make test`. Um
+commit de seed que deixa a suíte vermelha viola o guardrail de sessão do `CLAUDE.md`.
+
+A S-01 conseguiu criar o seed sem tocar em código porque `catalogo.py` **ainda não existia** —
+ele nasceu na S-03. A partir do momento em que existe um leitor com contrato fechado, seed e
+leitor deixam de ser separáveis.
+
+Resolvido dentro do escopo: a task 6 leva junto o mínimo de `catalogo.py` para o seed ser
+legível — `Produto`, o `Alergeno` `Literal`, as colunas do Postgres e os dois docstrings que
+explicam o que ficou de fora do Qdrant. Nada de busca, filtro ou tool: isso continua na S-11,
+cuja task 1 encolheu para *usar* os campos em vez de *criá-los*.
+
+**D-2 · A lista fechada de alérgenos estava errada, e o próprio catálogo provou.**
+O enum proposto era `lactose | gluten | alcool | castanhas | acucar`. Ao atribuir os valores,
+dois produtos que já estavam no seed não couberam: `pacoca-de-amendoim` (amendoim é leguminosa,
+não castanha — e é alérgeno de declaração obrigatória própria na RDC 26/2015) e
+`broa-de-fuba-com-erva-doce` (leva ovo). Forçá-los em `castanhas` ou deixá-los com `contem: []`
+seria declarar errado num campo cuja resposta errada machuca alguém.
+
+Enum corrigido para `lactose | gluten | ovos | castanhas | amendoim | alcool | acucar`, nos três
+lugares que precisam concordar: schema do seed, `Alergeno` em `catalogo.py`, e a constante
+`ALERGENOS` do teste — que existe justamente para os três não divergirem em silêncio.
+
+`castanhas` fica no enum sem nenhum produto usando. É deliberado: um comprador corporativo
+pergunta por castanha, e a restrição precisa ser expressável mesmo quando a resposta é *"nenhum
+item da composição contém"*.
+
+**D-3 · `biscoito-de-polvilho` nunca foi um doce.**
+Estava em `doces.json` por falta de categoria melhor. Com `petisco` no enum ele foi para
+`petiscos.json`, **mantendo o id** — os casos de eval que o citam continuam válidos. E ele
+virou o exemplo mais útil do catálogo: polvilho é mandioca, então é **sem glúten**, enquanto a
+broa de fubá ao lado leva trigo. Um celíaco pode comer um e não o outro, e nenhuma das duas
+descrições diz isso — que é exatamente o argumento para `contem` ser declarado e não inferido.
+
+**D-4 · Sem sistema de migração, `CREATE TABLE IF NOT EXISTS` não basta.**
+Um banco de desenvolvimento que já tem a tabela `produto` nunca veria as colunas novas, e o
+próximo `make seed` falharia com *coluna inexistente* em vez de dizer o que aconteceu. `SCHEMA`
+virou tupla de statements, com dois `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` ao lado do
+`CREATE`. As duas formas são idempotentes, então `setup()` continua podendo rodar à vontade.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação

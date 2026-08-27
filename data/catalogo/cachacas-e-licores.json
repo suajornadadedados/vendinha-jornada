@@ -21,6 +21,10 @@
     "preco": "148.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "4 anos em amburana",
     "teor_alcoolico": "38% vol."
   },
@@ -45,6 +49,10 @@
     "preco": "78.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "descansada 6 meses em inox",
     "teor_alcoolico": "40% vol."
   },
@@ -69,6 +77,10 @@
     "preco": "236.00",
     "disponivel": true,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "8 anos em carvalho",
     "teor_alcoolico": "41% vol."
   },
@@ -92,6 +104,10 @@
     "preco": "132.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "3 anos em jequitibá-rosa",
     "teor_alcoolico": "40% vol."
   },
@@ -116,6 +132,10 @@
     "preco": "118.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "2 anos em bálsamo",
     "teor_alcoolico": "39% vol."
   },
@@ -139,6 +159,10 @@
     "preco": "96.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "sem envelhecimento",
     "teor_alcoolico": "38% vol."
   },
@@ -162,6 +186,10 @@
     "preco": "172.00",
     "disponivel": false,
     "prazo_estimado": "7 a 10 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "5 anos em jatobá",
     "teor_alcoolico": "42% vol."
   },
@@ -186,6 +214,10 @@
     "preco": "198.00",
     "disponivel": true,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ],
     "maturacao": "6 anos, blend de umburana e carvalho",
     "teor_alcoolico": "40% vol."
   },
@@ -211,6 +243,11 @@
     "preco": "88.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool",
+      "acucar"
+    ],
     "maturacao": "macerado 90 dias",
     "teor_alcoolico": "20% vol."
   },
@@ -234,6 +271,11 @@
     "preco": "82.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool",
+      "acucar"
+    ],
     "maturacao": "macerado 120 dias",
     "teor_alcoolico": "22% vol."
   },
@@ -259,6 +301,11 @@
     "preco": "78.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool",
+      "acucar"
+    ],
     "maturacao": "macerado 60 dias",
     "teor_alcoolico": "20% vol."
   },
@@ -282,7 +329,42 @@
     "preco": "74.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "alcool",
+      "lactose",
+      "acucar"
+    ],
     "maturacao": "descansado 30 dias",
     "teor_alcoolico": "18% vol."
+  },
+  {
+    "id": "cachaca-reserva-20-anos",
+    "nome": "Cachaça reserva 20 anos em bálsamo",
+    "tipo": "cachaca",
+    "regiao": "Salinas, MG",
+    "produtor": "Alambique Boca da Mata",
+    "descricao": "Vinte anos em tonel de bálsamo, engarrafada em numeração limitada. Cor de âmbar escuro, doçura de madeira e um final que não termina. O presente que se lembra.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "chocolate amargo",
+      "queijo parmesão mineiro",
+      "charuto"
+    ],
+    "ocasiao": [
+      "presente para cliente",
+      "presente para quem entende",
+      "fim de ano"
+    ],
+    "peso": "700 ml",
+    "preco": "480.00",
+    "disponivel": true,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "maturacao": "20 anos em bálsamo",
+    "teor_alcoolico": "42% vol.",
+    "rendimento": 12,
+    "contem": [
+      "alcool"
+    ]
   }
 ]
