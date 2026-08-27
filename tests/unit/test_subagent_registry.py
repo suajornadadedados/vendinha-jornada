@@ -29,6 +29,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.graph import ConversationState, build_graph, session_config
+from vendinha.pedidos import PedidosEmMemoria
 from vendinha.subagents import (
     PROMPT_RECOMENDACAO,
     RECOMENDACAO,
@@ -93,9 +94,16 @@ def test_the_recommendation_subagent_is_registered_with_read_only_tools_only(
 
     `validar_composicao` entrou na S-11 e não move a fronteira: propor uma
     composição é ler o catálogo e somar. O veredito não autoriza venda — quem
-    autoriza é `criar_pedido`, na S-04, e ele revalida do zero (ADR-013, RF-2.7).
+    autoriza é `criar_pedido`, e ele revalida do zero (ADR-013, RF-2.7).
+
+    `consultar_pedido` entrou na S-04 pelo mesmo argumento: ler um pedido é
+    leitura. Ela ficou fora do checkout-só porque o handoff exige uma composição
+    aprovada **nesta conversa**, e quem volta para perguntar sobre um pedido antigo
+    não tem uma — a tool estaria do lado errado da porta.
     """
-    subagent = recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT)
+    subagent = recomendacao(
+        BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+    )
 
     assert subagent.nome == RECOMENDACAO
     assert {tool.name for tool in subagent.tools} == {
@@ -103,6 +111,7 @@ def test_the_recommendation_subagent_is_registered_with_read_only_tools_only(
         "detalhar_produto",
         "consultar_preco",
         "validar_composicao",
+        "consultar_pedido",
     }
     assert subagent.escritoras == ()
     assert all(not ferramenta.escreve for ferramenta in subagent.ferramentas)
@@ -181,7 +190,9 @@ async def test_a_tool_call_is_executed_and_its_return_comes_back_as_a_tool_messa
         ],
     )
     resposta = AIMessage(content="O Canastra meia-cura sai por R$ 89,90.")
-    subagent = recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT)
+    subagent = recomendacao(
+        BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+    )
 
     graph = build_graph(
         ModeloComTools(messages=iter([pedido, resposta])), InMemorySaver(), subagent
@@ -216,7 +227,9 @@ async def test_a_tool_round_does_not_widen_the_checkpointed_state(
             {"name": "buscar_produtos", "args": {"necessidade": "queijo"}, "id": "chamada-1"}
         ],
     )
-    subagent = recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT)
+    subagent = recomendacao(
+        BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+    )
     checkpointer = InMemorySaver()
 
     graph = build_graph(

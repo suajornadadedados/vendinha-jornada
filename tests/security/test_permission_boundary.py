@@ -58,7 +58,9 @@ def seed() -> tuple[Produto, ...]:
 
 @pytest.fixture
 def le(seed: tuple[Produto, ...]) -> Subagent:
-    return recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT)
+    return recomendacao(
+        BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+    )
 
 
 @pytest.fixture

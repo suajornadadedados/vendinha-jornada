@@ -50,7 +50,7 @@ from vendinha import composicao as motor
 from vendinha.budget import TimedOut, run_with_timeout
 from vendinha.catalogo import Alergeno, Catalogo, Produto
 from vendinha.composicao import TipoDeEvento
-from vendinha.documentos import mascarar_cnpj
+from vendinha.documentos import cnpj_valido, mascarar_cnpj
 from vendinha.pagamento import GatewayIndisponivel, PaymentGateway
 from vendinha.pedidos import (
     ComposicaoDoPedido,
@@ -79,17 +79,26 @@ LIMITE_DE_COMPOSICOES = 10
 
 
 class EnderecoEntrada(BaseModel):
-    """O endereço como o cliente o dita. A validação é de `pedidos.Endereco`."""
+    """O endereço como o cliente o dita — inclusive pela metade.
+
+    **Todo campo é opcional, e isso é a decisão.** Um schema que exigisse o endereço
+    completo obrigaria o modelo a decidir sozinho se já pode chamar a tool, e aí quem
+    julga se o dado está completo volta a ser ele. Com tudo opcional, ele manda o que
+    tem e `pedidos.Endereco` diz o que falta.
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    logradouro: str = Field(description="Rua, avenida ou praça.")
-    numero: str = Field(description="O número. 's/n' quando não houver.")
+    logradouro: str | None = Field(default=None, description="Rua, avenida ou praça.")
+    numero: str | None = Field(default=None, description="O número. 's/n' quando não houver.")
     complemento: str | None = Field(default=None, description="Sala, andar, bloco.")
-    bairro: str
-    cidade: str
-    uf: str = Field(description="A sigla de duas letras, como MG.")
-    cep: str = Field(description="Oito dígitos, como 30140-071.")
+    bairro: str | None = None
+    cidade: str | None = None
+    uf: str | None = Field(
+        default=None,
+        description="A sigla de duas letras, como MG. Vazio se o cliente não disse.",
+    )
+    cep: str | None = Field(default=None, description="Oito dígitos, como 30140-071.")
 
 
 class EmpresaEntrada(BaseModel):
@@ -99,15 +108,26 @@ class EmpresaEntrada(BaseModel):
     outro é o que o código aceita. Fossem o mesmo, um CNPJ com dígito errado viraria
     `ValidationError` na fronteira da tool e o modelo receberia um traceback em vez
     de uma frase que ele consegue transformar em pergunta ao cliente.
+
+    **Tudo opcional, pelo mesmo motivo, e isso foi medido.** Com os campos
+    obrigatórios, o agente não tinha como chamar a tool antes de ter tudo — então
+    coletava em prosa e decidia sozinho quando o cadastro estava completo, que é
+    exatamente o julgamento que a tool existe para tirar dele. O `golden-008`
+    reprovava sem que nenhuma validação tivesse rodado, e a causa não era o prompt:
+    era o schema pedindo ao modelo uma decisão que é do código (S-04).
     """
 
     model_config = ConfigDict(frozen=True)
 
-    razao_social: str = Field(description="A razão social, como está no cartão CNPJ.")
-    cnpj: str = Field(description="Como o cliente informou. Não corrija, não complete.")
-    contato_nome: str = Field(description="Quem está falando com você.")
-    contato_email: str
-    endereco: EnderecoEntrada
+    razao_social: str | None = Field(
+        default=None, description="A razão social, como está no cartão CNPJ."
+    )
+    cnpj: str | None = Field(
+        default=None, description="Como o cliente informou. Não corrija, não complete."
+    )
+    contato_nome: str | None = Field(default=None, description="Quem está falando com você.")
+    contato_email: str | None = None
+    endereco: EnderecoEntrada = Field(default_factory=EnderecoEntrada)
 
 
 class ComposicaoProposta(BaseModel):
@@ -164,7 +184,15 @@ class GerarLinkPagamento(BaseModel):
 
 
 class DadosDoClienteValidados(ItemDeResultado):
-    """O veredito sobre os dados da empresa. Nenhum documento em claro aqui dentro."""
+    """O veredito sobre os dados da empresa. Nenhum documento em claro aqui dentro.
+
+    **`cnpj_valido` e `dados_completos` são duas perguntas, e conflá-las é um bug
+    que a régua pegou.** A primeira versão fazia `cnpj_valido = a empresa inteira
+    validou`, então um CNPJ perfeitamente correto voltava `false` porque o CEP
+    ainda não tinha chegado — e o agente dizia ao cliente que o documento dele não
+    conferia. `cnpj_valido` é sobre o documento e mais nada; se o cadastro está
+    completo é `dados_completos` quem responde.
+    """
 
     cnpj_valido: bool
     cnpj: str = Field(description="Mascarado — os quatro últimos dígitos e mais nada.")
@@ -233,6 +261,33 @@ def _para_o_banco(veredito: motor.Veredito, proposta: ComposicaoProposta) -> Com
     )
 
 
+# O que uma empresa precisa ter para ser destinatário de uma NF-e modelo 55. O
+# complemento fica de fora de propósito: nem todo endereço tem um.
+OBRIGATORIOS = ("razao_social", "cnpj", "contato_nome", "contato_email")
+OBRIGATORIOS_DO_ENDERECO = ("logradouro", "numero", "bairro", "cidade", "uf", "cep")
+
+
+def _vazio(valor: str | None) -> bool:
+    return not (valor or "").strip()
+
+
+def faltando(entrada: EmpresaEntrada) -> tuple[str, ...]:
+    """Os campos que o cliente ainda não informou, nomeados um a um.
+
+    Ausência é tratada aqui, e não deixada para o `ValidationError` do Pydantic,
+    porque as duas coisas são diferentes para quem lê: *"o CEP ainda não veio"* é um
+    pedido ao cliente, e *"o CNPJ não confere"* é uma recusa. Um agente que recebe as
+    duas com a mesma cara trata as duas do mesmo jeito.
+    """
+    ausentes = [campo for campo in OBRIGATORIOS if _vazio(getattr(entrada, campo))]
+    ausentes += [
+        f"endereco.{campo}"
+        for campo in OBRIGATORIOS_DO_ENDERECO
+        if _vazio(getattr(entrada.endereco, campo))
+    ]
+    return tuple(f"{campo}: ainda não informado pelo cliente" for campo in ausentes)
+
+
 def _empresa_ou_problemas(entrada: EmpresaEntrada) -> tuple[Empresa | None, tuple[str, ...]]:
     """Constrói a `Empresa` validada, ou devolve o que impede de construí-la.
 
@@ -240,13 +295,25 @@ def _empresa_ou_problemas(entrada: EmpresaEntrada) -> tuple[Empresa | None, tupl
     o modelo perguntar de novo ao cliente, e para isso ele precisa receber o
     problema como dado.
     """
+    ausentes = faltando(entrada)
+    if ausentes:
+        return None, ausentes
+
     try:
         empresa = Empresa(
-            razao_social=entrada.razao_social,
-            cnpj=entrada.cnpj,
-            contato_nome=entrada.contato_nome,
-            contato_email=entrada.contato_email,
-            endereco=Endereco(**entrada.endereco.model_dump()),
+            razao_social=entrada.razao_social or "",
+            cnpj=entrada.cnpj or "",
+            contato_nome=entrada.contato_nome or "",
+            contato_email=entrada.contato_email or "",
+            endereco=Endereco(
+                logradouro=entrada.endereco.logradouro or "",
+                numero=entrada.endereco.numero or "",
+                complemento=entrada.endereco.complemento,
+                bairro=entrada.endereco.bairro or "",
+                cidade=entrada.endereco.cidade or "",
+                uf=entrada.endereco.uf or "",
+                cep=entrada.endereco.cep or "",
+            ),
         )
     except ValidationError as invalido:
         return None, tuple(
@@ -326,10 +393,10 @@ def ferramentas_de_checkout(
         return Resultado(
             encontrados=(
                 DadosDoClienteValidados(
-                    cnpj_valido=validada is not None,
-                    cnpj=mascarar_cnpj(entrada.cnpj),
-                    razao_social=entrada.razao_social,
-                    contato_nome=entrada.contato_nome,
+                    cnpj_valido=cnpj_valido(entrada.cnpj or ""),
+                    cnpj=mascarar_cnpj(entrada.cnpj or ""),
+                    razao_social=entrada.razao_social or "",
+                    contato_nome=entrada.contato_nome or "",
                     dados_completos=validada is not None,
                     problemas=problemas,
                 ),
@@ -338,8 +405,10 @@ def ferramentas_de_checkout(
                 None
                 if validada is not None
                 else (
-                    "os dados acima não passam na validação; peça de novo ao cliente. "
-                    "Não corrija, não complete e não aceite um valor provisório"
+                    "o cadastro ainda não está completo ou válido; veja `problemas`. "
+                    "Campo 'ainda não informado' é dado que falta — peça ao cliente. "
+                    "Os demais são recusa: não corrija, não complete e não aceite um "
+                    "valor provisório"
                 )
             ),
         ).model_dump_json(exclude_none=True)
@@ -353,10 +422,10 @@ def ferramentas_de_checkout(
             return Resultado(
                 encontrados=(
                     DadosDoClienteValidados(
-                        cnpj_valido=False,
-                        cnpj=mascarar_cnpj(entrada.cnpj),
-                        razao_social=entrada.razao_social,
-                        contato_nome=entrada.contato_nome,
+                        cnpj_valido=cnpj_valido(entrada.cnpj or ""),
+                        cnpj=mascarar_cnpj(entrada.cnpj or ""),
+                        razao_social=entrada.razao_social or "",
+                        contato_nome=entrada.contato_nome or "",
                         dados_completos=False,
                         problemas=problemas,
                     ),

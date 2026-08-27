@@ -40,6 +40,7 @@ carregam, com o agravante de ninguém migrar nem invalidar checkpoint (RNF-6, R9
 """
 
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -51,6 +52,8 @@ from pydantic import BaseModel, Field
 
 from vendinha.budget import within_budget
 from vendinha.subagents import Subagent
+
+logger = logging.getLogger(__name__)
 
 Destino = Literal["recomendacao", "checkout"]
 
@@ -220,23 +223,36 @@ class Supervisor:
     async def rota(self, messages: Sequence[AnyMessage], budget_tokens: int) -> Subagent:
         """Quem atende este turno. Ver os degraus no topo do módulo."""
         if not within_budget(messages, budget_tokens):
+            logger.info("rota=recomendacao motivo=teto-de-sessao")
             # O teto já estourou: a lane de recomendação é a barata, e o nó de
             # conversa devolve a mensagem de limite sem chamar modelo nenhum.
             # Pagar um roteador para descobrir isso seria gastar depois do fim.
             return self.recomendacao
 
         if self.ja_em_checkout(messages):
+            logger.info("rota=checkout motivo=tool-de-checkout-ja-respondeu")
             return self.checkout
 
         if not existe_composicao_aprovada(messages):
+            logger.info("rota=recomendacao motivo=sem-composicao-aprovada")
             return self.recomendacao
 
         rota = await self.perguntar(messages)
-        if rota.destino == "checkout" and citacao_confere(
-            rota.fala_de_confirmacao, falas_do_cliente(messages)
-        ):
-            return self.checkout
-        return self.recomendacao
+        if rota.destino != "checkout":
+            logger.info("rota=recomendacao motivo=roteador-nao-viu-confirmacao")
+            return self.recomendacao
+        if not citacao_confere(rota.fala_de_confirmacao, falas_do_cliente(messages)):
+            # O roteador afirmou uma confirmação e a citação não bate com nenhuma
+            # fala do cliente. É o degrau que impede o modelo de destravar a escrita
+            # sozinho, e é ruidoso de propósito: quando ele dispara com frequência,
+            # ou o prompt do roteador está mal escrito, ou alguém está tentando.
+            logger.info(
+                "rota=recomendacao motivo=citacao-nao-confere citacao=%r",
+                rota.fala_de_confirmacao,
+            )
+            return self.recomendacao
+        logger.info("rota=checkout motivo=confirmacao-conferida")
+        return self.checkout
 
 
 def roteador_do_modelo(model: BaseChatModel) -> Roteador:
@@ -259,6 +275,11 @@ def roteador_do_modelo(model: BaseChatModel) -> Roteador:
         try:
             return Rota.model_validate(resposta)
         except Exception:
+            # Ruidoso de propósito. O default é seguro — sem confirmação —, mas um
+            # roteador que nunca devolve o schema deixaria a lane de checkout
+            # inalcançável e a conversa parada, e isso não pode acontecer em
+            # silêncio.
+            logger.warning("o roteador não devolveu uma Rota válida", exc_info=True)
             return Rota(destino="recomendacao")
 
     return perguntar

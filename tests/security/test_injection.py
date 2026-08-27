@@ -66,7 +66,9 @@ def _supervisor(seed: tuple[Produto, ...], rota: Rota) -> Supervisor:
         return rota
 
     return Supervisor(
-        recomendacao=recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT),
+        recomendacao=recomendacao(
+            BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+        ),
         checkout=checkout(
             BuscaEmMemoria(seed),
             CatalogoEmMemoria(seed),

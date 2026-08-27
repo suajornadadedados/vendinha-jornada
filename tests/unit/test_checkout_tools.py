@@ -148,13 +148,18 @@ async def test_bad_company_data_is_refused_with_a_reason_the_agent_can_relay(
     Como exceção, o modelo receberia uma mensagem técnica e o caminho de conserto —
     perguntar de novo ao cliente — ficaria fora do alcance dele. E `adversarial-006`
     reprova a execução que deixa vazar mensagem de erro interna.
+
+    A asserção é sobre `dados_completos`, e não sobre `cnpj_valido`: um e-mail
+    malformado não torna o CNPJ inválido. Confundir os dois fazia o agente dizer ao
+    cliente que o documento dele não conferia por causa de outro campo.
     """
     resposta = await chamar(
         tools["validar_dados_cliente"], empresa={**empresa_valida, campo: valor}
     )
 
     (veredito,) = resposta["encontrados"]
-    assert veredito["cnpj_valido"] is False
+    assert veredito["dados_completos"] is False
+    assert veredito["cnpj_valido"] is (campo != "cnpj")
     assert veredito["problemas"], "a recusa tem que dizer o que está errado"
     assert "provisório" in resposta["observacao"]
 
@@ -314,3 +319,51 @@ async def test_the_same_payment_event_only_produces_an_effect_once(
 
     assert await gravados.registrar_pagamento(pedido_id, "evento-1") is False
     assert gravados.gravados[pedido_id].status is StatusDoPedido.AGUARDANDO_APROVACAO_NF
+
+
+@pytest.mark.risco("R1")
+async def test_partial_company_data_is_accepted_by_the_tool_and_refused_by_the_code(
+    tools: dict[str, BaseTool], chamar: Chamar
+) -> None:
+    """R1, RF-2.2 — quem decide se o cadastro está completo é o código, não o modelo.
+
+    O schema de entrada aceita a empresa pela metade **de propósito**. Com os campos
+    obrigatórios, o agente não conseguia chamar a tool antes de ter tudo — então
+    coletava em prosa e decidia sozinho quando o cadastro estava completo, que é
+    exatamente o julgamento que esta tool existe para tirar dele. A recusa nomeia
+    campo a campo, para o agente saber o que pedir.
+    """
+    resposta = await chamar(
+        tools["validar_dados_cliente"],
+        empresa={"razao_social": "Aurora Servicos Digitais LTDA", "cnpj": "11.222.333/0001-81"},
+    )
+
+    (veredito,) = resposta["encontrados"]
+    assert veredito["dados_completos"] is False
+    # E o documento continua válido: cadastro incompleto não torna um CNPJ errado.
+    assert veredito["cnpj_valido"] is True
+    assert "contato_email: ainda não informado pelo cliente" in veredito["problemas"]
+    assert "endereco.cep: ainda não informado pelo cliente" in veredito["problemas"]
+    # Faltar não é o mesmo que estar errado, e a mensagem tem que diferenciar: um é
+    # pedido ao cliente, o outro é recusa.
+    assert not any("não fecham" in problema for problema in veredito["problemas"])
+
+
+@pytest.mark.risco("R1")
+async def test_a_missing_field_and_an_invalid_one_are_different_problems(
+    tools: dict[str, BaseTool], empresa_valida: dict[str, Any], chamar: Chamar
+) -> None:
+    """R1 — CNPJ com dígito errado é recusa; CEP ausente é pedido.
+
+    Um agente que recebe as duas com a mesma cara trata as duas do mesmo jeito — e
+    aí ou ele pede um documento que o cliente já deu, ou aceita um que não fecha.
+    """
+    resposta = await chamar(
+        tools["validar_dados_cliente"],
+        empresa={**empresa_valida, "cnpj": "11.222.333/0001-99"},
+    )
+
+    (veredito,) = resposta["encontrados"]
+    assert veredito["cnpj_valido"] is False
+    assert any("dígitos verificadores" in problema for problema in veredito["problemas"])
+    assert not any("ainda não informado" in problema for problema in veredito["problemas"])

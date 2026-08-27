@@ -338,7 +338,7 @@ def create_app(
             model,
             app.state.checkpointer,
             Supervisor(
-                recomendacao=recomendacao(busca, app.state.catalogo, timeout),
+                recomendacao=recomendacao(busca, app.state.catalogo, app.state.pedidos, timeout),
                 checkout=checkout(
                     busca,
                     app.state.catalogo,

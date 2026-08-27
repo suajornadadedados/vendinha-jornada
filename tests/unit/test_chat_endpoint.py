@@ -27,6 +27,7 @@ from vendinha.app import create_app
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
+from vendinha.pedidos import PedidosEmMemoria
 from vendinha.providers import PROVIDERS, Provider
 from vendinha.subagents import (
     PROMPT_RECOMENDACAO,
@@ -281,7 +282,7 @@ def test_the_stream_never_carries_a_tool_return_to_the_customer() -> None:
     graph = build_graph(
         ModeloQuePedeTool(respostas=[pedido, AIMessage(content="Sai por R$ 89,90.")]),
         InMemorySaver(),
-        recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), 30.0),
+        recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), 30.0),
     )
 
     with TestClient(

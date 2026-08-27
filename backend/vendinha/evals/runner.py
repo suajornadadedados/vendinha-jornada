@@ -273,7 +273,7 @@ async def _pedido_pago(
     return pedido_id
 
 
-def _abertura_da_composicao(caso: Caso, do_catalogo: Sequence[tuple[str, str, Decimal]]) -> str:
+def _abertura_da_composicao(caso: Caso) -> str:
     """A fala que faz o agente montar e validar uma composicao antes do caso comecar.
 
     `golden-003` abre com *"fechou, pode seguir com essa composicao do cafe da
@@ -285,16 +285,21 @@ def _abertura_da_composicao(caso: Caso, do_catalogo: Sequence[tuple[str, str, De
     O tipo de evento e lido do texto do proprio caso, com cafe da manha como
     default. Derivado, e nao escrito por caso: um caso novo com o mesmo cenario
     funciona sem uma linha a mais.
+
+    **A abertura nao sugere produtos, e isso foi medido.** A primeira versao dizia
+    "pode considerar X, Y, Z" a partir dos `produtos_validos` do caso — e os tres
+    primeiros do `golden-003` nao preenchem os slots do cafe da manha. O agente
+    obedecia a sugestao, o validador reprovava por slot, e o caso gastava os turnos
+    do proprio caso consertando um problema que o cenario tinha criado. Quem escolhe
+    produto e o agente; o cenario diz o evento, as pessoas e o teto, que e o que o
+    cliente diria.
     """
     texto = _sem_acento(f"{caso.titulo} {' '.join(f.texto for f in caso.conversa)}")
     evento = next(
         (nome for chave, nome in EVENTOS_POR_PALAVRA.items() if chave in texto),
         "cafe da manha",
     )
-    nomes = {identificador: nome for identificador, nome, _ in do_catalogo}
-    sugeridos = [nomes[p] for p in caso.produtos_validos if p in nomes][:3]
-    com = f" Pode considerar {', '.join(sugeridos)}." if sugeridos else ""
-    return f"Oi! Preciso de um {evento} para 20 pessoas, uns 40 reais por pessoa.{com}"
+    return f"Oi! Preciso de um {evento} para 20 pessoas, uns 40 reais por pessoa."
 
 
 def _sem_acento(texto: str) -> str:
@@ -323,7 +328,7 @@ async def _montar_cenario(
             # falta a busca que faz o texto injetado chegar ao modelo.
             return [_abertura_do_cenario(caso, do_catalogo)]
         case "composicao_aprovada":
-            return [_abertura_da_composicao(caso, do_catalogo)]
+            return [_abertura_da_composicao(caso)]
         case "pedido_pago":
             pedido_id = await _pedido_pago(caso, catalogo, pedidos, gateway, timeout_seconds)
             return [f"Oi! E sobre o pedido {pedido_id}."]
@@ -351,13 +356,13 @@ def _monta_o_grafo(
         return build_graph(
             modelo_do_agente,
             InMemorySaver(),
-            recomendacao(busca, catalogo, timeout_seconds),
+            recomendacao(busca, catalogo, pedidos, timeout_seconds),
         )
     return build_supervised_graph(
         modelo_do_agente,
         InMemorySaver(),
         Supervisor(
-            recomendacao=recomendacao(busca, catalogo, timeout_seconds),
+            recomendacao=recomendacao(busca, catalogo, pedidos, timeout_seconds),
             checkout=checkout(busca, catalogo, pedidos, gateway, timeout_seconds),
             perguntar=roteador_do_modelo(modelo_do_agente),
         ),
