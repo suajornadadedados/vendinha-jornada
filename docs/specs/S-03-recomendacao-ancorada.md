@@ -114,9 +114,16 @@ Duas decisões que não são minhas e que a S-04 encosta:
 1. **RS-1 — o D-1 vira ADR-013, ou a recusa fica registrada.** Exigir `OPENAI_API_KEY` para
    `make seed` numa instância que conversa só por Anthropic contraria a letra do RNF-1. Está
    declarado em três lugares e nunca passou por ADR.
+   **Estado:** o PO confirmou ter a chave no `.env`, então isto não bloqueia a entrega. O ADR
+   continua em aberto — ter a chave resolve a fricção de quem tem a chave, e não a promessa do
+   RNF-1 para quem clona o repositório amanhã.
 2. **RS-2 — decidir o contrato de `buscar_produtos` ANTES da S-04.** O conserto nomeado na
    DESC-1 (tirar `preco` e `disponivel` do retorno) muda um contrato Pydantic que a S-04 vai
-   consumir. Decidir depois custa retrabalho nas duas specs.
+   consumir.
+   **Estado: adiado por decisão do PO** (2026-08-27), com o PR da S-03 aberto assim mesmo.
+   A consequência a carregar: a S-04 vai construir `criar_pedido` sobre o contrato atual, e o
+   conserto da DESC-1 — se vier — passa a mexer nas duas specs em vez de uma. Fica escrito para
+   ser escolha, e não descoberta.
 
 ---
 
