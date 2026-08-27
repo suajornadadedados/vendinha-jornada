@@ -87,6 +87,15 @@ e o teste de `security` só na S-04. O precedente está no repositório.
 5. `test(s-11): composition rules refuse what they must`
 6. `eval(s-11): composition cases runnable locally`
 
+Acrescentadas na execução, com aprovação do PO, depois que os evals mostraram o teto
+de sessão cortando composição legítima (D-8). Ficaram nesta spec, e não numa spec de
+custo separada, porque decidir o teto sem antes arrumar o desperdício seria escolher
+um número para um fluxo que ia mudar em seguida:
+
+7. `perf(s-11): detalhar_produto answers for a whole composition in one call`
+8. `fix(s-11): the ceiling degrades before it truncates`
+9. `fix(s-11): set the session ceiling from measurement, not from memory`
+
 ## BDD
 ```gherkin
 Cenário: o código recusa o que o modelo propôs
@@ -194,30 +203,46 @@ pulava a tool que o `golden-001` ancora; o modelo calculava a sobra do orçament
 ADR-001; e um veredito reprovado resolvido em silêncio deixa o cliente com uma
 composição que ele não reconhece. Nenhum caso de `evals/` foi tocado (ADR-006).
 
-**D-11 — a reescrita do prompt não está em paridade com os critérios da S-03, e a
-verificação disso é instável.** `make evals-groundedness` reprova. Três coisas
-diferentes estão misturadas ali e vale separá-las:
+**D-11 — a suíte da S-03 já estava 0 de 6 na `main`, e a S-11 a melhorou.** Essa
+medição faltava desde o começo e é o que reenquadra tudo: durante boa parte da
+execução eu comparei os resultados contra uma linha de base **imaginada** como verde.
+Rodando `make evals-groundedness` no commit `5e0efdb` (a `main`, sem esta branch):
 
-*O que a S-11 consertou:* na `main`, `golden-013` e `golden-016` reprovavam no portão
-determinístico por `contem`/`rendimento` não atravessarem a tool — ou seja, **a suíte
-da S-03 já estava vermelha antes desta branch**. Depois da task 1, o portão desses
-dois casos volta limpo ("fatos sem origem: nenhum").
+| | aprovados | critérios reprovados |
+|---|---|---|
+| `main` (5e0efdb) | **0 de 6** | 13 |
+| `spec/s-11-composicao` | 0 a 1 de 6 | **8** |
 
-*O que a S-11 quebrou, e foi consertado:* a regra nova sobre números deixou o modelo
-**receoso de dizer número consultado** — em `golden-016` ele se recusou a informar
-rendimento e devolveu pergunta. A regra proibia calcular e ele leu como proibição de
-relatar. Corrigido, e `golden-016` caiu de três falhas para uma.
+Ou seja: a reescrita do prompt **não** quebrou a S-03 — ela já estava quebrada, e a
+task 1 desta spec (`contem` e `rendimento` atravessando a tool) removeu falhas do
+portão determinístico que na `main` eram estruturais e insanáveis.
 
-*O que continua aberto:* o enquadramento de composição faz o modelo insinuar
-negociação (*"a gente pode pensar numa composição que caiba melhor no orçamento"*),
-o que reprova `golden-002` num critério de desconto. Há um reparo commitado para
-isso, **ainda não verificado** — rodar de novo antes da decisão sobre D-8 seria
-gastar uma rodada paga num prompt que pode mudar junto com o teto.
+*O que a S-11 quebrou e consertou no caminho:* a regra nova sobre números deixou o
+modelo receoso de **dizer** número consultado — ele proibia calcular e o modelo leu
+como proibição de relatar. E o prompt, reescrito para o comprador corporativo,
+cresceu de ~110 para 242 linhas com treze "regras mecânicas" competindo entre si;
+casos que passavam havia duas specs começaram a falhar em regras que continuavam no
+texto, intocadas. Consolidado para 162 linhas, `golden-002` e `golden-005` voltaram —
+o defeito era o comprimento, não uma regra específica. A lição vale registrar: no
+prompt, justificativa é para quem lê o código, não para o modelo.
 
-*O que não é sinal:* os critérios de juiz oscilam entre rodadas do **mesmo** código —
-`golden-002` passou numa e reprovou na seguinte —, e `golden-006` chegou a reprovar
-por `ValidationError` do próprio juiz, não por comportamento do agente. Afinar prompt
-contra uma régua que se move é como se overfita sem perceber.
+*O que continua aberto:* 8 critérios, concentrados em `detalhar_produto` não ser
+chamada em conversa que não é de composição. Não é regressão desta branch, é dívida
+que a S-03 deixou e que só ficou visível agora que o portão determinístico parou de
+mascará-la.
+
+*O que não é sinal:* os vereditos do juiz oscilam entre rodadas do **mesmo** código —
+`golden-005` aprovou numa e reprovou na seguinte, e uma conversa de composição custou
+13k tokens numa rodada e 91k na outra. Afinar prompt contra uma régua que se move é
+como se overfita sem perceber, e foi por isso que parei o laço aqui em vez de seguir
+uma rodada paga por vez.
+
+**D-12 — o portão de groundedness não pega categoria inventada.** No `golden-014` o
+agente ofereceu *"temos chocolate quente, chá e suco"* — nenhum dos três existe no
+catálogo — e o portão não viu, porque ele só confere **nome de produto real** citado
+sem origem (o próprio docstring de `groundedness.py` declara esse limite). O prompt
+ganhou a regra ("categoria também é catálogo"), mas a régua continua cega para essa
+classe. Não foi mexido: `evals/` é CODEOWNERS e a decisão é de PO.
 
 **D-7 — o `Makefile` não roda no shell deste ambiente sem ajuste.**
 `scripts/run-tests.sh` escolhe `python3`, que aqui resolve para um shim do pyenv sem as
