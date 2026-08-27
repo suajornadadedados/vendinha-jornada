@@ -167,6 +167,16 @@ class Settings(BaseSettings):
     # `PAYMENT_GATEWAY` switch: it would allow `mercadopago` with no token, which
     # boots fine and breaks on the first order. See D-4 and `pagamento.gateway_de`.
     mercadopago_access_token: str | None = None
+    # Emissor de NF-e, S-05. `mock` (default) gera DANFE e XML fiéis ao leiaute 55
+    # com tarja "SEM VALOR FISCAL"; `homologacao` é o adapter da S-09 e é recusado
+    # aqui com uma frase que diz isso, em vez de cair no mock em silêncio.
+    #
+    # Ao contrário do pagamento, a escolha é EXPLÍCITA (ver `nota.emissor_de`). As
+    # três variáveis estavam no `.env.example` desde a S-02 e nenhum código as lia —
+    # mesma classe da ressalva R-5 da verificação da S-02 e da DESC-3 da S-04.
+    nf_emitter: str = "mock"
+    nf_emitter_api_key: str | None = None
+    nf_emitter_base_url: str | None = None
     # Origin verification of the payment webhook (RF-2.5, R8). Absent means no
     # signature verifies — the safe side. "No secret, accept anything" would turn
     # a forgotten environment variable into an open endpoint that moves money.

@@ -109,6 +109,16 @@ class Empresa(BaseModel):
 
     razao_social: Texto
     cnpj: Texto
+    # A inscrição estadual da compradora, e ela é **opcional por decisão** (S-05).
+    # Não contribuinte de ICMS é a situação normal de boa parte das empresas que
+    # compram um café da manhã, e exigi-la recusaria compradora legítima — além de
+    # transformar a coleta num interrogatório. Ausente, a nota sai com `ISENTO` e
+    # `indIEDest=9`, que é o que a norma manda imprimir (`nota/documento.py`).
+    #
+    # Repare que quem julga se a IE **confere** com o CNPJ não é código nenhum: é o
+    # operador, na fila da S-05 — o `golden-011` rejeita a nota exatamente por isso.
+    # É um bom exemplo do que a fila existe para pegar e o schema não.
+    inscricao_estadual: str | None = None
     contato_nome: Texto
     contato_email: Texto
     endereco: Endereco
@@ -219,6 +229,14 @@ CREATE TABLE IF NOT EXISTS pedido (
     criado_em     timestamptz NOT NULL DEFAULT now()
 )
 """,
+    # A S-05 acrescentou a coluna, e `CREATE TABLE IF NOT EXISTS` não a levaria a um
+    # banco que já existe — quem rodou `make db-setup` na S-04 ficaria com a tabela
+    # antiga e um `INSERT` quebrado. Não há ferramenta de migração neste projeto (e
+    # trazer uma é decisão de ADR, não de spec), então a alteração é idempotente e
+    # fica ao lado do `CREATE` que ela corrige.
+    """
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS inscricao_estadual text
+""",
     """
 CREATE TABLE IF NOT EXISTS composicao_do_pedido (
     pedido_id            text NOT NULL REFERENCES pedido(id) ON DELETE CASCADE,
@@ -281,13 +299,15 @@ class PostgresPedidos:
         async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "INSERT INTO pedido (id, razao_social, cnpj, contato_nome, contato_email,"
+                    "INSERT INTO pedido (id, razao_social, cnpj, inscricao_estadual,"
+                    " contato_nome, contato_email,"
                     " endereco, total, status, url_pagamento, criado_em)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         pedido.id,
                         pedido.empresa.razao_social,
                         pedido.empresa.cnpj,
+                        pedido.empresa.inscricao_estadual,
                         pedido.empresa.contato_nome,
                         pedido.empresa.contato_email,
                         Json(pedido.empresa.endereco.model_dump()),
@@ -340,7 +360,8 @@ class PostgresPedidos:
             cabecalho = await (
                 await conn.execute(
                     "SELECT id, razao_social, cnpj, contato_nome, contato_email, endereco,"
-                    " total, status, url_pagamento, criado_em FROM pedido WHERE id = %s",
+                    " total, status, url_pagamento, criado_em, inscricao_estadual"
+                    " FROM pedido WHERE id = %s",
                     (pedido_id,),
                 )
             ).fetchone()
@@ -383,6 +404,10 @@ class PostgresPedidos:
             empresa=Empresa(
                 razao_social=cabecalho[1],
                 cnpj=cabecalho[2],
+                # No fim do SELECT, e não na posição do modelo: a coluna chegou
+                # depois (S-05) e um `ALTER TABLE` a acrescenta no fim. Ler pelo
+                # índice que a query declara é o que mantém as duas coisas juntas.
+                inscricao_estadual=cabecalho[10],
                 contato_nome=cabecalho[3],
                 contato_email=cabecalho[4],
                 endereco=Endereco.model_validate(cabecalho[5]),

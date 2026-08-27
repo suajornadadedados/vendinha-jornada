@@ -125,6 +125,14 @@ class EmpresaEntrada(BaseModel):
     cnpj: str | None = Field(
         default=None, description="Como o cliente informou. Não corrija, não complete."
     )
+    inscricao_estadual: str | None = Field(
+        default=None,
+        description=(
+            "A inscrição estadual da empresa, se ela for contribuinte de ICMS. "
+            "OPCIONAL: muita empresa não tem, e a nota sai como ISENTO. Registre se "
+            "o cliente informar; não peça como se fosse obrigatória e nunca invente."
+        ),
+    )
     contato_nome: str | None = Field(default=None, description="Quem está falando com você.")
     contato_email: str | None = None
     endereco: EnderecoEntrada = Field(default_factory=EnderecoEntrada)
@@ -303,6 +311,10 @@ def _empresa_ou_problemas(entrada: EmpresaEntrada) -> tuple[Empresa | None, tupl
         empresa = Empresa(
             razao_social=entrada.razao_social or "",
             cnpj=entrada.cnpj or "",
+            # Sem `or ""`: aqui a string vazia e a ausência são a mesma coisa, e o
+            # modelo do pedido distingue `None` de `""`. Uma IE vazia gravada faria
+            # a nota sair com inscrição em branco em vez de `ISENTO` (S-05).
+            inscricao_estadual=(entrada.inscricao_estadual or "").strip() or None,
             contato_nome=entrada.contato_nome or "",
             contato_email=entrada.contato_email or "",
             endereco=Endereco(

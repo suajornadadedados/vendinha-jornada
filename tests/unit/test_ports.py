@@ -15,6 +15,16 @@ nada — ele é uma implementação de produção do port (`docs/testes.md` §4,
 a preferência é verificado **à mão** no `/fechar-spec`, com o link aberto no
 navegador, e o resultado registrado no relatório. Está declarado para ninguém achar
 que está automatizado.
+
+**A S-05 trouxe a segunda porta, e com ela uma assimetria que vale nomear.** O
+`NFEmitter` tem hoje **um** adapter só: o `HomologacaoAdapter` é entregável da S-09.
+Então a metade "os dois adapters satisfazem o mesmo contrato" da R8 **não fecha
+nesta spec** para esta porta — parametrizar uma fixture com um elemento e chamar
+aquilo de teste de contrato seria a vacuidade que `docs/testes.md` §3.3 recusa. O
+que dá para provar agora é o que está abaixo: que a escolha do emissor é
+configuração, que uma configuração impossível é **recusada alto** em vez de cair no
+mock em silêncio, e que a exceção do port é uma só. A fidelidade do documento que o
+mock produz é de `tests/unit/test_nota_fiscal.py`.
 """
 
 from collections.abc import Callable
@@ -26,6 +36,17 @@ import pytest
 
 from vendinha import runtime
 from vendinha.composicao import TipoDeEvento
+from vendinha.nota import (
+    HOMOLOGACAO,
+    Autorizacao,
+    EmissorIndisponivel,
+    MockNFAdapter,
+    NotaEmitida,
+    agora,
+    chave_confere,
+    emissor_de,
+)
+from vendinha.nota import MOCK as MOCK_NF
 from vendinha.pagamento import (
     MERCADOPAGO,
     MOCK,
@@ -470,3 +491,66 @@ def test_the_mock_never_approves_a_reference_it_does_not_recognise(
 
     assert pagamento.aprovado is aprovado
     assert pagamento.pedido_id == pedido_id
+
+
+# ------------------------------------------------- a porta do emissor de NF-e
+
+
+@pytest.mark.risco("R8")
+def test_the_default_emitter_is_the_mock_and_nothing_has_to_be_configured() -> None:
+    """R8, ADR-004, RNF-1 — o quickstart não pede conta, certificado nem CNPJ.
+
+    `NF_EMITTER` ausente ou `mock` dão o mesmo adapter, e a normalização aceita o
+    que uma pessoa realmente digita num `.env`.
+    """
+    for configurado in (None, "", "mock", "MOCK", "  mock  "):
+        emissor = emissor_de(configurado, None, None)
+
+        assert isinstance(emissor, MockNFAdapter)
+        assert emissor.nome == MOCK_NF
+
+
+@pytest.mark.risco("R8")
+def test_asking_for_the_homologacao_emitter_refuses_loudly_instead_of_falling_back() -> None:
+    """R8, ADR-004 — cair no mock em silêncio é a pior falha possível aqui.
+
+    Uma instância configurada para emitir contra a SEFAZ e servida pelo mock emitiria
+    documentos de demonstração achando que emitiu notas, e ninguém descobriria até
+    alguém procurar a nota na SEFAZ. A recusa nomeia a spec que entrega o adapter,
+    para quem leu o erro saber o que fazer com ele.
+    """
+    with pytest.raises(EmissorIndisponivel) as recusado:
+        emissor_de(HOMOLOGACAO, "chave-fabricada", "https://exemplo.invalido")
+
+    assert "S-09" in str(recusado.value)
+
+
+@pytest.mark.risco("R8")
+def test_an_unknown_emitter_name_is_refused_with_the_list_of_the_ones_that_exist() -> None:
+    """R8 — um valor errado no `.env` para na subida, não no primeiro pedido pago."""
+    with pytest.raises(EmissorIndisponivel) as recusado:
+        emissor_de("focus-nfe", None, None)
+
+    assert MOCK_NF in str(recusado.value)
+
+
+@pytest.mark.risco("R8")
+def test_the_emitter_returns_the_port_shape_and_never_a_vendor_specific_one() -> None:
+    """R8, ADR-004 — `NotaEmitida`: identidade fiscal, XML e DANFE, e nada de fornecedor.
+
+    Código que trata emissão não pode precisar saber qual emissor está configurado.
+    Se precisasse, trocar de adapter deixaria de ser configuração — que é
+    exatamente o que a S-09 vai fazer sem tocar em `fiscal.py`.
+    """
+    pedido = _pedido()
+    autorizacao = Autorizacao(operador="ana.souza", decidido_em=agora())
+
+    emitida = _rodar(emissor_de(MOCK_NF, None, None).emitir(pedido, 1, autorizacao))
+
+    assert isinstance(emitida, NotaEmitida)
+    assert emitida.nota.pedido_id == pedido.id
+    assert emitida.nota.emissor == MOCK_NF
+    assert emitida.nota.total == pedido.total
+    assert chave_confere(emitida.nota.chave)
+    assert emitida.xml.startswith("<?xml")
+    assert emitida.danfe.startswith(b"%PDF-")
