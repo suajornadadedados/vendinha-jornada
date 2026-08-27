@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 import pytest
 
+from vendinha import runtime
 from vendinha.composicao import TipoDeEvento
 from vendinha.pagamento import (
     MERCADOPAGO,
@@ -60,6 +61,13 @@ PREFERENCIA_ACEITA = {
     "init_point": "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1234567890-abc",
     "sandbox_init_point": "https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=1234567890-abc",
 }
+
+
+def _rodar(coro: Any) -> Any:
+    """`asyncio.run` na versão que o projeto usa — psycopg não é o assunto aqui, mas o
+    loop do Windows é o mesmo, e `runtime.run` é o único ponto do repositório que
+    escolhe loop (ver `vendinha/runtime.py`)."""
+    return runtime.run(coro)
 
 
 def _pedido() -> Pedido:
@@ -340,3 +348,125 @@ def test_the_created_order_is_the_one_the_gateway_is_asked_to_charge() -> None:
     assert pedido.status is StatusDoPedido.AGUARDANDO_PAGAMENTO
     assert pedido.url_pagamento is None
     assert pedido.total == Decimal("39.00")
+
+
+# ------------------------------- consultar_pagamento: a metade nova do port (M-1)
+
+
+@pytest.mark.risco("R8")
+@pytest.mark.parametrize(
+    ("status", "aprovado"),
+    [
+        ("approved", True),
+        ("pending", False),
+        ("in_process", False),
+        ("rejected", False),
+        ("cancelled", False),
+        ("", False),
+    ],
+)
+def test_only_an_approved_payment_counts_as_paid(
+    monkeypatch: pytest.MonkeyPatch, status: str, aprovado: bool
+) -> None:
+    """R8, RF-2.5 — `pending` e `in_process` também notificam, e não são dinheiro.
+
+    Ressalva M-1 da verificação independente: `consultar_pagamento` é a operação que
+    decide se o dinheiro existe, e nenhum adapter a tinha testada. A falsificação que
+    fazia o adapter aprovar qualquer status sobrevivia à suíte inteira — o que estava
+    testado uma camada acima era a **rota respeitando** um veredito já pronto, nunca o
+    adapter produzindo o veredito certo.
+
+    Tratar `pending` como pago libera a fila da nota antes de o dinheiro existir.
+    """
+    _com_transporte(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200, json={"status": status, "external_reference": "pedido-de-teste"}
+        ),
+    )
+
+    pagamento = _rodar(MercadoPagoSandboxAdapter(TOKEN, BASE_URL).consultar_pagamento("1234567890"))
+
+    assert pagamento.aprovado is aprovado
+
+
+@pytest.mark.risco("R8")
+def test_the_gateway_is_what_says_which_order_was_paid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R8 — o `external_reference` é o que fecha o círculo até o pedido.
+
+    A notificação do webhook diz "olhe o pagamento 123", nunca "o pedido X foi pago".
+    Quem faz a ponte é este campo, que a preferência levou na ida — e sem ele não há
+    tabela de tradução nossa que valha.
+    """
+    _com_transporte(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200, json={"status": "approved", "external_reference": "pedido-de-teste"}
+        ),
+    )
+
+    pagamento = _rodar(MercadoPagoSandboxAdapter(TOKEN, BASE_URL).consultar_pagamento("1234567890"))
+
+    assert pagamento.pedido_id == "pedido-de-teste"
+    assert pagamento.referencia == "1234567890"
+
+
+@pytest.mark.risco("R8")
+def test_a_payment_with_no_order_behind_it_is_not_approved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R8 — pagamento aprovado sem `external_reference` não move pedido nenhum.
+
+    O `pedido_id` vazio é o que faz a rota responder `ignorado` em vez de procurar um
+    pedido que não existe.
+    """
+    _com_transporte(monkeypatch, lambda _: httpx.Response(200, json={"status": "approved"}))
+
+    pagamento = _rodar(MercadoPagoSandboxAdapter(TOKEN, BASE_URL).consultar_pagamento("1234567890"))
+
+    assert pagamento.pedido_id == ""
+
+
+@pytest.mark.risco("R8")
+def test_the_gateway_being_down_raises_the_same_exception_on_both_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R8, ADR-004 — uma exceção só para o port inteiro, não uma por operação.
+
+    A rota conta com isso para devolver 503 e pedir o reenvio: se `consultar_pagamento`
+    levantasse outra coisa, o webhook responderia 200 sem ter confirmado nada, e o
+    pedido ficaria pago lá fora e pendente aqui.
+    """
+    _com_transporte(monkeypatch, lambda _: httpx.Response(500, text="boom"))
+
+    with pytest.raises(GatewayIndisponivel) as falhou:
+        _rodar(MercadoPagoSandboxAdapter(TOKEN, BASE_URL).consultar_pagamento("1234567890"))
+
+    assert TOKEN not in str(falhou.value)
+
+
+@pytest.mark.risco("R8")
+@pytest.mark.parametrize(
+    ("referencia", "aprovado", "pedido_id"),
+    [
+        ("mock-pedido-de-teste", True, "pedido-de-teste"),
+        ("mercadopago-123", False, ""),
+        ("mock-", False, ""),
+        ("", False, ""),
+    ],
+)
+def test_the_mock_never_approves_a_reference_it_does_not_recognise(
+    referencia: str, aprovado: bool, pedido_id: str
+) -> None:
+    """R8, ADR-004 — mock que aprova o que não conhece é o stub que faz a demo mentir.
+
+    A referência do mock carrega o id do pedido, e é só isso que ele sabe. Aprovar por
+    padrão faria o teste passar e o quickstart confirmar um pagamento que nunca teve
+    origem — a diferença entre "mock de primeira classe" e "stub jogado".
+    """
+    pagamento = _rodar(MockPaymentAdapter(BASE_URL).consultar_pagamento(referencia))
+
+    assert pagamento.aprovado is aprovado
+    assert pagamento.pedido_id == pedido_id

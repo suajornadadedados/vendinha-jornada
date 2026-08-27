@@ -233,3 +233,94 @@ def test_the_empresa_entry_model_is_what_the_model_fills_not_what_the_code_accep
     entrada = EmpresaEntrada.model_validate({**empresa_valida, "cnpj": "11.222.333/0001-99"})
 
     assert entrada.cnpj == "11.222.333/0001-99"
+
+
+@pytest.mark.risco("R1")
+async def test_every_field_of_the_persisted_line_is_the_one_the_invoice_will_read(
+    seed: tuple[Produto, ...],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R1, RF-2.3 — a linha gravada é o insumo da DANFE, e ela é afirmada campo a campo.
+
+    Ressalva A-1 da verificação independente: cinco quebras em `_para_o_banco` —
+    `quantidade`, `subtotal`, `nome`, `rendimento` e `restricoes` — deixavam a suíte
+    inteira verde. Dos sete campos que a função projeta do veredito para o banco, só
+    `preco_unitario` era realmente afirmado.
+
+    **O item escolhido tem quantidade 2, e essa é a correção que importa.** O teste
+    anterior tocava a quantidade persistida num item cuja quantidade real é 1 — o
+    valor esperado coincidia com o valor neutro da mutação, e `docs/testes.md` §4 é
+    literal: *"valor esperado vem de fonte independente"*. Com `== 1` não há como
+    distinguir o valor certo do degenerado.
+
+    Os números vêm do seed, à mão, como o resto deste arquivo:
+    requeijão de corte mineiro, R$ 44,00, rende 14 → para 20 pessoas são 2 unidades
+    e R$ 88,00 de subtotal.
+    """
+    await chamar(
+        _criar_pedido(seed, gravados),
+        empresa=empresa_valida,
+        composicoes=[
+            ComposicaoProposta(
+                tipo_de_evento=TipoDeEvento.CAFE_DA_MANHA,
+                pessoas=20,
+                produto_ids=list(CAFE_DA_MANHA),
+            )
+        ],
+    )
+
+    (pedido,) = gravados.gravados.values()
+    (composicao,) = pedido.composicoes
+    linha = next(i for i in composicao.itens if i.produto_id == "requeijao-de-corte")
+
+    assert linha.quantidade == 2, "quantidade é obrigação declarada do REQ-3"
+    assert linha.subtotal == Decimal("88.00")
+    assert linha.preco_unitario == Decimal("44.00")
+    assert linha.nome == "Requeijão de corte mineiro"
+    assert linha.tipo == "queijo"
+    assert linha.rendimento == 14
+    # Uma linha internamente incoerente — "1 unidade a R$ 44,00, subtotal R$ 88,00" —
+    # é uma nota fiscal errada que nenhum campo isolado denuncia.
+    assert linha.preco_unitario * linha.quantidade == linha.subtotal
+
+
+@pytest.mark.risco("R10")
+async def test_the_declared_restriction_is_persisted_with_its_composition(
+    seed: tuple[Produto, ...],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R10, RF-2.3 — sem `restricoes` no banco, o subgrupo depende de interpretação.
+
+    É o pior dos cinco campos que a ressalva A-1 encontrou desprotegidos. *"12 cestas,
+    2 sem álcool"* vira duas composições indistinguíveis a não ser pela lista de itens,
+    e a RF-2.3 existe justamente para que o subgrupo **não** seja uma leitura de quem
+    olha depois. Quem lê depois é a S-05, montando a nota.
+    """
+    await chamar(
+        _criar_pedido(seed, gravados),
+        empresa=empresa_valida,
+        composicoes=[
+            ComposicaoProposta(
+                tipo_de_evento=TipoDeEvento.CAFE_DA_MANHA,
+                pessoas=20,
+                produto_ids=list(CAFE_DA_MANHA),
+            ),
+            ComposicaoProposta(
+                tipo_de_evento=TipoDeEvento.CESTA_DE_FIM_DE_ANO,
+                pessoas=2,
+                produto_ids=list(CESTA_SEM_ALCOOL),
+                restricoes=["alcool"],
+            ),
+        ],
+    )
+
+    (pedido,) = gravados.gravados.values()
+    com_alcool, sem_alcool = pedido.composicoes
+
+    assert com_alcool.restricoes == ()
+    assert sem_alcool.restricoes == ("alcool",)
+    assert sem_alcool.pessoas == 2

@@ -22,8 +22,13 @@ from langchain_core.tools import BaseTool
 from vendinha.catalogo import CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.composicao import TipoDeEvento
 from vendinha.documentos import cnpj_valido, formatar_cnpj, mascarar_cnpj, normalizar_cnpj
-from vendinha.pagamento import MockPaymentAdapter
-from vendinha.pedidos import PedidosEmMemoria, StatusDoPedido
+from vendinha.pagamento import (
+    GatewayIndisponivel,
+    LinkDePagamento,
+    MockPaymentAdapter,
+    Pagamento,
+)
+from vendinha.pedidos import Pedido, PedidosEmMemoria, StatusDoPedido
 from vendinha.tools.checkout import ComposicaoProposta, ferramentas_de_checkout
 
 pytestmark = pytest.mark.requires_backend
@@ -367,3 +372,105 @@ async def test_a_missing_field_and_an_invalid_one_are_different_problems(
     assert veredito["cnpj_valido"] is False
     assert any("dígitos verificadores" in problema for problema in veredito["problemas"])
     assert not any("ainda não informado" in problema for problema in veredito["problemas"])
+
+
+class GatewayQueContaChamadas:
+    """Um gateway que devolve um link DIFERENTE a cada chamada.
+
+    Ressalva A-2 da verificação independente. O `MockPaymentAdapter` deriva a URL do
+    id do pedido, então com ele a segunda chamada devolve a mesma string de qualquer
+    jeito — a quebra da idempotência é **invisível por construção**. Com o adapter do
+    Mercado Pago, um segundo `POST /checkout/preferences` é um segundo link vivo, e é
+    esse cenário que este duplo reproduz.
+    """
+
+    nome = "conta-chamadas"
+
+    def __init__(self) -> None:
+        self.chamadas = 0
+
+    async def criar_preferencia(self, pedido: Pedido) -> LinkDePagamento:
+        self.chamadas += 1
+        return LinkDePagamento(
+            url=f"https://sandbox.exemplo/checkout/{pedido.id}/{self.chamadas}",
+            referencia=f"pref-{self.chamadas}",
+            gateway=self.nome,
+        )
+
+    async def consultar_pagamento(self, referencia: str) -> Pagamento:
+        raise AssertionError(f"não deveria consultar pagamento aqui: {referencia}")
+
+
+@pytest.mark.risco("R8")
+async def test_asking_for_the_payment_link_twice_never_opens_a_second_one(
+    seed: tuple[Produto, ...],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R8, RF-2.4 — dois links vivos para um pedido é uma conciliação quebrada.
+
+    O cliente paga um e o financeiro dele vê o outro em aberto. A invariante estava
+    escrita no docstring do módulo, na `description` que o **modelo lê** — *"chamar
+    duas vezes para o mesmo pedido devolve o MESMO link"* — e em lugar nenhum da
+    suíte: a falsificação M23 desligava a guarda e nada ficava vermelho.
+    """
+    gateway = GatewayQueContaChamadas()
+    tools = {
+        tool.name: tool
+        for tool in ferramentas_de_checkout(CatalogoEmMemoria(seed), gravados, gateway, SEM_TIMEOUT)
+    }
+    criado = await chamar(
+        tools["criar_pedido"], empresa=empresa_valida, composicoes=[CAFE_DA_MANHA]
+    )
+    pedido_id = criado["encontrados"][0]["pedido_id"]
+
+    primeiro = await chamar(tools["gerar_link_pagamento"], pedido_id=pedido_id)
+    segundo = await chamar(tools["gerar_link_pagamento"], pedido_id=pedido_id)
+
+    assert gateway.chamadas == 1, "a segunda chamada abriu uma segunda preferência no gateway"
+    assert primeiro["encontrados"][0]["url_pagamento"] == segundo["encontrados"][0]["url_pagamento"]
+    assert gravados.gravados[pedido_id].url_pagamento == primeiro["encontrados"][0]["url_pagamento"]
+
+
+@pytest.mark.risco("R8")
+async def test_a_gateway_that_is_down_leaves_the_order_valid_and_asks_for_a_retry(
+    seed: tuple[Produto, ...],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R8, ADR-004 — degradação graciosa: o pedido está gravado, falta o link.
+
+    O que não pode acontecer é o cliente receber traceback, nome de fornecedor ou
+    código de status (`adversarial-006`) — nem o pedido ser perdido, porque ele
+    continua válido e o que falta é uma segunda tentativa.
+    """
+
+    class ForaDoAr:
+        nome = "fora-do-ar"
+
+        async def criar_preferencia(self, pedido: Pedido) -> LinkDePagamento:
+            del pedido
+            raise GatewayIndisponivel("o Mercado Pago não respondeu como esperado: ReadTimeout")
+
+        async def consultar_pagamento(self, referencia: str) -> Pagamento:
+            raise AssertionError(referencia)
+
+    tools = {
+        tool.name: tool
+        for tool in ferramentas_de_checkout(
+            CatalogoEmMemoria(seed), gravados, ForaDoAr(), SEM_TIMEOUT
+        )
+    }
+    criado = await chamar(
+        tools["criar_pedido"], empresa=empresa_valida, composicoes=[CAFE_DA_MANHA]
+    )
+    pedido_id = criado["encontrados"][0]["pedido_id"]
+
+    resposta = await chamar(tools["gerar_link_pagamento"], pedido_id=pedido_id)
+
+    assert gravados.gravados[pedido_id].url_pagamento is None
+    assert "tente de novo" in resposta["observacao"]
+    assert "Mercado Pago" not in str(resposta)
+    assert "ReadTimeout" not in str(resposta)
