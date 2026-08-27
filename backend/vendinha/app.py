@@ -35,6 +35,8 @@ from fastapi.responses import HTMLResponse
 from langchain.embeddings import init_embeddings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.budget import run_with_timeout
@@ -43,7 +45,9 @@ from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
+from vendinha.fiscal import Fiscal, PostgresFiscal, abrir_fila_da_nota, build_emissao_graph
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
+from vendinha.nota import NFEmitter, emissor_de
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.pagamento import (
     MOCK,
@@ -125,6 +129,9 @@ def create_app(
     catalogo: Catalogo | None = None,
     pedidos: Pedidos | None = None,
     gateway: PaymentGateway | None = None,
+    fiscal: Fiscal | None = None,
+    emissor: NFEmitter | None = None,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -179,6 +186,25 @@ def create_app(
         app.state.gateway = gateway or gateway_de(
             settings.mercadopago_access_token, settings.public_base_url
         )
+        # O lado fiscal (S-05). A porta guarda a decisão do operador e a nota; o
+        # emissor é escolhido por `NF_EMITTER` e diz em voz alta qual é, como o
+        # gateway faz — escolha de integração que ninguém anuncia é a que vira
+        # dúvida três semanas depois (D-4 da S-04).
+        app.state.fiscal = fiscal or PostgresFiscal(with_connect_timeout(settings.database_url))
+        app.state.emissor = emissor or emissor_de(
+            settings.nf_emitter, settings.nf_emitter_api_key, settings.nf_emitter_base_url
+        )
+        # O grafo da emissão existe SEMPRE, porque é ele que persiste a pausa do
+        # ADR-003 — sem ele, um pedido pago não teria onde parar. Em produção o
+        # checkpointer é o do Postgres; num teste que injeta o grafo da conversa é o
+        # `InMemorySaver`, que é outra implementação da MESMA interface do LangGraph
+        # e não um dublê de nada (`docs/testes.md` §4).
+        app.state.emissao = build_emissao_graph(
+            app.state.pedidos,
+            app.state.fiscal,
+            app.state.emissor,
+            checkpointer or InMemorySaver(),
+        )
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -190,15 +216,22 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if graph is not None:
-            await preparar(app, checkpointer=None, fixed_graph=graph)
+            # `checkpointer` injetado ou nenhum: com o grafo da conversa fixo, o
+            # único que ainda precisa de um é o da emissão, e `preparar` cai no
+            # `InMemorySaver` quando não recebe. Um teste que queira provar retomada
+            # da nota passa o seu.
+            await preparar(app, checkpointer=checkpointer, fixed_graph=graph)
             try:
                 yield
             finally:
                 await _fechar_busca(app)
             return
 
-        async with open_checkpointer(settings.database_url) as checkpointer:
-            await preparar(app, checkpointer=checkpointer, fixed_graph=None)
+        # `saver` e não `checkpointer`: o parâmetro de `create_app` tem esse nome, e
+        # um `as checkpointer` aqui o tornaria local de `lifespan` — o ramo acima
+        # passaria a ler uma variável ainda não atribuída, na subida, em produção.
+        async with open_checkpointer(settings.database_url) as saver:
+            await preparar(app, checkpointer=saver, fixed_graph=None)
             try:
                 yield
             finally:
@@ -604,6 +637,8 @@ def create_app(
             logger.warning("webhook para um pedido que não existe: %s", pagamento.pedido_id)
             return WebhookProcessado(resultado="ignorado")
 
+        if aplicado:
+            await _abrir_fila_da_nota(request.app, pagamento.pedido_id)
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
 
     _rotas_do_mock(app)
@@ -671,7 +706,32 @@ def _rotas_do_mock(app: FastAPI) -> None:
             )
         except PedidoInexistente:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido não encontrado") from None
+        if aplicado:
+            await _abrir_fila_da_nota(request.app, pedido_id)
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+
+async def _abrir_fila_da_nota(app: FastAPI, pedido_id: str) -> None:
+    """Pagamento confirmado: o grafo fiscal entra e para no `interrupt` (REQ-1).
+
+    **Falhar aqui não derruba o webhook, e isso não é tolerância a erro — é a
+    consequência de a fila do operador ser derivada do banco.** O pedido já está em
+    `aguardando_aprovacao_nf`, então ele aparece na fila de qualquer jeito, e a rota
+    de aprovação conduz o grafo do começo quando a thread não existe
+    (`fiscal.conduzir_ate_o_fim`). Devolver 5xx aqui faria o gateway reenviar um
+    evento que já teve efeito, pelo motivo errado.
+
+    O log é `exception` de propósito: o caminho normal é a thread abrir, e cair aqui
+    significa que o checkpointer não respondeu — notícia, não ruído.
+    """
+    try:
+        await abrir_fila_da_nota(app.state.emissao, pedido_id)
+    except Exception:
+        logger.exception(
+            "não consegui abrir a pausa da nota para o pedido %s; ele continua na fila "
+            "pelo status, e a aprovação conduz o grafo do começo",
+            pedido_id,
+        )
 
 
 async def _pedido_ou_404(request: Request, pedido_id: str) -> Any:
