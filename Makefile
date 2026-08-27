@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals-composicao evals hooks
+.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals-composicao evals-checkout evals hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -49,10 +49,13 @@ evals-groundedness:  ## Roda os 6 casos da S-03 contra o agente (precisa de `mak
 evals-composicao:  ## Roda os 4 casos de composição da S-11 contra o agente (precisa de `make up`, `db-setup` e `seed`)
 	cd backend && uv run python -m vendinha.evals.runner --spec S-11
 
+evals-checkout:  ## Roda os 7 casos da S-04 contra o agente (precisa de `make up`, `db-setup` e `seed`)
+	cd backend && uv run python -m vendinha.evals.runner --spec S-04
+
 evals:  ## Executa a suíte de evals contra o agente (chega na S-06)
 	@echo "A suíte completa é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
 	@echo "Por enquanto: make evals-check (schema, sem agente), make evals-groundedness (S-03)"
-	@echo "e make evals-composicao (S-11)."
+	@echo "make evals-composicao (S-11) e make evals-checkout (S-04)."
 	@exit 1
 
 hooks:  ## Instala os portões locais (pre-commit, commit-msg, pre-push)

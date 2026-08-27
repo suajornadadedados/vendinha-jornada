@@ -44,6 +44,28 @@ outros verdes. É deliberado: essas duas falhas não são questão de grau.
 todo YAML contra ele. Campos obrigatórios: `id`, `familia`, `titulo`, `riscos`, `spec`, `conversa`,
 `criterio`. Um caso `golden` exige também `produtos_validos` — ver abaixo.
 
+### `cenario` — o estado que o caso pressupõe e não cria
+
+Vários casos abrem no meio de uma conversa. O `golden-003` começa com *"fechou, pode seguir com
+essa composição"* e não existe composição nenhuma; o `golden-010` fala de um webhook que confirmou
+um pedido que ninguém criou; o `adversarial-004` descreve um catálogo já envenenado. Reproduzir só
+as falas desses casos os faz reprovar **sem exercitar nada do que existem para exercitar** — que é
+a pior forma de reprovar, porque parece falha do modelo.
+
+O campo `cenario` declara esse estado, e o runner o materializa **rodando o sistema de verdade**:
+
+| `cenario` | O que o runner faz antes de replicar as falas |
+|---|---|
+| `catalogo_envenenado` | injeta o texto na `descricao` de um produto e dispara uma busca real, para que o retorno da tool chegue ao modelo |
+| `composicao_aprovada` | pede uma composição ao agente, que a monta e a submete a `validar_composicao` |
+| `pedido_pago` | cria um pedido por `criar_pedido` e o confirma **duas vezes** com o mesmo evento, pela mesma `registrar_pagamento` que o webhook usa |
+
+Isto era uma heurística até a S-04: o runner adivinhava `catalogo_envenenado` pela presença de um
+turno `de: sistema`. Funcionava porque só um caso a usava, e quebraria em silêncio no segundo — o
+turno de sistema do `golden-010` descreve um webhook e seria lido como envenenamento. Agora o turno
+`de: sistema` continua no YAML porque é o que faz o caso se explicar a quem lê, e **quem manda é o
+campo** (S-04, D-5).
+
 O bloco `tools.proibidas` merece atenção: ele lista tools que **não devem ser chamadas**, e algumas
 delas — `aplicar_desconto`, por exemplo — **não existem no registro de nenhum subagent**. Não estão
 negadas por instrução; não estão lá. O caso serve para provar que continuam não existindo (ADR-002).

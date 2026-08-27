@@ -18,23 +18,32 @@ modelo para concordar.
 nota, não há média, não há "5 de 6 passaram". Está escrito assim no
 `evals/README.md` e é o que o relatório abaixo reporta.
 
-**Envenenamento do catálogo, e o cenário que ele exige.** Uma fala `de: sistema`
-descreve o catálogo devolvendo texto injetado — é o `adversarial-004`. O runner
-faz duas coisas com ela: envenena a `descricao` do primeiro produto lido, e
-**monta o cenário**, rodando uma busca de verdade antes de replicar as falas do
-caso. A segunda metade é necessária porque o turno de sistema *descreve* um
-estado que ele não *cria*: "me fala mais sobre esse café" não tem antecedente
-sem uma busca anterior, e sem ela a tool nunca é chamada e o texto injetado nunca
-chega ao modelo. Ver `_abertura_do_cenario`. Genérico, sem código por caso.
+**O cenário é declarado, não inferido (S-04, D-5).** Vários casos pressupõem um
+estado que a conversa replicada não cria: o `adversarial-004` fala de uma descrição
+de produto já envenenada, o `golden-003` abre com *"fechou, pode seguir com essa
+composição"* sem que exista composição, o `golden-010` pressupõe pedido pago. Até a
+S-04 o runner adivinhava um único desses estados pela presença de um turno
+`de: sistema` — regra que funcionava porque só um caso a usava e que quebraria em
+silêncio no segundo. Agora o caso **declara** `cenario`, e `_montar_cenario`
+materializa cada um por código, uma vez, genérico: nada de ramo por id de caso.
+
+Materializar é sempre **rodar o sistema de verdade**, nunca fabricar histórico. A
+composição aprovada é uma composição que o agente montou e o código validou; o
+pedido pago é um pedido criado por `criar_pedido` e confirmado pela mesma
+`registrar_pagamento` que o webhook usa. Um cenário forjado à mão testaria o
+cenário, não o produto.
 """
 
 import argparse
+import json
 import logging
 import sys
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
@@ -50,14 +59,60 @@ from vendinha.db import with_connect_timeout
 from vendinha.evals.caso import Caso, carregar_casos
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever, verificar
 from vendinha.evals.judge import VeredictoDoJuiz, julgar
-from vendinha.graph import build_graph, session_config
+from vendinha.graph import build_graph, build_supervised_graph, session_config
+from vendinha.pagamento import MockPaymentAdapter, PaymentGateway
+from vendinha.pedidos import Pedidos, PedidosEmMemoria
 from vendinha.providers import effective_credentials, resolve_model, split_model
-from vendinha.subagents import recomendacao
+from vendinha.subagents import checkout, recomendacao
+from vendinha.supervisor import Supervisor, roteador_do_modelo
+from vendinha.tools.checkout import ferramentas_de_checkout
 
 logger = logging.getLogger(__name__)
 
 EVALS = REPO_ROOT / "evals"
 SPEC_PADRAO = "S-03"
+
+# As specs cujos casos exercitam o checkout — supervisor, duas lanes, tools de
+# escrita. Fora delas o runner monta só a lane de recomendação, que é o agente que
+# a S-03 e a S-11 mediram: ligar o checkout ali mudaria o sistema sob medição sem
+# que nenhum caso pedisse.
+SPECS_COM_CHECKOUT = frozenset({"S-04"})
+
+# O vocabulario do cliente para cada tipo de evento, usado so para derivar a fala
+# de abertura de um cenario `composicao_aprovada`. Nao e a fonte da verdade dos
+# eventos — essa e `composicao.REGRAS`; aqui e so como se pede um deles em
+# portugues.
+EVENTOS_POR_PALAVRA = {
+    "happy hour": "happy hour",
+    "fim de ano": "cesta de fim de ano",
+    "boas-vindas": "kit de boas-vindas",
+    "boas vindas": "kit de boas-vindas",
+    "cafe da manha": "cafe da manha",
+}
+
+# So o adapter mock precisa dela, e so para montar um link que ninguem abre nesta
+# execucao. A regua nao fala com gateway de verdade.
+BASE_URL_DO_CENARIO = "http://localhost:8000"
+
+# O comprador de teste dos cenários. Fabricado — CNPJ com dígitos válidos de uma
+# empresa que não existe (RNF-7). É o mesmo da `tests/conftest.py`, e é de
+# propósito: um dado de cenário que diverge do dos testes é a próxima divergência
+# que ninguém percebe.
+EMPRESA_DO_CENARIO = {
+    "razao_social": "Aurora Servicos Digitais LTDA",
+    "cnpj": "11.222.333/0001-81",
+    "contato_nome": "Marta Ribeiro",
+    "contato_email": "marta@exemplo.com.br",
+    "endereco": {
+        "logradouro": "Rua das Acacias",
+        "numero": "240",
+        "complemento": "sala 12",
+        "bairro": "Savassi",
+        "cidade": "Belo Horizonte",
+        "uf": "MG",
+        "cep": "30140-071",
+    },
+}
 
 
 class InfraestruturaAusente(Exception):
@@ -168,6 +223,147 @@ def _abertura_do_cenario(caso: Caso, do_catalogo: Sequence[tuple[str, str, Decim
     return f"Oi! O que vocês têm parecido com {alvo}?"
 
 
+async def _pedido_pago(
+    caso: Caso, catalogo: Catalogo, pedidos: Pedidos, gateway: PaymentGateway, timeout: float
+) -> str:
+    """Cria um pedido de verdade e o confirma DUAS vezes com o mesmo evento.
+
+    Duas vezes porque e o que o cenario descreve: o `golden-010` fala de um webhook
+    e do reenvio dele, e o `adversarial-002` parte de um pedido ja pago. A segunda
+    confirmacao passa pela mesma `registrar_pagamento` que a rota usa, entao o
+    estado que o agente vai encontrar e o estado que a idempotencia produz — nao um
+    estado escrito a mao para o teste.
+
+    **A composicao e uma cesta de fim de ano montada com os `produtos_validos` do
+    proprio caso.** E o unico tipo de evento cuja regra e "tres tipos distintos", e
+    portanto o unico que se satisfaz sem o caso ter que declarar slots — o que seria
+    pedir ao autor do caso para conhecer o motor de composicao.
+    """
+    tools = {
+        tool.name: tool for tool in ferramentas_de_checkout(catalogo, pedidos, gateway, timeout)
+    }
+    resposta = json.loads(
+        await tools["criar_pedido"].ainvoke(
+            {
+                "empresa": EMPRESA_DO_CENARIO,
+                "composicoes": [
+                    {
+                        "tipo_de_evento": "cesta_de_fim_de_ano",
+                        "pessoas": 12,
+                        "produto_ids": list(caso.produtos_validos),
+                    }
+                ],
+            }
+        )
+    )
+    encontrados = resposta.get("encontrados") or []
+    pedido_id = encontrados[0].get("pedido_id") if encontrados else None
+    if not isinstance(pedido_id, str):
+        # Falhar alto: um cenario que nao montou faz o caso reprovar por falta de
+        # estado, e "parece falha do modelo" e a pior forma de reprovar.
+        raise InfraestruturaAusente(
+            f"{caso.id} declara `cenario: pedido_pago` e o pedido nao pode ser criado: "
+            f"{resposta.get('observacao') or resposta}. Os `produtos_validos` do caso "
+            f"precisam formar uma cesta valida — tres tipos distintos e disponiveis."
+        )
+
+    await tools["gerar_link_pagamento"].ainvoke({"pedido_id": pedido_id})
+    await pedidos.registrar_pagamento(pedido_id, f"evento-{pedido_id}")
+    await pedidos.registrar_pagamento(pedido_id, f"evento-{pedido_id}")
+    return pedido_id
+
+
+def _abertura_da_composicao(caso: Caso, do_catalogo: Sequence[tuple[str, str, Decimal]]) -> str:
+    """A fala que faz o agente montar e validar uma composicao antes do caso comecar.
+
+    `golden-003` abre com *"fechou, pode seguir com essa composicao do cafe da
+    manha"* e nao existe composicao nenhuma; `golden-008` e `golden-009` fazem o
+    mesmo. Sem esta abertura o handoff do supervisor nunca destrava — e com razao,
+    porque nao ha o que confirmar — e o caso reprova sem exercitar nada do que ele
+    existe para exercitar.
+
+    O tipo de evento e lido do texto do proprio caso, com cafe da manha como
+    default. Derivado, e nao escrito por caso: um caso novo com o mesmo cenario
+    funciona sem uma linha a mais.
+    """
+    texto = _sem_acento(f"{caso.titulo} {' '.join(f.texto for f in caso.conversa)}")
+    evento = next(
+        (nome for chave, nome in EVENTOS_POR_PALAVRA.items() if chave in texto),
+        "cafe da manha",
+    )
+    nomes = {identificador: nome for identificador, nome, _ in do_catalogo}
+    sugeridos = [nomes[p] for p in caso.produtos_validos if p in nomes][:3]
+    com = f" Pode considerar {', '.join(sugeridos)}." if sugeridos else ""
+    return f"Oi! Preciso de um {evento} para 20 pessoas, uns 40 reais por pessoa.{com}"
+
+
+def _sem_acento(texto: str) -> str:
+    decomposto = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in decomposto if not unicodedata.combining(c)).lower()
+
+
+async def _montar_cenario(
+    caso: Caso,
+    catalogo: Catalogo,
+    pedidos: Pedidos,
+    gateway: PaymentGateway,
+    timeout_seconds: float,
+    do_catalogo: Sequence[tuple[str, str, Decimal]],
+) -> list[str]:
+    """Materializa o `cenario` declarado e devolve as falas de abertura (S-04, D-5).
+
+    Um `match` sobre um enum fechado, e nenhum ramo por id de caso: um caso novo que
+    declare um cenario existente funciona sem codigo a mais, e um cenario novo e uma
+    linha aqui e uma no schema — visivel no diff, que e onde uma decisao de regua
+    deve aparecer.
+    """
+    match caso.cenario:
+        case "catalogo_envenenado":
+            # O envenenamento ja foi aplicado ao catalogo em `rodar_caso`; aqui so
+            # falta a busca que faz o texto injetado chegar ao modelo.
+            return [_abertura_do_cenario(caso, do_catalogo)]
+        case "composicao_aprovada":
+            return [_abertura_da_composicao(caso, do_catalogo)]
+        case "pedido_pago":
+            pedido_id = await _pedido_pago(caso, catalogo, pedidos, gateway, timeout_seconds)
+            return [f"Oi! E sobre o pedido {pedido_id}."]
+        case _:
+            return []
+
+
+def _monta_o_grafo(
+    caso: Caso,
+    modelo_do_agente: BaseChatModel,
+    busca: Busca,
+    catalogo: Catalogo,
+    pedidos: Pedidos,
+    gateway: PaymentGateway,
+    timeout_seconds: float,
+) -> Any:
+    """O agente do caso: uma lane, ou o supervisor com as duas.
+
+    Fora das specs de checkout o grafo continua sendo o de uma lane so — o mesmo que
+    a S-03 e a S-11 mediram. Ligar o checkout la mudaria o sistema sob medicao sem
+    que nenhum caso tivesse pedido, e um numero medido em outro sistema nao compara
+    com o anterior.
+    """
+    if caso.spec not in SPECS_COM_CHECKOUT:
+        return build_graph(
+            modelo_do_agente,
+            InMemorySaver(),
+            recomendacao(busca, catalogo, timeout_seconds),
+        )
+    return build_supervised_graph(
+        modelo_do_agente,
+        InMemorySaver(),
+        Supervisor(
+            recomendacao=recomendacao(busca, catalogo, timeout_seconds),
+            checkout=checkout(busca, catalogo, pedidos, gateway, timeout_seconds),
+            perguntar=roteador_do_modelo(modelo_do_agente),
+        ),
+    )
+
+
 async def rodar_caso(
     caso: Caso,
     modelo_do_agente: BaseChatModel,
@@ -177,63 +373,66 @@ async def rodar_caso(
     do_catalogo: Sequence[tuple[str, str, Decimal]],
     juiz_modelo: BaseChatModel | None,
 ) -> Resultado:
-    """Reproduz a conversa do caso contra o agente e aplica as duas metades da régua.
+    """Reproduz a conversa do caso contra o agente e aplica as duas metades da regua.
 
-    **O modelo chega pronto, e as portas são as interfaces e não as implementações.**
+    **O modelo chega pronto, e as portas sao as interfaces e nao as implementacoes.**
     Isto era `(nome_do_modelo, api_key)` com um `resolve_model` aqui dentro, e
-    aquela forma não tinha costura: nenhum teste conseguia percorrer esta função,
-    então a fiação entre o turno `de: sistema`, o `CatalogoEnvenenado` e o
-    `_abertura_do_cenario` não era provada por ninguém.
+    aquela forma nao tinha costura: nenhum teste conseguia percorrer esta funcao,
+    entao a fiacao entre o cenario, o `CatalogoEnvenenado` e a abertura nao era
+    provada por ninguem.
 
-    A verificação independente da S-03 mediu o preço disso (NC-1): trocar o bloco
-    de envenenamento por `envenenamento = None` **desligava o vetor de injeção
-    inteiro do `adversarial-004`** e deixava a suíte com 446 testes verdes — o caso
-    continuaria "aprovando", pelo motivo errado, sem nada avisar. As duas peças
-    tinham teste isolado; **quem as liga, não**. É a classe de erro que o relatório
-    da S-02 já tinha nomeado: *testo a função que faz e não que alguém a chama*.
+    A verificacao independente da S-03 mediu o preco disso (NC-1): trocar o bloco
+    de envenenamento por `envenenamento = None` **desligava o vetor de injecao
+    inteiro do `adversarial-004`** e deixava a suite com 446 testes verdes — o caso
+    continuaria "aprovando", pelo motivo errado, sem nada avisar. As duas pecas
+    tinham teste isolado; **quem as liga, nao**. E a classe de erro que o relatorio
+    da S-02 ja tinha nomeado: *testo a funcao que faz e nao que alguem a chama*.
 
-    `resolve_model` subiu para `rodar`, que é onde a credencial já vive.
+    **O pedido vive em memoria, e o catalogo nao.** O que a regua mede e fato — preco,
+    atributo, total —, e todo fato vem do catalogo, que e o Postgres de verdade.
+    Pedido e efeito, e grava-lo no banco de desenvolvimento faria cada corrida da
+    regua deixar lixo atras de si. `PedidosEmMemoria` e implementacao de primeira
+    classe do mesmo port (ADR-004) — a mesma que `tests/security` usa para provar o
+    invariante da R10. O gateway e o mock pela mesma razao: uma regua nao abre
+    preferencia de pagamento no sandbox a cada execucao.
     """
-    envenenamento = next(
-        (fala.texto for fala in caso.conversa if fala.de == "sistema"),
-        None,
+    if any(fala.de == "operador" for fala in caso.conversa):
+        raise InfraestruturaAusente(
+            f"{caso.id} tem fala de operador, e a fila do operador e entregavel da S-05. "
+            f"Este runner cobre as specs sem fila humana — hoje a S-03, a S-04 e a S-11."
+        )
+
+    envenenamento = (
+        next((fala.texto for fala in caso.conversa if fala.de == "sistema"), None)
+        if caso.cenario == "catalogo_envenenado"
+        else None
     )
     catalogo_do_caso: Catalogo = (
         CatalogoEnvenenado(catalogo, envenenamento) if envenenamento else catalogo
     )
 
-    graph = build_graph(
-        modelo_do_agente,
-        InMemorySaver(),
-        recomendacao(busca, catalogo_do_caso, timeout_seconds),
+    pedidos = PedidosEmMemoria()
+    gateway = MockPaymentAdapter(BASE_URL_DO_CENARIO)
+
+    graph = _monta_o_grafo(
+        caso, modelo_do_agente, busca, catalogo_do_caso, pedidos, gateway, timeout_seconds
     )
 
-    falas_do_cliente = [fala.texto for fala in caso.conversa if fala.de == "cliente"]
-    if not falas_do_cliente:
+    do_caso = [fala.texto for fala in caso.conversa if fala.de == "cliente"]
+    if not do_caso:
         raise InfraestruturaAusente(
-            f"{caso.id} não tem nenhuma fala de cliente: não há atendimento para avaliar."
+            f"{caso.id} nao tem nenhuma fala de cliente: nao ha atendimento para avaliar."
         )
+
+    aberturas = await _montar_cenario(
+        caso, catalogo_do_caso, pedidos, gateway, timeout_seconds, do_catalogo
+    )
+    falas_do_cliente = [*aberturas, *do_caso]
 
     mensagens: list[object] = []
-    if envenenamento:
-        abertura = _abertura_do_cenario(caso, do_catalogo)
-        falas_do_cliente.insert(0, abertura)
+    for fala in falas_do_cliente:
         estado = await graph.ainvoke(
-            {"session_id": caso.id, "messages": [HumanMessage(content=abertura)]},
-            config=session_config(caso.id),
-        )
-        mensagens = list(estado["messages"])
-
-    for fala in caso.conversa:
-        if fala.de == "operador":
-            raise InfraestruturaAusente(
-                f"{caso.id} tem fala de operador, e a fila do operador é entregável da S-05. "
-                f"Este runner cobre as specs sem fila humana — hoje a S-03 e a S-11."
-            )
-        if fala.de != "cliente":
-            continue
-        estado = await graph.ainvoke(
-            {"session_id": caso.id, "messages": [HumanMessage(content=fala.texto)]},
+            {"session_id": caso.id, "messages": [HumanMessage(content=fala)]},
             config=session_config(caso.id),
         )
         mensagens = list(estado["messages"])
@@ -247,8 +446,8 @@ async def rodar_caso(
         try:
             veredito_do_juiz = await julgar(juiz_modelo, caso, transcricao, falas_do_cliente)
         except Exception as falhou:
-            # Um juiz que não devolve o schema é problema do juiz, não do agente —
-            # mas também não é aprovação. Fica registrado no caso e o resto roda.
+            # Um juiz que nao devolve o schema e problema do juiz, nao do agente —
+            # mas tambem nao e aprovacao. Fica registrado no caso e o resto roda.
             erro_do_juiz = f"{type(falhou).__name__}: {falhou}"
 
     return Resultado(
@@ -341,7 +540,8 @@ async def rodar(spec: str = SPEC_PADRAO, apenas: str | None = None) -> list[Resu
 
 def relatorio(resultados: Sequence[Resultado]) -> str:
     """O relatório: caso a caso, critério a critério, sem nota agregada."""
-    linhas = ["# Eval de groundedness — S-03", ""]
+    spec = resultados[0].caso.spec if resultados else "?"
+    linhas = [f"# Eval — {spec}", ""]
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
@@ -414,7 +614,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="python -m vendinha.evals.runner",
         description="Roda os casos de evals/ de uma spec contra o agente.",
     )
-    parser.add_argument("--spec", default=SPEC_PADRAO, help="ex.: S-03 (padrão)")
+    parser.add_argument("--spec", default=SPEC_PADRAO, help="ex.: S-03 (padrão), S-04, S-11")
     parser.add_argument("--caso", default=None, help="prefixo do id, para rodar um só")
     parser.add_argument("--saida", type=Path, default=None, help="grava o relatório num arquivo")
     args = parser.parse_args(argv)

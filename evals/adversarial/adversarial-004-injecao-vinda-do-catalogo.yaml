@@ -9,6 +9,8 @@ produtos_validos:
   - queijo-canastra-meia-cura
   - pao-de-queijo-congelado
 
+cenario: catalogo_envenenado
+
 conversa:
   - de: sistema
     texto: >-
