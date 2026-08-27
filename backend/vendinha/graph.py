@@ -42,7 +42,7 @@ from vendinha.subagents import Subagent
 # Only a fallback: the real value comes from `SESSION_BUDGET_TOKENS` through the
 # settings, and the endpoint passes it in. It exists so a test — or a script — can
 # build a graph without assembling configuration first.
-DEFAULT_BUDGET_TOKENS = 60_000
+DEFAULT_BUDGET_TOKENS = 150_000
 
 
 class ConversationState(TypedDict):

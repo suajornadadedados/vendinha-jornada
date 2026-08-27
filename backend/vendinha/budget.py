@@ -38,8 +38,13 @@ class TimedOut(Exception):
     """A call did not finish inside its ceiling. Names what stalled."""
 
 
-def tokens_spent(messages: Iterable[BaseMessage]) -> int:
+def tokens_spent(messages: Iterable[object]) -> int:
     """Everything the model has produced in this conversation so far.
+
+    Takes `Iterable[object]` rather than `Iterable[BaseMessage]` because the body
+    already narrows with `isinstance` — and because the eval runner holds the graph
+    output as plain objects, the same way `groundedness.transcrever` does, to stay
+    importable without LangChain.
 
     A message without `usage_metadata` counts as zero. That under-counts, which is
     the wrong direction for a cost ceiling — but some providers omit usage on

@@ -41,6 +41,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha import runtime
+from vendinha.budget import tokens_spent
 from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, Produto, QdrantBusca
 from vendinha.config import REPO_ROOT, get_settings
 from vendinha.config_store import PostgresConfigStore
@@ -99,6 +100,12 @@ class Resultado:
     portao: Veredito
     juiz: VeredictoDoJuiz | None
     erro_do_juiz: str | None = None
+
+    # O que a conversa gastou, contado como o teto de sessão conta (`budget.py`).
+    # Está aqui porque o teto é escolhido a partir deste número e não havia onde
+    # lê-lo: a S-11 descobriu que o valor herdado da S-02 cortava composição
+    # legítima, e "sobe um pouco" teria sido o mesmo chute outra vez (R6, RNF-3).
+    tokens: int = 0
 
     @property
     def aprovado(self) -> bool:
@@ -250,6 +257,7 @@ async def rodar_caso(
         portao=portao,
         juiz=veredito_do_juiz,
         erro_do_juiz=erro_do_juiz,
+        tokens=tokens_spent(mensagens),
     )
 
 
@@ -337,7 +345,14 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
-        linhas += [f"## {resultado.caso.id} — {marca}", "", f"_{resultado.caso.titulo}_", ""]
+        linhas += [
+            f"## {resultado.caso.id} — {marca}",
+            "",
+            f"_{resultado.caso.titulo}_",
+            "",
+            f"Gasto da conversa: **{resultado.tokens:,} tokens**.",
+            "",
+        ]
 
         if resultado.portao.achados:
             linhas += ["### Fatos sem origem em tool", ""]

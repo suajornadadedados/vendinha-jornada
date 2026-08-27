@@ -87,9 +87,30 @@ class Settings(BaseSettings):
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
 
-    # Token, not currency — D-2 in the spec. A price table per model would be
+    # Token, not currency — D-2 in the S-02 spec. A price table per model would be
     # several tables now that the provider is configurable, all rotting quietly.
-    session_budget_tokens: int = 60_000
+    #
+    # **Measured, not guessed.** 60_000 came from the S-02, when the agent had three
+    # tools and answered one question about one product. The B2B composition flow
+    # is longer by design — search, detail, price, validate, and all of it again
+    # when the code refuses — and the S-11 measured what that actually costs by
+    # reporting the spend of every eval case (`evals/runner.py`):
+    #
+    #     adversarial-007  12k    two turns, no composition
+    #     golden-007       33k    one composition, one recompose after a refusal
+    #     golden-014       57k    one composition, one recompose after a refusal
+    #     golden-001       64k    one composition, six products detailed
+    #
+    # So legitimate work runs to ~65k and the old ceiling cut the top of the normal
+    # range: `golden-014` said "now I'll validate the composition" and then could
+    # not, because the guard had already taken the tools away. 150_000 leaves room
+    # for the real B2B conversation — several compositions in one order, RF-2.3 —
+    # while staying a hard bound on the loop `adversarial-006` builds.
+    #
+    # It is also the right side of the economics after the ADR-013: the ticket went
+    # from tens of reais to thousands, and a ceiling that saves a fraction of a cent
+    # by dropping an order is not a saving.
+    session_budget_tokens: int = 150_000
 
     # Ceiling for one external call: a tool when they arrive in S-03, and today
     # the wait for the model's first token.
