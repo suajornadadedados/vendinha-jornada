@@ -32,6 +32,7 @@ from langchain_core.tools import BaseTool
 
 from vendinha.catalogo import CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.composicao import Motivo, TipoDeEvento
+from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria
 from vendinha.tools.checkout import ComposicaoProposta, ferramentas_de_checkout
 from vendinha.tools.composicao import ferramentas_de_composicao
@@ -42,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CATALOGO = REPO_ROOT / "data" / "catalogo"
 
 SEM_TIMEOUT = 30.0
+BASE_URL = "http://localhost:8000"
 
 # Um café da manhã que passa: os quatro slots preenchidos, R$ 237,00 para 20 pessoas
 # (R$ 11,85 por cabeça), nenhum item indisponível.
@@ -72,7 +74,9 @@ def gravados() -> PedidosEmMemoria:
 def criar_pedido(seed: tuple[Produto, ...], gravados: PedidosEmMemoria) -> BaseTool:
     return next(
         tool
-        for tool in ferramentas_de_checkout(CatalogoEmMemoria(seed), gravados, SEM_TIMEOUT)
+        for tool in ferramentas_de_checkout(
+            CatalogoEmMemoria(seed), gravados, MockPaymentAdapter(BASE_URL), SEM_TIMEOUT
+        )
         if tool.name == "criar_pedido"
     )
 
@@ -274,7 +278,9 @@ async def test_the_revalidation_reads_todays_catalogue_not_the_one_the_verdict_s
     )
     tool = next(
         t
-        for t in ferramentas_de_checkout(CatalogoEmMemoria(mais_caro), gravados, SEM_TIMEOUT)
+        for t in ferramentas_de_checkout(
+            CatalogoEmMemoria(mais_caro), gravados, MockPaymentAdapter(BASE_URL), SEM_TIMEOUT
+        )
         if t.name == "criar_pedido"
     )
 

@@ -22,6 +22,7 @@ from langchain_core.tools import BaseTool
 from vendinha.catalogo import CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.composicao import TipoDeEvento
 from vendinha.documentos import cnpj_valido, formatar_cnpj, mascarar_cnpj, normalizar_cnpj
+from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria, StatusDoPedido
 from vendinha.tools.checkout import ComposicaoProposta, ferramentas_de_checkout
 
@@ -31,6 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CATALOGO = REPO_ROOT / "data" / "catalogo"
 
 SEM_TIMEOUT = 30.0
+BASE_URL = "http://localhost:8000"
 
 CAFE_DA_MANHA = ComposicaoProposta(
     tipo_de_evento=TipoDeEvento.CAFE_DA_MANHA,
@@ -60,7 +62,9 @@ def gravados() -> PedidosEmMemoria:
 def tools(seed: tuple[Produto, ...], gravados: PedidosEmMemoria) -> dict[str, BaseTool]:
     return {
         tool.name: tool
-        for tool in ferramentas_de_checkout(CatalogoEmMemoria(seed), gravados, SEM_TIMEOUT)
+        for tool in ferramentas_de_checkout(
+            CatalogoEmMemoria(seed), gravados, MockPaymentAdapter(BASE_URL), SEM_TIMEOUT
+        )
     }
 
 

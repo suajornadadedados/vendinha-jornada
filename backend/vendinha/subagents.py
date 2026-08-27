@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from langchain_core.tools import BaseTool
 
 from vendinha.catalogo import Busca, Catalogo
+from vendinha.pagamento import PaymentGateway
 from vendinha.pedidos import Pedidos
 from vendinha.tools.catalogo import ferramentas_de_catalogo
 from vendinha.tools.checkout import ferramentas_de_checkout
@@ -429,7 +430,11 @@ que não veio de tool."""
 
 
 def checkout(
-    busca: Busca, catalogo: Catalogo, pedidos: Pedidos, timeout_seconds: float
+    busca: Busca,
+    catalogo: Catalogo,
+    pedidos: Pedidos,
+    gateway: PaymentGateway,
+    timeout_seconds: float,
 ) -> Subagent:
     """Fecha o pedido — e é o único subagent que escreve (ADR-002).
 
@@ -442,7 +447,7 @@ def checkout(
     As tools de leitura do catálogo entram aqui de propósito — ver D-1 no topo do
     módulo. O que a fronteira protege é a ação, não a consulta.
     """
-    escritoras = {"criar_pedido"}
+    escritoras = {"criar_pedido", "gerar_link_pagamento"}
     return registrar(
         CHECKOUT,
         PROMPT_CHECKOUT,
@@ -451,7 +456,7 @@ def checkout(
             for tool in (
                 *ferramentas_de_catalogo(busca, catalogo, timeout_seconds),
                 *ferramentas_de_composicao(catalogo, timeout_seconds),
-                *ferramentas_de_checkout(catalogo, pedidos, timeout_seconds),
+                *ferramentas_de_checkout(catalogo, pedidos, gateway, timeout_seconds),
             )
         ],
     )

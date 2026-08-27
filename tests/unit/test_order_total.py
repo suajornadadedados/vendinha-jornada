@@ -28,6 +28,7 @@ from langchain_core.tools import BaseTool
 
 from vendinha.catalogo import CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.composicao import TipoDeEvento
+from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria
 from vendinha.tools.checkout import ComposicaoProposta, EmpresaEntrada, ferramentas_de_checkout
 
@@ -37,6 +38,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CATALOGO = REPO_ROOT / "data" / "catalogo"
 
 SEM_TIMEOUT = 30.0
+BASE_URL = "http://localhost:8000"
 
 # Café da manhã para 20 pessoas. Quantidade = teto de 20 dividido pelo rendimento.
 #   café     40 rende -> 1 x 39,00 =  39,00
@@ -75,7 +77,9 @@ def gravados() -> PedidosEmMemoria:
 def _criar_pedido(seed: tuple[Produto, ...], pedidos: PedidosEmMemoria) -> BaseTool:
     tools = {
         tool.name: tool
-        for tool in ferramentas_de_checkout(CatalogoEmMemoria(seed), pedidos, SEM_TIMEOUT)
+        for tool in ferramentas_de_checkout(
+            CatalogoEmMemoria(seed), pedidos, MockPaymentAdapter(BASE_URL), SEM_TIMEOUT
+        )
     }
     return tools["criar_pedido"]
 

@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
+    # A URL por onde o mundo de fora alcança este backend. Ela vai no
+    # `notification_url` da preferência do Mercado Pago e no link do adapter mock,
+    # então em local costuma ser um túnel. Estava no `.env.example` desde a S-02 e
+    # ninguém a lia — mesma classe da ressalva R-5 da verificação da S-02.
+    public_base_url: str = "http://localhost:8000"
+
     database_url: str = "postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha"
 
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
@@ -119,6 +125,16 @@ class Settings(BaseSettings):
     # Fernet key that encrypts the stored provider credential (ADR-012). Absent
     # means writes are refused — never that the secret is stored in the clear.
     config_encryption_key: str | None = None
+
+    # Payment, S-04. Sandbox always — a production credential does not enter this
+    # project. Absent token means the mock adapter, and there is deliberately no
+    # `PAYMENT_GATEWAY` switch: it would allow `mercadopago` with no token, which
+    # boots fine and breaks on the first order. See D-4 and `pagamento.gateway_de`.
+    mercadopago_access_token: str | None = None
+    # Origin verification of the payment webhook (RF-2.5, R8). Absent means no
+    # signature verifies — the safe side. "No secret, accept anything" would turn
+    # a forgotten environment variable into an open endpoint that moves money.
+    mercadopago_webhook_secret: str | None = None
 
 
 @lru_cache(maxsize=1)

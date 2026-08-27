@@ -43,6 +43,7 @@ from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.observability import callback_handler, install_log_redaction
+from vendinha.pagamento import PaymentGateway, gateway_de
 from vendinha.pedidos import Pedidos, PostgresPedidos
 from vendinha.providers import (
     PROVIDERS,
@@ -113,6 +114,7 @@ def create_app(
     store: ConfigStore | None = None,
     catalogo: Catalogo | None = None,
     pedidos: Pedidos | None = None,
+    gateway: PaymentGateway | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -160,6 +162,13 @@ def create_app(
         # trouxe escrita, e um teste que não consegue substituir o que escreve só
         # consegue testar o caminho que não escreve.
         app.state.pedidos = pedidos or PostgresPedidos(with_connect_timeout(settings.database_url))
+        # Qual adapter de pagamento vale nesta instância é decidido uma vez, na
+        # subida, e dito em voz alta no log: a escolha é derivada da presença do
+        # token, e escolha implícita que ninguém anuncia é a que vira dúvida
+        # semanas depois (S-04, D-4).
+        app.state.gateway = gateway or gateway_de(
+            settings.mercadopago_access_token, settings.public_base_url
+        )
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -320,7 +329,13 @@ def create_app(
             app.state.checkpointer,
             Supervisor(
                 recomendacao=recomendacao(busca, app.state.catalogo, timeout),
-                checkout=checkout(busca, app.state.catalogo, app.state.pedidos, timeout),
+                checkout=checkout(
+                    busca,
+                    app.state.catalogo,
+                    app.state.pedidos,
+                    app.state.gateway,
+                    timeout,
+                ),
                 perguntar=roteador_do_modelo(model),
             ),
             budget_tokens=settings.session_budget_tokens,

@@ -22,6 +22,7 @@ from typing import Any
 import pytest
 
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, Produto, carregar_seed
+from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria
 from vendinha.subagents import (
     CHECKOUT,
@@ -62,7 +63,13 @@ def le(seed: tuple[Produto, ...]) -> Subagent:
 
 @pytest.fixture
 def escreve(seed: tuple[Produto, ...]) -> Subagent:
-    return checkout(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT)
+    return checkout(
+        BuscaEmMemoria(seed),
+        CatalogoEmMemoria(seed),
+        PedidosEmMemoria(),
+        MockPaymentAdapter("http://localhost:8000"),
+        SEM_TIMEOUT,
+    )
 
 
 @pytest.mark.risco("R2")
@@ -178,7 +185,12 @@ def test_the_checkout_can_read_the_catalogue_because_the_boundary_is_about_actin
     do_checkout = {tool.name for tool in escreve.tools}
 
     assert {tool.name for tool in le.tools} <= do_checkout
-    assert {"criar_pedido", "validar_dados_cliente", "consultar_pedido"} <= do_checkout
+    assert {
+        "criar_pedido",
+        "gerar_link_pagamento",
+        "validar_dados_cliente",
+        "consultar_pedido",
+    } <= do_checkout
 
 
 @pytest.mark.risco("R2")
@@ -192,10 +204,9 @@ def test_every_adversarial_case_names_tools_that_this_repository_recognises(
     toda tool citada ou existe hoje, ou é de uma spec que ainda não chegou — e essas
     estão nomeadas, uma a uma.
     """
-    # `gerar_link_pagamento` chega na task 5 desta spec; `emitir_nf` e
-    # `registrar_aprovacao` são da S-05; `aplicar_desconto` e as irmãs não existem
-    # por decisão (RF-2.6) e são cobertas pelo teste acima.
-    ainda_nao_existem = {"gerar_link_pagamento", "emitir_nf", "registrar_aprovacao"} | INEXISTENTES
+    # `emitir_nf` e `registrar_aprovacao` são da S-05; `aplicar_desconto` e as
+    # irmãs não existem por decisão (RF-2.6) e são cobertas pelo teste acima.
+    ainda_nao_existem = {"emitir_nf", "registrar_aprovacao"} | INEXISTENTES
     registradas = {tool.name for tool in (*le.tools, *escreve.tools)}
 
     # A lista de pendências tem que se esvaziar sozinha: no dia em que

@@ -1,6 +1,6 @@
 """As tools do checkout — onde o agente escreve, e onde o código recusa o que ele propôs.
 
-Três tools nesta task, e a do meio é a razão de o arquivo existir.
+Quatro tools, e `criar_pedido` é a razão de o arquivo existir.
 
 **`criar_pedido` revalida a composição do zero.** Ela chega aqui com ids que já
 passaram por `validar_composicao` e por isso mesmo não são confiáveis: o veredito
@@ -26,12 +26,20 @@ números para a resposta, e ele vira trace. `golden-003` e `golden-008` reprovam
 execução que repete o documento em claro, e o ADR-007 pede PII ilegível fora do
 processo — então não há de onde copiar (R5).
 
+**`gerar_link_pagamento` é idempotente e degrada com graça.** Chamada duas vezes
+para o mesmo pedido, ela devolve o mesmo link em vez de criar uma segunda
+preferência: dois links vivos para um pedido é o cliente pagando um enquanto o
+financeiro dele vê o outro em aberto. E gateway fora do ar não vira exceção — o
+pedido está gravado e continua válido, então o que falta é uma segunda tentativa
+(ADR-004, R8).
+
 **O envelope é o `Resultado` de `tools/catalogo.py`.** O portão de groundedness só
 enxerga `encontrados` (`evals/groundedness.py`): um retorno com envelope próprio
 seria invisível para a régua, e fato invisível para a régua é fato que ninguém está
 conferindo.
 """
 
+import logging
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -39,10 +47,11 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from vendinha import composicao as motor
-from vendinha.budget import run_with_timeout
+from vendinha.budget import TimedOut, run_with_timeout
 from vendinha.catalogo import Alergeno, Catalogo, Produto
 from vendinha.composicao import TipoDeEvento
 from vendinha.documentos import mascarar_cnpj
+from vendinha.pagamento import GatewayIndisponivel, PaymentGateway
 from vendinha.pedidos import (
     ComposicaoDoPedido,
     Empresa,
@@ -56,7 +65,9 @@ from vendinha.pedidos import (
 from vendinha.tools.catalogo import ItemDeResultado, Resultado
 from vendinha.tools.composicao import LIMITE_DE_ITENS, ComposicaoValidada
 
-NOMES = ("validar_dados_cliente", "criar_pedido", "consultar_pedido")
+logger = logging.getLogger(__name__)
+
+NOMES = ("validar_dados_cliente", "criar_pedido", "gerar_link_pagamento", "consultar_pedido")
 
 # Um pedido com mais composições do que isto não é um evento corporativo, é um
 # despejo. O teto existe pelo mesmo motivo que o de `validar_composicao`: argumento
@@ -142,6 +153,10 @@ class CriarPedido(BaseModel):
 
 
 class ConsultarPedido(BaseModel):
+    pedido_id: str = Field(description="O id que criar_pedido devolveu.")
+
+
+class GerarLinkPagamento(BaseModel):
     pedido_id: str = Field(description="O id que criar_pedido devolveu.")
 
 
@@ -242,7 +257,10 @@ def _empresa_ou_problemas(entrada: EmpresaEntrada) -> tuple[Empresa | None, tupl
 
 
 def ferramentas_de_checkout(
-    catalogo: Catalogo, pedidos: Pedidos, timeout_seconds: float
+    catalogo: Catalogo,
+    pedidos: Pedidos,
+    gateway: PaymentGateway,
+    timeout_seconds: float,
 ) -> tuple[BaseTool, ...]:
     """Constrói as tools do checkout contra as portas recebidas.
 
@@ -369,6 +387,44 @@ def ferramentas_de_checkout(
             exclude_none=True
         )
 
+    async def gerar_link_pagamento(pedido_id: str) -> str:
+        pedido = await run_with_timeout(
+            pedidos.por_id(pedido_id), timeout_seconds, "leitura do pedido"
+        )
+        if pedido is None:
+            return Resultado(
+                nao_encontrados=(pedido_id,),
+                observacao="não existe pedido com esse id; crie o pedido antes de cobrar",
+            ).model_dump_json(exclude_none=True)
+
+        # Link já gerado é devolvido, e não gerado de novo. Duas preferências para o
+        # mesmo pedido são dois links vivos: o cliente paga por um, o financeiro
+        # dele vê o outro em aberto, e a conciliação vira telefonema.
+        if pedido.url_pagamento:
+            return Resultado(encontrados=(_resumir(pedido),)).model_dump_json(exclude_none=True)
+
+        try:
+            link = await run_with_timeout(
+                gateway.criar_preferencia(pedido), timeout_seconds, "criação do link de pagamento"
+            )
+        except (GatewayIndisponivel, TimedOut) as fora_do_ar:
+            # Degradação graciosa (ADR-004, R8): o pedido está gravado e continua
+            # válido, então o que falta é uma segunda tentativa — não um pedido
+            # novo. A observação é escrita para o cliente ler e não carrega nome de
+            # fornecedor, código de status nem configuração (`adversarial-006`).
+            logger.warning("o gateway de pagamento falhou para %s: %s", pedido_id, fora_do_ar)
+            return Resultado(
+                encontrados=(_resumir(pedido),),
+                observacao=(
+                    "não consegui gerar o link de pagamento agora. O pedido está "
+                    "registrado; avise o cliente e tente de novo em seguida"
+                ),
+            ).model_dump_json(exclude_none=True)
+
+        await pedidos.registrar_link(pedido.id, link.url)
+        atualizado = pedido.model_copy(update={"url_pagamento": link.url})
+        return Resultado(encontrados=(_resumir(atualizado),)).model_dump_json(exclude_none=True)
+
     async def consultar_pedido(pedido_id: str) -> str:
         pedido = await run_with_timeout(
             pedidos.por_id(pedido_id), timeout_seconds, "leitura do pedido"
@@ -404,6 +460,16 @@ def ferramentas_de_checkout(
                 "depois de o cliente confirmar explicitamente."
             ),
             args_schema=CriarPedido,
+        ),
+        StructuredTool.from_function(
+            coroutine=gerar_link_pagamento,
+            name="gerar_link_pagamento",
+            description=(
+                "Cria o link de pagamento de um pedido já criado e devolve a URL. "
+                "Chamar duas vezes para o mesmo pedido devolve o MESMO link — nunca um "
+                "segundo. O link que você apresentar é o url_pagamento que ela devolver."
+            ),
+            args_schema=GerarLinkPagamento,
         ),
         StructuredTool.from_function(
             coroutine=consultar_pedido,
