@@ -57,6 +57,11 @@ CAMPO_DA_TOOL = {
     "prazo_estimado": "prazo_estimado",
     "regiao": "regiao",
     "peso": "peso",
+    # Os dois fatos do pivô B2B que o modelo não pode deduzir do nome nem do
+    # texto: quantas pessoas o item atende, e o que ele declara conter. Ambos só
+    # chegam por `detalhar_produto` (R1, R10 — `golden-013`, `golden-016`).
+    "rendimento": "rendimento",
+    "contem": "contem",
 }
 
 # Dinheiro em texto brasileiro, nas formas que um modelo escreve de verdade:

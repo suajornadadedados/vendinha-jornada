@@ -66,9 +66,23 @@ class ProdutoEncontrado(BaseModel):
 
 
 class ProdutoDetalhado(ProdutoEncontrado):
-    """O produto inteiro, incluindo o que só o tipo dele tem."""
+    """O produto inteiro, incluindo o que só o tipo dele tem.
+
+    **`rendimento` e `contem` só aparecem aqui, e não em `ProdutoEncontrado`.**
+    É a mesma regra mecânica que o prompt já aplica a maturação e torra: a busca
+    serve para escolher, o detalhe é o que autoriza descrever. Descrever pela
+    lembrança de um resultado de busca é como um atributo inventado entra numa
+    frase que parece ancorada — e para alérgeno essa frase não custa uma
+    recomendação ruim, custa alguém passar mal (R10, `golden-013`).
+
+    Os dois campos existem no `Produto` desde a S-10, mas `ProdutoEncontrado.de`
+    filtra por `model_fields`: exposição aqui é opt-in, e um campo que ninguém
+    declarou some em silêncio no caminho até o cliente.
+    """
 
     produtor: str
+    rendimento: int
+    contem: tuple[str, ...] = ()
     maturacao: str | None = None
     torra: str | None = None
     notas_sensoriais: tuple[str, ...] = ()

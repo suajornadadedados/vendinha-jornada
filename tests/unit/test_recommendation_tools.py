@@ -276,6 +276,61 @@ async def test_detail_carries_the_type_specific_attributes(
     assert detalhe_cafe["encontrados"][0]["notas_sensoriais"] == list(cafe.notas_sensoriais)
 
 
+@pytest.mark.risco("R10")
+async def test_detail_carries_the_declared_allergens(
+    ferramentas: dict[str, BaseTool], seed: tuple[Produto, ...]
+) -> None:
+    """R10 — `contem` chega ao modelo pela tool, ou não corta nada.
+
+    `golden-013` ancora o alérgeno em `tool:detalhar_produto`, e o par que o seed
+    tem de propósito é o motivo: o biscoito de polvilho é sem glúten e a broa de
+    fubá ao lado leva trigo. As duas suposições que um modelo faria sobre o nome
+    estão erradas, e a única resposta certa é o campo declarado.
+
+    O valor esperado vem do seed, nunca de uma lista escrita aqui.
+    """
+    com_alergeno = next(produto for produto in seed if produto.contem)
+
+    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_id=com_alergeno.id)
+
+    assert detalhe["encontrados"][0]["contem"] == list(com_alergeno.contem)
+
+
+@pytest.mark.risco("R1")
+async def test_detail_carries_how_many_people_the_item_serves(
+    ferramentas: dict[str, BaseTool], seed: tuple[Produto, ...]
+) -> None:
+    """R1 — `rendimento` é campo lido, e é o que converte "40 pessoas" em quantidade.
+
+    `golden-016` ancora o rendimento em `tool:detalhar_produto`. Sem ele no
+    retorno, "quantos pacotes de café para 40 pessoas" vira estimativa em texto —
+    que é exatamente a classe de erro que R1 existe para impedir (RF-1.6).
+    """
+    algum = seed[0]
+
+    detalhe = await _chamar(ferramentas["detalhar_produto"], produto_id=algum.id)
+
+    assert detalhe["encontrados"][0]["rendimento"] == algum.rendimento
+
+
+@pytest.mark.risco("R10")
+async def test_search_does_not_carry_the_allergen(ferramentas: dict[str, BaseTool]) -> None:
+    """R10 — a busca escolhe; quem autoriza descrever alérgeno é o detalhe.
+
+    `contem` fora de `buscar_produtos` é a mesma regra mecânica que o prompt já
+    aplica a maturação e torra: descrever pela lembrança de um resultado de busca
+    é como um atributo inventado entra numa frase que parece ancorada. Para
+    alérgeno, essa frase manda alguém para o hospital.
+    """
+    resposta = await _chamar(
+        ferramentas["buscar_produtos"], necessidade="queijo para o café da manhã", limite=4
+    )
+
+    assert resposta["encontrados"], "a busca não devolveu nada e o teste não provaria nada"
+    for item in resposta["encontrados"]:
+        assert "contem" not in item
+
+
 @pytest.mark.risco("R4")
 async def test_a_recovered_description_reaches_the_model_as_data_not_as_a_field_of_its_own(
     seed: tuple[Produto, ...],
