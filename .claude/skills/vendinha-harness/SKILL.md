@@ -1,6 +1,6 @@
 ---
 name: vendinha-harness
-description: Roteia o trabalho da Vendinha para as skills certas e declara a precedencia dos documentos normativos do projeto sobre qualquer skill de terceiros. Use SEMPRE ao iniciar uma spec (S-00 a S-09), ao escolher entre as skills instaladas, e sempre que uma skill sugerir algo que pareca conflitar com a regra de ouro, com os ADRs ou com a matriz de riscos.
+description: Roteia o trabalho da Vendinha para as skills certas e declara a precedencia dos documentos normativos do projeto sobre qualquer skill de terceiros. Use SEMPRE ao iniciar uma spec (S-00 a S-11), ao escolher entre as skills instaladas, e sempre que uma skill sugerir algo que pareca conflitar com a regra de ouro, com os ADRs ou com a matriz de riscos.
 ---
 
 # Harness da Vendinha — roteamento e precedencia
@@ -17,7 +17,7 @@ Quando uma skill de terceiro sugerir algo que contradiga os normativos do projet
 1. `CLAUDE.md` — regra de ouro: *o LLM decide o que dizer; o codigo decide o que pode ser feito*
 2. `docs/requisitos.md` — a traducao que este projeto fez do pedido do cliente; e dela que
    riscos, PRD e ADRs derivam
-3. `docs/riscos.md` — R1 a R9. Risco sem verificacao e desejo, nao requisito
+3. `docs/riscos.md` — R1 a R10. Risco sem verificacao e desejo, nao requisito
 4. `docs/testes.md` — risco -> teste: o seam de cada verificacao e o criterio de aceite
 5. `docs/adr/` — decisoes aceitas, imutaveis (mudanca gera novo ADR)
 6. `docs/specs/S-XX-*.md` — a spec ativa e a fonte da verdade da sessao
@@ -29,7 +29,7 @@ Leia esta secao antes de aplicar qualquer skill de LangChain/LangGraph.
 
 **`langchain-rag`** ensina a gerar a resposta a partir do contexto recuperado.
 Aqui isso vale para *texto de conversa*, nunca para *fato de negocio*: atributo, preco,
-disponibilidade e total **nao saem do texto recuperado**. Preco vem de consulta ao Postgres
+disponibilidade, rendimento, alergeno (`contem`) e total **nao saem do texto recuperado**. Preco vem de consulta ao Postgres
 por tool, no momento da criacao do pedido. Um unico fato inventado reprova a suite de evals
 inteira e trava o release (R1, RF-1.3, ADR-001, ADR-006).
 
@@ -46,6 +46,17 @@ recomendacao possui exclusivamente tools read-only, garantido por teste da camad
 (`tests/security/test_permission_boundary.py`, ADR-011) que falha
 se a fronteira vazar. `desconto` nao existe como acao disponivel a nenhum agente — nao e
 negado, simplesmente nao existe (ADR-002, R2, R4, RF-2.6).
+
+**Composicao de evento (S-11)**: nenhuma skill de terceiro cobre isso, e a tentacao e deixar
+o modelo montar e somar. Aqui o modelo **propoe** os produtos e o codigo **valida**: total e
+valor por pessoa em `Decimal`, quantidade derivada do `rendimento`, slots obrigatorios por
+tipo de evento, e corte por `contem`. `validar_composicao` e read-only e vive no subagent
+`recomendacao` — propor nao e side effect —, e `criar_pedido` revalida no servidor: a
+validacao que passou pelo modelo nunca e a que autoriza (R10, ADR-013, RF-2.7).
+
+Restricao alimentar em particular **nunca** e julgamento do modelo. `contem` nao entra no
+payload do Qdrant nem no texto embedado: e corte lido do Postgres, porque um alergeno com
+duas moradas e a falha de R1 com consequencia fisica.
 
 **`langgraph-persistence`** apresenta varias estrategias de estado.
 Aqui a escolha ja esta feita: checkpointer em Postgres e **pointer-not-payload** — o estado
@@ -91,6 +102,8 @@ se o Langfuse estiver indisponivel.
 | S-01 Discovery como codigo | `grill-with-docs`, `domain-modeling`, `writing-for-agents` | requisitos, PRD, jornada, riscos |
 | S-02 Agente observavel | `langgraph-fundamentals`, `langgraph-persistence`, `langfuse`, `tdd` | ADR-001, ADR-007; R5, R6, R9 |
 | S-03 Recomendacao ancorada | `langchain-rag`, `langfuse`, `tdd` | ADR-001; R1; RF-1.3 |
+| S-10 Discovery B2B | `domain-modeling`, `writing-for-agents` | ADR-013; requisitos, PRD, jornada, riscos |
+| S-11 Composicao de evento | `codebase-design`, `tdd` | ADR-001, ADR-002, ADR-013; R1, R10 |
 | S-04 Fronteira de pagamento | `langchain-middleware`, `codebase-design`, `tdd` | ADR-002, ADR-004; R2, R4, R8 |
 | S-05 HITL e NF | `langgraph-human-in-the-loop`, `langgraph-persistence` | ADR-003; R3, R8 |
 | S-06 Qualidade como gate | `eval-engineering`, `langfuse` | ADR-006; R7; RF-5.4 |

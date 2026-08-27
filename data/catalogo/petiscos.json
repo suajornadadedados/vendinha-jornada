@@ -1,0 +1,269 @@
+[
+  {
+    "id": "biscoito-de-polvilho",
+    "nome": "Biscoito de polvilho artesanal",
+    "tipo": "petisco",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Polvilho azedo, ovo e banha. Seco, leve e sonoro. O acompanhamento natural do café da tarde.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "café coado",
+      "doce de leite cremoso"
+    ],
+    "ocasiao": [
+      "lanche da tarde",
+      "dia a dia"
+    ],
+    "peso": "200 g",
+    "preco": "24.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 10,
+    "contem": [
+      "ovos"
+    ]
+  },
+  {
+    "id": "torresmo-de-rolo",
+    "nome": "Torresmo de rolo",
+    "tipo": "petisco",
+    "regiao": "Sul de Minas, MG",
+    "produtor": "Casa de Carnes Serra Verde",
+    "descricao": "Barriga enrolada e frita duas vezes: casca que estala e carne macia por dentro. O petisco que faz a mesa parar de conversar por um minuto.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "cachaça prata",
+      "cerveja gelada",
+      "limão e pimenta"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "confraternização",
+      "receber visita",
+      "fim de tarde"
+    ],
+    "peso": "300 g",
+    "preco": "38.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 10,
+    "contem": []
+  },
+  {
+    "id": "pao-de-queijo-congelado",
+    "nome": "Pão de queijo congelado para assar",
+    "tipo": "petisco",
+    "regiao": "Belo Horizonte, MG",
+    "produtor": "Quitandas da Serra",
+    "descricao": "Polvilho azedo e queijo meia-cura, moldado e congelado cru: assa em vinte minutos e chega à mesa como se tivesse acabado de sair do forno de casa. Sem trigo.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "doce de leite",
+      "requeijão de corte"
+    ],
+    "ocasiao": [
+      "café da manhã corporativo",
+      "lanche da tarde",
+      "onboarding",
+      "reunião com cliente"
+    ],
+    "peso": "1 kg",
+    "preco": "46.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [
+      "lactose",
+      "ovos"
+    ]
+  },
+  {
+    "id": "chips-de-mandioca",
+    "nome": "Chips de mandioca com alecrim",
+    "tipo": "petisco",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Roça Nova Alimentos",
+    "descricao": "Mandioca fatiada fina, frita na hora e finalizada com alecrim e sal grosso. Crocante de verdade, e a única coisa na mesa que todo mundo pode comer.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "geleia de pimenta biquinho",
+      "cachaça prata",
+      "queijo meia-cura"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "confraternização",
+      "dia a dia",
+      "reunião com cliente"
+    ],
+    "peso": "200 g",
+    "preco": "26.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 10,
+    "contem": []
+  },
+  {
+    "id": "linguica-artesanal-defumada",
+    "nome": "Linguiça artesanal defumada",
+    "tipo": "petisco",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "Defumada lentamente em madeira de laranjeira, temperada só com alho, sal e pimenta. Vai à brasa ou à frigideira e não precisa de mais nada.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "cachaça envelhecida",
+      "pão de queijo",
+      "geleia de pimenta"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "churrasco",
+      "confraternização",
+      "receber visita"
+    ],
+    "peso": "500 g",
+    "preco": "54.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 12,
+    "contem": []
+  },
+  {
+    "id": "pimenta-biquinho-em-conserva",
+    "nome": "Pimenta biquinho em conserva",
+    "tipo": "petisco",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Fazenda Riacho Fundo",
+    "descricao": "A pimenta que não arde: só perfume e acidez, curtida em conserva leve. Some do pote antes de qualquer outra coisa numa tábua de frios.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "queijo curado",
+      "torresmo",
+      "tábua de frios",
+      "cachaça prata"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "tábua de frios",
+      "receber visita",
+      "presente para cliente"
+    ],
+    "peso": "300 g",
+    "preco": "32.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": []
+  },
+  {
+    "id": "amendoim-torrado-com-alho",
+    "nome": "Amendoim torrado com alho e sal",
+    "tipo": "petisco",
+    "regiao": "Alto Paranaíba, MG",
+    "produtor": "Torrefação Vila Rica",
+    "descricao": "Torrado em tacho de ferro com alho laminado e sal grosso, sem óleo acrescentado. O petisco mais barato da mesa e sempre o primeiro a acabar.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "cachaça prata",
+      "cerveja gelada",
+      "licor de café"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "dia a dia",
+      "confraternização"
+    ],
+    "peso": "250 g",
+    "preco": "22.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "amendoim"
+    ]
+  },
+  {
+    "id": "biscoito-de-queijo-mineiro",
+    "nome": "Biscoito amanteigado de queijo",
+    "tipo": "petisco",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Quitandas da Serra",
+    "descricao": "Massa amanteigada com queijo curado ralado, assada até dourar nas bordas. Salgado discreto que combina com café tanto quanto com cerveja.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "cerveja gelada",
+      "geleia de pimenta"
+    ],
+    "ocasiao": [
+      "café da manhã corporativo",
+      "lanche da tarde",
+      "reunião com cliente"
+    ],
+    "peso": "200 g",
+    "preco": "28.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 10,
+    "contem": [
+      "gluten",
+      "lactose",
+      "ovos"
+    ]
+  },
+  {
+    "id": "pacoca-de-carne-seca",
+    "nome": "Paçoca de carne seca com farinha",
+    "tipo": "petisco",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Casa de Carnes Serra Verde",
+    "descricao": "Carne seca desfiada e pilada com farinha de mandioca e cebola, do jeito que se faz no norte do estado. Come-se de colher, e some rápido.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "cachaça envelhecida",
+      "chips de mandioca",
+      "pimenta biquinho"
+    ],
+    "ocasiao": [
+      "happy hour",
+      "confraternização",
+      "degustação"
+    ],
+    "peso": "250 g",
+    "preco": "48.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 10,
+    "contem": []
+  },
+  {
+    "id": "manteiga-de-garrafa",
+    "nome": "Manteiga de garrafa artesanal",
+    "tipo": "petisco",
+    "regiao": "Norte de Minas, MG",
+    "produtor": "Fazenda Riacho Fundo",
+    "descricao": "Manteiga clarificada em fogo baixo até ficar líquida e dourada, guardada em garrafa. Regada no pão de queijo quente ou na broa, muda a coisa inteira de lugar.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "pão de queijo",
+      "broa de fubá",
+      "queijo minas frescal"
+    ],
+    "ocasiao": [
+      "café da manhã corporativo",
+      "cozinhar",
+      "presente para quem entende"
+    ],
+    "peso": "500 ml",
+    "preco": "34.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 16,
+    "contem": [
+      "lactose"
+    ]
+  }
+]

@@ -22,7 +22,7 @@
     "titulo": { "type": "string", "minLength": 10 },
     "riscos": {
       "type": "array", "minItems": 1,
-      "items": { "type": "string", "pattern": "^R[1-9]$" }
+      "items": { "type": "string", "pattern": "^R[1-9][0-9]?$" }
     },
     "requisitos": {
       "type": "array",

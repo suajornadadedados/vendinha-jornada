@@ -47,7 +47,13 @@ from qdrant_client import AsyncQdrantClient, models
 # `numeric(8,2)` casa exatamente com o `^[0-9]{1,6}\\.[0-9]{2}$` do schema do seed,
 # e psycopg devolve `numeric` como `Decimal` — o dinheiro atravessa o banco sem
 # passar por float em nenhum ponto.
-SCHEMA = """
+# `ALTER TABLE ... IF NOT EXISTS` ao lado do `CREATE`: sem sistema de migracao,
+# um banco de desenvolvimento que ja tem a tabela nunca veria as colunas novas, e
+# o proximo `make seed` falharia com uma coluna inexistente em vez de dizer o que
+# aconteceu. As duas formas sao idempotentes, entao `setup()` continua podendo
+# rodar quantas vezes quiser.
+SCHEMA: tuple[str, ...] = (
+    """
 CREATE TABLE IF NOT EXISTS produto (
     id               text PRIMARY KEY,
     nome             text NOT NULL,
@@ -66,17 +72,28 @@ CREATE TABLE IF NOT EXISTS produto (
     torra            text,
     notas_sensoriais text[] NOT NULL DEFAULT '{}',
     teor_alcoolico   text,
+    rendimento       integer NOT NULL DEFAULT 1 CHECK (rendimento > 0),
+    contem           text[] NOT NULL DEFAULT '{}',
     atualizado_em    timestamptz NOT NULL DEFAULT now()
 )
-"""
+""",
+    "ALTER TABLE produto ADD COLUMN IF NOT EXISTS rendimento integer NOT NULL DEFAULT 1",
+    "ALTER TABLE produto ADD COLUMN IF NOT EXISTS contem text[] NOT NULL DEFAULT '{}'",
+)
 
 # O Qdrant só aceita UUID ou inteiro como id de ponto, e o id do seed é um slug.
 # Derivar o UUID do slug — em vez de sortear um — é o que faz `make seed` rodar
 # duas vezes produzir o mesmo índice em vez de duas cópias de cada produto.
 POINT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://vendinha.local/catalogo")
 
-TipoDeProduto = Literal["queijo", "cafe", "doce", "cachaca", "licor"]
+TipoDeProduto = Literal["queijo", "cafe", "doce", "cachaca", "licor", "petisco"]
 Intensidade = Literal["suave", "media", "marcante"]
+
+# Lista fechada, espelhando o enum do schema do seed. Fechada de proposito: um
+# alergeno escrito "gluteN" numa linha do seed viraria uma restricao que nenhuma
+# busca casa, e o cliente receberia justamente o produto que pediu para nao
+# receber (R10).
+Alergeno = Literal["lactose", "gluten", "ovos", "castanhas", "amendoim", "alcool", "acucar"]
 
 
 class Produto(BaseModel):
@@ -102,6 +119,15 @@ class Produto(BaseModel):
     preco: Annotated[Decimal, Field(gt=0, decimal_places=2)]
     disponivel: bool
     prazo_estimado: str
+
+    # Quantas pessoas o item atende num evento. E o que converte "40 pessoas" em
+    # quantidade — e quem divide e o codigo, nunca o modelo (RF-1.6, R1).
+    rendimento: Annotated[int, Field(ge=1)]
+
+    # Alergenos declarados. Campo de CORTE, nao de ranqueamento: nao entra no
+    # payload do Qdrant nem no texto embedado (ver `payload_de` e
+    # `texto_para_embedding`). Tupla vazia significa "nada a declarar" (R10).
+    contem: tuple[Alergeno, ...] = ()
 
     # Condicionais por tipo — o schema do seed diz quais são obrigatórios para
     # cada um, e é lá que essa exigência é verificada
@@ -158,6 +184,12 @@ def texto_para_embedding(produto: Produto) -> str:
 
     Sem preço e sem prazo, de propósito: o vetor responde *para quem serve este
     produto*, e valor não é uma dimensão de semelhança que alguém pediu.
+
+    `rendimento` e `contem` ficam de fora pela mesma regra, por caminhos diferentes:
+    rendimento é aritmética, e semelhança não soma; `contem` é **corte**, e quem
+    pede "sem lactose" não quer o queijo ranqueado mais baixo, quer ele fora do
+    resultado. Semelhança é a ferramenta errada para as duas coisas — e no caso do
+    alérgeno, errar custa mais do que uma recomendação ruim (R10).
 
     **As frases cruzadas do topo são o documento fazendo o trabalho do produto**, e
     elas foram escritas depois de medir. A primeira versão listava `harmonizacao` e
@@ -219,6 +251,12 @@ def payload_de(produto: Produto) -> dict[str, object]:
     Nem preço, nem descrição, nem nome. Não é economia de espaço — é que qualquer
     campo aqui é um fato com duas moradas, e o dia em que as duas discordarem o
     agente vai citar a errada com a mesma confiança.
+
+    **`contem` também não entra**, e é o caso em que a regra mais dói de seguir:
+    pré-filtrar alérgeno aqui seria mais rápido do que cortar no Postgres depois.
+    Mas alérgeno é o pior fato possível para se ter em duas moradas — a cópia velha
+    não custa uma recomendação ruim, custa alguém passar mal. O corte por `contem`
+    acontece junto com o de preço, na fonte da verdade (R10, ADR-013).
     """
     return {"id": produto.id, "tipo": produto.tipo, "disponivel": produto.disponivel}
 
@@ -243,6 +281,8 @@ def colunas_de(produto: Produto) -> tuple[object, ...]:
         produto.torra,
         list(produto.notas_sensoriais),
         produto.teor_alcoolico,
+        produto.rendimento,
+        list(produto.contem),
     )
 
 
@@ -264,6 +304,8 @@ COLUNAS: tuple[str, ...] = (
     "torra",
     "notas_sensoriais",
     "teor_alcoolico",
+    "rendimento",
+    "contem",
 )
 
 
@@ -326,7 +368,8 @@ class PostgresCatalogo:
 
     async def setup(self) -> None:
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
-            await conn.execute(SCHEMA)
+            for statement in SCHEMA:
+                await conn.execute(statement.encode())
 
     async def por_ids(self, ids: Sequence[str]) -> dict[str, Produto]:
         """Os produtos pedidos, por id. Id que não existe simplesmente não volta.

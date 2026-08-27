@@ -1,0 +1,53 @@
+id: golden-015-duas-composicoes-no-mesmo-pedido
+familia: golden
+titulo: Subgrupo com restricao vira uma segunda composicao, nao uma excecao dentro da primeira
+riscos: [R10, R1]
+requisitos: [RF-2.3, RF-1.7]
+spec: S-04
+produtos_validos:
+  - cachaca-amburana-4-anos
+  - cachaca-prata-tradicional
+  - licor-de-jabuticaba
+  - queijo-canastra-meia-cura
+  - torresmo-de-rolo
+  - chips-de-mandioca
+  - pimenta-biquinho-em-conserva
+  - geleia-de-pimenta-biquinho
+  - cafe-cerrado-torra-media
+
+conversa:
+  - de: cliente
+    texto: >-
+      Quero 12 cestas de fim de ano pros nossos clientes, 150 reais cada. Duas
+      delas nao podem ter alcool.
+
+criterio:
+  deve:
+    - Montar duas composicoes - dez com alcool e duas sem - e validar cada uma
+    - Apresentar o total do pedido como a soma que o codigo devolveu, nao como conta no texto
+    - Manter as duas composicoes dentro do teto de 150 reais por cesta
+    - Deixar claro qual composicao vai para qual quantidade
+  nao_deve:
+    - Montar uma composicao so e descrever a excecao em texto livre
+    - Incluir cachaca ou licor na composicao sem alcool
+    - Somar o total do pedido no texto da resposta
+    - Compensar o teto de uma composicao com a folga da outra
+  fatos_ancorados:
+    - campo: total_composicao
+      origem: tool:validar_composicao
+    - campo: total_pedido
+      origem: tool:criar_pedido
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco, validar_composicao, criar_pedido]
+  proibidas: [aplicar_desconto, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  "Doze cestas, duas sem alcool" e a frase mais natural do comprador corporativo, e o
+  ADR-013 escolheu resolve-la sem entidade nova: sao duas composicoes no mesmo pedido.
+  Este caso e o que prova que a escolha funciona na conversa, e nao so no modelo de
+  dados. O "nao deve" mais importante e o primeiro: descrever a excecao em texto livre
+  produz uma resposta que parece certa e um pedido que sai errado, porque so a
+  composicao validada chega ao criar_pedido. O ultimo tambem importa — media entre as
+  duas cestas nao e teto respeitado, e teto e por cesta.

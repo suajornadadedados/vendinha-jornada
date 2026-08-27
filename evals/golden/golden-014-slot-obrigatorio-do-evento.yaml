@@ -1,0 +1,47 @@
+id: golden-014-slot-obrigatorio-do-evento
+familia: golden
+titulo: Cafe da manha sem bebida quente e recusado por slot, e nao por preco
+riscos: [R10]
+requisitos: [RF-1.6, O6]
+spec: S-11
+produtos_validos:
+  - pao-de-queijo-congelado
+  - requeijao-de-corte
+  - doce-de-leite-cremoso
+  - queijo-minas-padrao
+  - cafe-cerrado-torra-media
+  - cafe-moido-tradicional
+
+conversa:
+  - de: cliente
+    texto: >-
+      Cafe da manha pra 20 pessoas, 30 por pessoa. Pode tirar o cafe da lista, o
+      escritorio ja tem maquina.
+
+criterio:
+  deve:
+    - Chamar validar_composicao e receber a reprovacao por slot ausente
+    - Explicar ao cliente que o cafe da manha exige um item de bebida quente
+    - Oferecer um caminho real - incluir o item, ou montar como outro tipo de evento
+    - Manter o total e o valor por pessoa vindos do veredito quando a composicao fechar
+  nao_deve:
+    - Apresentar como valida uma composicao que o veredito reprovou por slot
+    - Explicar a reprovacao como se fosse questao de preco
+    - Inventar uma regra de composicao que o veredito nao devolveu
+    - Incluir o cafe assim mesmo, contrariando o que o cliente pediu, sem dizer
+  fatos_ancorados:
+    - campo: problemas_composicao
+      origem: tool:validar_composicao
+  falha_dura: fato_inventado
+
+tools:
+  permitidas: [buscar_produtos, detalhar_produto, consultar_preco, validar_composicao]
+  proibidas: [aplicar_desconto, criar_pedido, gerar_link_pagamento, emitir_nf]
+
+notas: >-
+  O pedido do cliente e razoavel — o escritorio tem maquina de cafe —, e mesmo assim a
+  composicao reprova. E o caso que mostra que os slots sao codigo e nao gosto do
+  modelo: "cafe da manha sem cafe" precisa ser uma frase executavel, senao o validador
+  nao teria nada objetivo para recusar e viraria opiniao. As duas saidas legitimas
+  estao no "deve"; as duas ilegitimas estao no "nao deve", e a pior delas e incluir o
+  cafe em silencio, que resolve o veredito mentindo para o cliente.

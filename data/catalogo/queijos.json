@@ -22,6 +22,10 @@
     "preco": "89.90",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "45 dias"
   },
   {
@@ -47,6 +51,10 @@
     "preco": "118.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "120 dias"
   },
   {
@@ -71,6 +79,10 @@
     "preco": "68.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "8 dias"
   },
   {
@@ -96,6 +108,10 @@
     "preco": "79.50",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "30 dias"
   },
   {
@@ -120,6 +136,10 @@
     "preco": "142.00",
     "disponivel": true,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 11,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "180 dias"
   },
   {
@@ -144,6 +164,10 @@
     "preco": "84.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "60 dias"
   },
   {
@@ -167,6 +191,10 @@
     "preco": "76.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "40 dias"
   },
   {
@@ -191,6 +219,10 @@
     "preco": "95.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "90 dias"
   },
   {
@@ -216,6 +248,10 @@
     "preco": "168.00",
     "disponivel": true,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 16,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "12 meses"
   },
   {
@@ -240,6 +276,10 @@
     "preco": "52.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "20 dias"
   },
   {
@@ -263,6 +303,10 @@
     "preco": "38.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 11,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "3 dias"
   },
   {
@@ -287,6 +331,10 @@
     "preco": "132.00",
     "disponivel": false,
     "prazo_estimado": "7 a 10 dias úteis",
+    "rendimento": 10,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "90 dias"
   },
   {
@@ -311,6 +359,95 @@
     "preco": "108.00",
     "disponivel": true,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 11,
+    "contem": [
+      "lactose"
+    ],
     "maturacao": "60 dias"
+  },
+  {
+    "id": "requeijao-de-corte",
+    "nome": "Requeijão de corte mineiro",
+    "tipo": "queijo",
+    "regiao": "Zona da Mata, MG",
+    "produtor": "Laticínio Água Limpa",
+    "descricao": "Cremoso e levemente ácido, firme o bastante para fatiar. O par obrigatório do pão de queijo quente, e o que mais some da mesa num café da manhã.",
+    "intensidade": "suave",
+    "harmonizacao": [
+      "pão de queijo",
+      "goiabada cascão",
+      "café coado"
+    ],
+    "ocasiao": [
+      "café da manhã corporativo",
+      "lanche da tarde",
+      "onboarding"
+    ],
+    "peso": "400 g",
+    "preco": "44.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "maturacao": "fresco, sem cura",
+    "rendimento": 14,
+    "contem": [
+      "lactose"
+    ]
+  },
+  {
+    "id": "queijo-canastra-tabua-1kg",
+    "nome": "Queijo Canastra meia-cura peça inteira 1 kg",
+    "tipo": "queijo",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "A peça inteira do Canastra meia-cura, para tábua de evento grande: chega sem cortes, e rende bem mais por real do que duas peças de meio quilo.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "goiabada cascão",
+      "café coado",
+      "cachaça envelhecida"
+    ],
+    "ocasiao": [
+      "confraternização",
+      "receber visita",
+      "tábua de frios",
+      "fim de ano"
+    ],
+    "peso": "1 kg",
+    "preco": "168.00",
+    "disponivel": true,
+    "prazo_estimado": "5 a 7 dias úteis",
+    "maturacao": "45 dias",
+    "rendimento": 28,
+    "contem": [
+      "lactose"
+    ]
+  },
+  {
+    "id": "queijo-canastra-premiado-mundial",
+    "nome": "Queijo Canastra premiado - lote de concurso",
+    "tipo": "queijo",
+    "regiao": "Serra da Canastra, MG",
+    "produtor": "Sítio Boa Vista",
+    "descricao": "Lote da mesma leva que levou medalha em concurso mundial: cura de 180 dias, massa quebradiça e final longo. Vem em caixa de madeira com o certificado.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "cachaça envelhecida em carvalho",
+      "doce de figo",
+      "café microlote"
+    ],
+    "ocasiao": [
+      "presente para cliente",
+      "presente para quem entende",
+      "fim de ano"
+    ],
+    "peso": "600 g",
+    "preco": "320.00",
+    "disponivel": true,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "maturacao": "180 dias",
+    "rendimento": 16,
+    "contem": [
+      "lactose"
+    ]
   }
 ]

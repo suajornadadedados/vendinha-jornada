@@ -20,6 +20,8 @@
     "preco": "42.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra média",
     "notas_sensoriais": [
       "chocolate ao leite",
@@ -48,6 +50,8 @@
     "preco": "46.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra escura",
     "notas_sensoriais": [
       "cacau",
@@ -76,6 +80,8 @@
     "preco": "54.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra média-clara",
     "notas_sensoriais": [
       "fruta vermelha",
@@ -104,6 +110,8 @@
     "preco": "58.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra média",
     "notas_sensoriais": [
       "caramelo",
@@ -130,6 +138,8 @@
     "preco": "88.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra clara",
     "notas_sensoriais": [
       "laranja",
@@ -158,6 +168,8 @@
     "preco": "62.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra média",
     "notas_sensoriais": [
       "chocolate",
@@ -185,6 +197,8 @@
     "preco": "96.00",
     "disponivel": false,
     "prazo_estimado": "5 a 7 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra clara",
     "notas_sensoriais": [
       "abacaxi",
@@ -213,6 +227,8 @@
     "preco": "39.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 40,
+    "contem": [],
     "torra": "torra escura",
     "notas_sensoriais": [
       "cacau",
@@ -239,6 +255,8 @@
     "preco": "74.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 40,
+    "contem": [],
     "torra": "torra média-escura",
     "notas_sensoriais": [
       "chocolate amargo",
@@ -267,6 +285,8 @@
     "preco": "66.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra média",
     "notas_sensoriais": [
       "castanha",
@@ -294,6 +314,8 @@
     "preco": "59.00",
     "disponivel": true,
     "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [],
     "torra": "torra clara",
     "notas_sensoriais": [
       "limão siciliano",
@@ -321,11 +343,44 @@
     "preco": "180.00",
     "disponivel": false,
     "prazo_estimado": "7 a 10 dias úteis",
+    "rendimento": 12,
+    "contem": [],
     "torra": "torra clara",
     "notas_sensoriais": [
       "jasmim",
       "bergamota",
       "pêssego"
     ]
+  },
+  {
+    "id": "cafe-microlote-premiado",
+    "nome": "Café microlote premiado - lote de concurso",
+    "tipo": "cafe",
+    "regiao": "Serra do Caparaó, MG",
+    "produtor": "Fazenda Vereda Grande",
+    "descricao": "Microlote pontuado acima de 90 em concurso nacional, torrado sob encomenda e datado. Vem com a ficha de prova do lote, e a diferença se sente na primeira xícara.",
+    "intensidade": "marcante",
+    "harmonizacao": [
+      "chocolate amargo",
+      "doce de figo",
+      "queijo curado"
+    ],
+    "ocasiao": [
+      "presente para cliente",
+      "presente para quem entende",
+      "degustação"
+    ],
+    "peso": "250 g",
+    "preco": "260.00",
+    "disponivel": true,
+    "prazo_estimado": "7 a 10 dias úteis",
+    "torra": "clara, torrado sob encomenda",
+    "notas_sensoriais": [
+      "jasmim",
+      "damasco",
+      "mel de laranjeira"
+    ],
+    "rendimento": 20,
+    "contem": []
   }
 ]

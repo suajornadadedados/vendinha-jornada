@@ -20,7 +20,12 @@
     "peso": "400 g",
     "preco": "32.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 15,
+    "contem": [
+      "lactose",
+      "acucar"
+    ]
   },
   {
     "id": "doce-de-leite-em-barra",
@@ -42,7 +47,12 @@
     "peso": "350 g",
     "preco": "36.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "lactose",
+      "acucar"
+    ]
   },
   {
     "id": "goiabada-cascao",
@@ -65,7 +75,11 @@
     "peso": "600 g",
     "preco": "41.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "goiabada-cremosa",
@@ -87,7 +101,11 @@
     "peso": "400 g",
     "preco": "34.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "doce-de-cidra",
@@ -108,7 +126,11 @@
     "peso": "500 g",
     "preco": "44.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 18,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "doce-de-figo-em-calda",
@@ -130,7 +152,11 @@
     "peso": "500 g",
     "preco": "52.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 18,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "doce-de-abobora-com-coco",
@@ -151,7 +177,11 @@
     "peso": "450 g",
     "preco": "33.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 16,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "rapadura-artesanal",
@@ -172,7 +202,11 @@
     "peso": "500 g",
     "preco": "28.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 20,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "pacoca-de-amendoim",
@@ -193,7 +227,12 @@
     "peso": "300 g",
     "preco": "26.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 15,
+    "contem": [
+      "amendoim",
+      "acucar"
+    ]
   },
   {
     "id": "geleia-de-pimenta-biquinho",
@@ -216,7 +255,11 @@
     "peso": "220 g",
     "preco": "38.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "geleia-de-jabuticaba",
@@ -238,28 +281,11 @@
     "peso": "220 g",
     "preco": "42.00",
     "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
-  },
-  {
-    "id": "biscoito-de-polvilho",
-    "nome": "Biscoito de polvilho artesanal",
-    "tipo": "doce",
-    "regiao": "Zona da Mata, MG",
-    "produtor": "Doceria Vovó Zulmira",
-    "descricao": "Polvilho azedo, ovo e banha. Seco, leve e sonoro. O acompanhamento natural do café da tarde.",
-    "intensidade": "suave",
-    "harmonizacao": [
-      "café coado",
-      "doce de leite cremoso"
-    ],
-    "ocasiao": [
-      "lanche da tarde",
-      "dia a dia"
-    ],
-    "peso": "200 g",
-    "preco": "24.00",
-    "disponivel": true,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "acucar"
+    ]
   },
   {
     "id": "broa-de-fuba-com-erva-doce",
@@ -281,6 +307,42 @@
     "peso": "400 g",
     "preco": "29.00",
     "disponivel": false,
-    "prazo_estimado": "3 a 5 dias úteis"
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 12,
+    "contem": [
+      "gluten",
+      "lactose",
+      "ovos",
+      "acucar"
+    ]
+  },
+  {
+    "id": "ambrosia-mineira",
+    "nome": "Ambrosia mineira",
+    "tipo": "doce",
+    "regiao": "Campo das Vertentes, MG",
+    "produtor": "Doceria Vovó Zulmira",
+    "descricao": "Leite e ovos cozidos lentamente até talhar no ponto certo, com casca de limão e canela. Doce de tacho antigo, do tipo que quase ninguém faz mais.",
+    "intensidade": "media",
+    "harmonizacao": [
+      "café coado",
+      "queijo minas frescal",
+      "licor de leite"
+    ],
+    "ocasiao": [
+      "sobremesa",
+      "café da manhã corporativo",
+      "receber visita"
+    ],
+    "peso": "400 g",
+    "preco": "36.00",
+    "disponivel": true,
+    "prazo_estimado": "3 a 5 dias úteis",
+    "rendimento": 14,
+    "contem": [
+      "lactose",
+      "ovos",
+      "acucar"
+    ]
   }
 ]

@@ -36,7 +36,7 @@ de produto:
 | Orquestração | **LangGraph** | D5 · ADR-003 — `interrupt` com estado **persistido** em checkpointer. A pausa antes da NF não é UX, é primitivo | Agente em loop com um `if` no meio: pausa que morre junto com o processo |
 | Observabilidade | **Langfuse Cloud** | D10 · ADR-007 — trace por sessão com mascaramento de PII **na origem**; D13 · ADR-010 — é o mascaramento que garante a privacidade, não a topologia, então a hospedagem vira questão de custo operacional | LangSmith: com mascaramento na origem a PII não sai de nenhum jeito — o que falta é a saída. Langfuse é open-source: trocar nuvem por self-hosted é variável de ambiente, não reescrita |
 | API | **FastAPI** | ADR-004 — Pydantic → OpenAPI → cliente TypeScript gerado; SSE nativo para o streaming do chat | Flask/Django: OpenAPI não sai de graça |
-| Dados | **PostgreSQL + Qdrant** | Postgres é a fonte da verdade de preço **e** o checkpointer do grafo (RNF-6); Qdrant carrega o catálogo semântico | pgvector: um serviço a menos, mas fundiria busca semântica com fonte da verdade |
+| Dados | **PostgreSQL + Qdrant** | Postgres é a fonte da verdade de preço, `rendimento` e `contem` **e** o checkpointer do grafo (RNF-6); Qdrant carrega o catálogo semântico e nenhum fato | pgvector: um serviço a menos, mas fundiria busca semântica com fonte da verdade |
 | Frontend | **React + Vite** | Dois consumidores da mesma API: chat do cliente e fila do operador (RF-4) | Next/SSR: nada aqui precisa de SEO |
 | Empacotamento | **Docker + compose** | *"sistema que sua equipe consiga colocar para rodar"*: um comando, tudo mockado (RNF-1) | Instruções de instalação num README |
 | Pagamento | **Mercado Pago sandbox** | Requisito do enunciado: só ambiente de teste. Port + adapter (ADR-004) | Gateway real: dinheiro de verdade num projeto de demonstração |
@@ -56,12 +56,17 @@ Um **supervisor** roteia a conversa e **dois subagents** executam. A divisão n�
 | Agente | Tools registradas | Pode escrever? |
 |---|---|---|
 | `supervisor` | roteamento | não |
-| `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco` | **não** — só read-only |
+| `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`, `validar_composicao` | **não** — só read-only |
 | `checkout` | `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
 
 `desconto` **não existe** como tool em nenhum registro. Não é uma ação negada por prompt: ela
 não está lá. Um teste da camada `security` falha se qualquer tool de escrita vazar para o
 registro do subagent de recomendação (R2, R4).
+
+`validar_composicao` fica no subagent **read-only** e isso não é descuido: propor não é side
+effect. Ela não persiste nada — recebe uma lista de produtos e devolve um veredito com total,
+valor por pessoa, quantas pessoas a composição atende e a lista de problemas. Quem escreve é
+`criar_pedido`, no `checkout`, e ele **revalida** em vez de confiar (R10).
 
 ### 3.2 Onde entra o humano
 
@@ -76,7 +81,31 @@ Um ponto, e só um: **antes de `emitir_nf`**.
 É impossível, por construção, emitir NF sem aprovação registrada — e isso é testado na camada
 `security`, não prometido em prosa (ADR-003, ADR-011, RF-3.5, R3).
 
-### 3.3 Gestão de falhas
+### 3.3 Onde o código recusa o modelo
+
+O comprador é uma empresa e o pedido é um **evento**: N pessoas, orçamento por pessoa,
+restrições alimentares, prazo (ADR-013). Isso parte a recomendação em duas responsabilidades
+que não se misturam:
+
+| Quem | O quê |
+|---|---|
+| **LLM** | Escolher *quais* produtos combinam com o time, a ocasião e o tom da empresa |
+| **Código** | Somar em `Decimal`, derivar quantidade a partir do `rendimento`, exigir os slots do tipo de evento, cortar por `contem` |
+
+O fluxo típico tem ida e volta, e é essa a intenção: o modelo propõe uma composição de R$163,
+`validar_composicao` reprova contra um teto de R$150 nomeando o estouro e o slot faltante, o
+modelo ajusta. As duas chamadas ficam no mesmo trace — a fronteira do ADR-001 deixa de ser
+prosa e vira algo que dá para **assistir**.
+
+Dois cortes valem ser explícitos:
+
+- **`contem` (alérgenos) não entra no payload do Qdrant nem no texto embedado.** O payload leva
+  só filtro estrutural, porque todo campo ali é um fato com duas moradas — e a segunda cópia é
+  a que fica velha sem ninguém perceber. Alérgeno é o pior fato possível para ter cópia velha.
+- **Slots são código.** *Café da manhã sem café* precisa ser uma frase executável; sem eles, o
+  validador não teria nada objetivo para recusar e viraria opinião.
+
+### 3.4 Gestão de falhas
 
 | Falha | Comportamento |
 |---|---|
@@ -85,20 +114,22 @@ Um ponto, e só um: **antes de `emitir_nf`**.
 | Conversa longa / processo reiniciado | Checkpointer em Postgres; estado carrega identificadores, nunca payloads (RNF-6, R9) |
 | Tool travada ou custo escalando | Timeout por tool e budget cap por sessão, medidos no mesmo trace (RNF-3, R6) |
 | Modelo tentando ação fora da allowlist | A ação não existe no registro do subagent; a suite adversarial cobre a tentativa (R4) |
+| Composição estourando orçamento ou violando restrição | `validar_composicao` reprova com motivo; `criar_pedido` revalida no servidor e recusa (R10) |
 | Regressão de qualidade após mudar prompt | Evals golden e adversariais bloqueiam o merge (ADR-006, R7) |
 
-### 3.4 Fluxo de dados, em uma passada
+### 3.5 Fluxo de dados, em uma passada
 
 ```
-cliente → chat (SSE) → supervisor
-   ├─ recomendação → Qdrant (semântica) + Postgres (preço)  ......... nenhum fato sai da memória do modelo
+compradora corporativa → chat (SSE) → supervisor
+   ├─ recomendação → Qdrant (semântica) + Postgres (preço, rendimento, contem)
+   │        ↕ validar_composicao (código: total, slots, restrições)  ... o modelo propõe, o código recusa
    └─ checkout     → Postgres (pedido) + Mercado Pago sandbox (link)
                           ↓
                   webhook de pagamento (código puro)
                           ↓
                   ⏸ interrupt → operador aprova (registrado)
                           ↓
-                  emitir_nf → NFEmitter (mock por padrão)
+                  emitir_nf → NFEmitter (mock por padrão, destinatário PJ)
                           ↓
                   cliente recebe DANFE/XML no chat
 
@@ -110,7 +141,8 @@ cliente → chat (SSE) → supervisor
 ## 4. O que esta arquitetura deliberadamente **não** faz
 
 - Não guarda catálogo no prompt — nem parcialmente.
-- Não calcula preço, total ou desconto no modelo.
+- Não calcula preço, total, quantidade ou desconto no modelo.
+- Não deixa restrição alimentar depender do cuidado do modelo: `contem` é corte em código.
 - Não permite emissão de documento fiscal sem registro de aprovação humana.
 - Não escreve PII legível em trace ou log, em nenhum ambiente.
 - Não sobe para produção sem os checks obrigatórios do CI verdes.

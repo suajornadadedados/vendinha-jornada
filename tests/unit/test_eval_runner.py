@@ -49,13 +49,20 @@ CATALOGO = REPO_ROOT / "data" / "catalogo"
 # Os casos que declaram `spec: S-03`. Cinco golden e um adversarial — o REQ-5 fala
 # em "6 casos golden", e a leitura fiel é esta: seis casos, sendo o sexto o que
 # prova a injeção vinda do próprio catálogo, que é o vetor específico do RAG.
+#
+# A S-10 trocou quatro deles sem mexer no número, e o critério da repartição não é
+# o assunto do caso: é a **tool que ele exige**. Um caso com `spec: S-03` roda
+# contra o agente da S-03, que tem três tools read-only sobre o catálogo e mais
+# nada. Composição precisa de `validar_composicao`, que só existe na S-11 — então
+# `golden-001` e `golden-007` migraram para lá, e no lugar deles entraram os dois
+# fatos novos do catálogo (`contem` e `rendimento`), que são groundedness pura.
 CASOS_DA_S03 = (
     "adversarial-004-injecao-vinda-do-catalogo",
-    "golden-001-recomendacao-por-necessidade",
     "golden-002-preco-vem-do-banco",
     "golden-005-qualifica-antes-de-recomendar",
     "golden-006-produto-indisponivel-e-dito",
-    "golden-007-alternativa-por-faixa-de-preco",
+    "golden-013-alergeno-e-campo-lido",
+    "golden-016-rendimento-e-campo-lido",
 )
 
 
@@ -106,9 +113,9 @@ def test_loading_reads_both_families_not_only_golden() -> None:
 def test_the_transcript_pairs_each_tool_call_with_its_own_return() -> None:
     """R1 — casar chamada e retorno pelo id é o que torna "de onde veio" respondível.
 
-    Duas chamadas na mesma volta é o caso comum — o `golden-007` compara dois
-    preços. Casar por ordem, e não por id, trocaria os retornos e faria o portão
-    aprovar um preço citado para o produto errado.
+    Duas chamadas na mesma volta é o caso comum — o `golden-016` compara o
+    rendimento de duas peças de queijo. Casar por ordem, e não por id, trocaria os
+    retornos e faria o portão aprovar um número citado para o produto errado.
     """
     mensagens = [
         HumanMessage(content="quanto custam os dois?"),
@@ -223,7 +230,12 @@ async def test_the_judge_returns_one_verdict_per_criterion_with_no_score() -> No
             ),
         ]
     )
-    caso = carregar_casos(EVALS, spec="S-03")[2]
+    # Por id e não por índice: os critérios do veredito combinado acima são os do
+    # `golden-002`, e uma posição faria essa correspondência virar coincidência —
+    # a S-10 reordenou a lista e o índice 2 passou a apontar para outro caso.
+    caso = next(
+        c for c in carregar_casos(EVALS, spec="S-03") if c.id == "golden-002-preco-vem-do-banco"
+    )
 
     veredito = await julgar(
         JuizFalso(messages=iter([]), veredito=combinado),
@@ -278,7 +290,7 @@ def test_a_judge_that_could_not_answer_reproves_its_case_and_spares_the_others()
     que é pior do que reprovar, porque ninguém fica sabendo de nada. Agora o caso
     reprova com o motivo escrito e os outros continuam medindo.
     """
-    bom = _resultado("golden-001-recomendacao-por-necessidade", aprovado=True, falha_dura=None)
+    bom = _resultado("golden-005-qualifica-antes-de-recomendar", aprovado=True, falha_dura=None)
     quebrado = Resultado(
         caso=bom.caso,
         transcricao=bom.transcricao,
@@ -512,7 +524,7 @@ def test_one_hard_failure_reproves_the_whole_suite_with_everything_else_green() 
     rubric proibida entrando por outra porta.
     """
     resultados = [
-        _resultado("golden-001-recomendacao-por-necessidade", aprovado=True, falha_dura=None),
+        _resultado("golden-005-qualifica-antes-de-recomendar", aprovado=True, falha_dura=None),
         _resultado("golden-002-preco-vem-do-banco", aprovado=False, falha_dura="fato_inventado"),
     ]
 
@@ -528,7 +540,7 @@ def test_one_hard_failure_reproves_the_whole_suite_with_everything_else_green() 
 def test_a_report_with_everything_green_says_the_suite_passed() -> None:
     """R1 — a outra metade: a régua precisa ser capaz de aprovar."""
     resultados = [
-        _resultado("golden-001-recomendacao-por-necessidade", aprovado=True, falha_dura=None),
+        _resultado("golden-005-qualifica-antes-de-recomendar", aprovado=True, falha_dura=None),
         _resultado("golden-002-preco-vem-do-banco", aprovado=True, falha_dura="fato_inventado"),
     ]
 

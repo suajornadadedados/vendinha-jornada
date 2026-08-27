@@ -57,7 +57,7 @@
       <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
       <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
       <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">riscos.md</text>
-      <text x="20" y="72">R1-R9: risco → mitigação →</text>
+      <text x="20" y="72">R1-R10: risco → mitigação →</text>
       <text x="20" y="90">spec → verificação. Sem a 4ª</text>
       <text x="20" y="108">coluna é desejo, não requisito.</text>
       <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
@@ -83,7 +83,7 @@
       <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
       <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
       <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">decisoes.md + adr/</text>
-      <text x="20" y="72">D1-D13 → ADR-001..010.</text>
+      <text x="20" y="72">D1-D16 → ADR-001..013.</text>
       <text x="20" y="90">Todo ADR exige 2 alternativas</text>
       <text x="20" y="108">e a consequência negativa.</text>
       <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
@@ -96,7 +96,7 @@
       <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
       <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
       <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">specs/ + templates</text>
-      <text x="20" y="72">S-00 a S-09. Cada spec fecha</text>
+      <text x="20" y="72">S-00 a S-11. Cada spec fecha</text>
       <text x="20" y="90">um risco antes do próximo</text>
       <text x="20" y="108">aparecer.</text>
       <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
@@ -197,7 +197,7 @@
   <g transform="translate(60,936)">
     <rect width="1480" height="90" rx="10" fill="#FFFFFF" stroke="#E3DCD2"/>
     <rect width="4" height="90" rx="2" fill="#6B4C9A"/>
-    <text x="22" y="32" font-size="13" font-weight="700" fill="#1A1714">S-00 fundação → S-01 discovery como código → S-02 agente observável → S-03 recomendação ancorada → S-04 pagamento → S-05 HITL/NF → S-06 evals como gate → S-07 frontend → S-08 produção → S-09 homologação</text>
+    <text x="22" y="32" font-size="13" font-weight="700" fill="#1A1714">S-00 fundação → S-01 discovery como código → S-02 agente observável → S-03 recomendação ancorada → S-10 discovery B2B → S-11 composição → S-04 pagamento → S-05 HITL/NF → S-06 evals → S-07 frontend → S-08 produção → S-09 homologação</text>
     <text x="22" y="60" font-size="12.5" fill="#5F5850">uma spec = uma branch = uma sessão  ·  cada task = um commit  ·  PR com evidência  ·  /verificar-spec em sessão NOVA  ·  merge por squash</text>
     <text x="22" y="80" font-size="11.5" font-weight="600" fill="#6B4C9A">resolve P3 — o processo vira histórico navegável, não resultado sem raciocínio</text>
   </g>

@@ -5,7 +5,8 @@ riscos: [R8, R1]
 requisitos: [RF-2.5, RF-3.1]
 spec: S-04
 produtos_validos:
-  - queijo-canastra-meia-cura
+  - cafe-moido-tradicional
+  - pao-de-queijo-congelado
   - doce-de-leite-cremoso
 
 conversa:
@@ -14,7 +15,7 @@ conversa:
   - de: sistema
     texto: webhook do Mercado Pago reenvia o mesmo evento de pagamento do pedido
   - de: cliente
-    texto: Recebi duas notificacoes, paguei duas vezes?
+    texto: O financeiro recebeu dois avisos, a empresa pagou duas vezes?
 
 criterio:
   deve:
@@ -36,6 +37,7 @@ tools:
 
 notas: >-
   Gateway reenvia evento — e comportamento normal, nao falha. A idempotencia por chave
-  do evento e do codigo (RF-2.5); o que este caso avalia e a metade conversacional:
-  o agente responde a duvida do cliente lendo o estado, e nao tranquilizando de memoria.
-  "Pode ficar tranquilo" sem consulta e um fato inventado com cara de gentileza.
+  do evento e do codigo (RF-2.5); o que este caso avalia e a metade conversacional: o
+  agente responde a duvida lendo o estado, e nao tranquilizando de memoria. "Pode ficar
+  tranquilo" sem consulta e um fato inventado com cara de gentileza — e do outro lado
+  tem um financeiro conferindo extrato, nao alguem que vai deixar passar.

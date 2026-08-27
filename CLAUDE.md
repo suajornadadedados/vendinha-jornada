@@ -1,24 +1,33 @@
 # Vendinha — Harness do projeto
 
 ## O que é este projeto
-Agente de vendas end-to-end (empório mineiro digital): recomendação via RAG, checkout com
-link de pagamento (Mercado Pago sandbox) e emissão de NF-e com aprovação humana (HITL).
+Agente de vendas end-to-end (empório mineiro digital vendendo **para empresas**): o cliente
+descreve um evento corporativo — café da manhã, happy hour, cesta de fim de ano, kit de
+boas-vindas — e o agente monta a composição via RAG, o **código valida** orçamento, slots e
+restrições alimentares, e o fluxo segue até o link de pagamento (Mercado Pago sandbox) e a
+emissão de NF-e para PJ com aprovação humana (HITL).
 Construído como estudo de caso público de decisões de engenharia em projetos com IA.
 
 ## Regra de ouro (governa toda decisão de código)
 > O LLM decide O QUE DIZER. O código decide O QUE PODE SER FEITO.
-- Preço, total, desconto, validação de dados: SEMPRE código/banco, NUNCA o modelo.
+- Preço, total, quantidade, desconto, validação de dados: SEMPRE código/banco, NUNCA o modelo.
+- Composição de evento: o modelo **propõe** os produtos, o código **valida e recusa**. Total,
+  valor por pessoa, slots obrigatórios e corte por alérgeno (`contem`) são de código (R10).
 - Side effects só existem como tools tipadas com permissão explícita por subagent.
 - Emissão de NF exige aprovação humana registrada (interrupt do LangGraph). Sem exceção.
 
 ## Documentos normativos (ler antes de implementar qualquer spec)
 - `docs/requisitos.md` — a tradução que fizemos do pedido do cliente; origem de tudo abaixo
 - `docs/jornada.md` — onde a IA entra no fluxo e por quê
-- `docs/riscos.md` — matriz R1-R9: risco → mitigação → spec → verificação
+- `docs/riscos.md` — matriz R1-R10: risco → mitigação → spec → verificação
 - `docs/testes.md` — risco → teste: onde cada verificação da matriz vive e o que faz um teste ser aceito
-- `docs/decisoes.md` — mapa D1-D15 → ADRs
+- `docs/decisoes.md` — mapa D1-D16 → ADRs
 - `docs/PRD.md` — requisitos do produto
 - `docs/specs/S-XX-*.md` — a spec em execução é a fonte da verdade da sessão
+
+> **Ordem de execução ≠ ordem dos ids.** S-10 e S-11 (pivô B2B, ADR-013) rodam **entre a S-03
+> e a S-04**. A nota no topo da S-10 explica por que renumerar sairia mais caro que um id
+> fora de ordem.
 
 ## Fluxo de trabalho (SDD)
 1. Cada spec tem uma issue no GitHub, linkada no frontmatter (`issue:`). A issue é **ponteiro**

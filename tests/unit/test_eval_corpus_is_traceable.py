@@ -38,7 +38,10 @@ CATALOGO = REPO_ROOT / "data" / "catalogo"
 FAMILIES = ("golden", "adversarial")
 
 # `| R1 | Modelo alucina ... |` — the first column of the matrix in docs/riscos.md.
-RISK_ROW = re.compile(r"^\|\s*(R[1-9])\s*\|", re.MULTILINE)
+# `R\d+` e nao `R[1-9]`: com um digito so, a linha do R10 nao casava (depois do `1`
+# vem `0`, e nao o pipe), entao o risco sumia de `known` e um caso que o cita
+# reprovaria dizendo que ele nao existe na matriz — onde ele esta (S-10).
+RISK_ROW = re.compile(r"^\|\s*(R\d+)\s*\|", re.MULTILINE)
 
 # `- RF-1.3 Recomendacoes citam...` na lista, `| RNF-6 | ...` e `| O2 | ...` nas tabelas.
 # Tres formatos porque o PRD escreve os tres assim — e o teste le o PRD, nao uma copia dele.
