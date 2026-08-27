@@ -17,7 +17,9 @@
     "peso",
     "preco",
     "disponivel",
-    "prazo_estimado"
+    "prazo_estimado",
+    "rendimento",
+    "contem"
   ],
   "additionalProperties": false,
   "properties": {
@@ -27,7 +29,7 @@
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "nome": { "type": "string", "minLength": 3 },
-    "tipo": { "enum": ["queijo", "cafe", "doce", "cachaca", "licor"] },
+    "tipo": { "enum": ["queijo", "cafe", "doce", "cachaca", "licor", "petisco"] },
     "regiao": { "type": "string", "minLength": 3 },
     "produtor": {
       "description": "Produtor ficticio. Nenhum nome, CNPJ ou endereco real entra no repositorio.",
@@ -59,6 +61,18 @@
     },
     "disponivel": { "type": "boolean" },
     "prazo_estimado": { "type": "string", "minLength": 5 },
+    "rendimento": {
+      "description": "Quantas pessoas este item atende num evento. E o campo que converte \"40 pessoas\" em quantidade: quem divide e o codigo, nunca o modelo (R1, RF-1.6).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "contem": {
+      "description": "Alergenos declarados. Campo de CORTE, nao de ranqueamento: nao entra no payload do Qdrant nem no texto embedado, porque um alergeno com duas moradas e a falha de R1 com consequencia fisica (R10, ADR-013). Lista vazia significa \"nada a declarar\".",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["lactose", "gluten", "alcool", "castanhas", "acucar"] }
+    },
     "maturacao": { "type": "string", "minLength": 3 },
     "torra": { "type": "string", "minLength": 3 },
     "notas_sensoriais": {
