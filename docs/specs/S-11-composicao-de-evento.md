@@ -194,6 +194,31 @@ pulava a tool que o `golden-001` ancora; o modelo calculava a sobra do orçament
 ADR-001; e um veredito reprovado resolvido em silêncio deixa o cliente com uma
 composição que ele não reconhece. Nenhum caso de `evals/` foi tocado (ADR-006).
 
+**D-11 — a reescrita do prompt não está em paridade com os critérios da S-03, e a
+verificação disso é instável.** `make evals-groundedness` reprova. Três coisas
+diferentes estão misturadas ali e vale separá-las:
+
+*O que a S-11 consertou:* na `main`, `golden-013` e `golden-016` reprovavam no portão
+determinístico por `contem`/`rendimento` não atravessarem a tool — ou seja, **a suíte
+da S-03 já estava vermelha antes desta branch**. Depois da task 1, o portão desses
+dois casos volta limpo ("fatos sem origem: nenhum").
+
+*O que a S-11 quebrou, e foi consertado:* a regra nova sobre números deixou o modelo
+**receoso de dizer número consultado** — em `golden-016` ele se recusou a informar
+rendimento e devolveu pergunta. A regra proibia calcular e ele leu como proibição de
+relatar. Corrigido, e `golden-016` caiu de três falhas para uma.
+
+*O que continua aberto:* o enquadramento de composição faz o modelo insinuar
+negociação (*"a gente pode pensar numa composição que caiba melhor no orçamento"*),
+o que reprova `golden-002` num critério de desconto. Há um reparo commitado para
+isso, **ainda não verificado** — rodar de novo antes da decisão sobre D-8 seria
+gastar uma rodada paga num prompt que pode mudar junto com o teto.
+
+*O que não é sinal:* os critérios de juiz oscilam entre rodadas do **mesmo** código —
+`golden-002` passou numa e reprovou na seguinte —, e `golden-006` chegou a reprovar
+por `ValidationError` do próprio juiz, não por comportamento do agente. Afinar prompt
+contra uma régua que se move é como se overfita sem perceber.
+
 **D-7 — o `Makefile` não roda no shell deste ambiente sem ajuste.**
 `scripts/run-tests.sh` escolhe `python3`, que aqui resolve para um shim do pyenv sem as
 dependências do backend; a suíte foi rodada com o interpretador de `backend/.venv`. É
