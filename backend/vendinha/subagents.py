@@ -33,6 +33,7 @@ from langchain_core.tools import BaseTool
 
 from vendinha.catalogo import Busca, Catalogo
 from vendinha.tools.catalogo import ferramentas_de_catalogo
+from vendinha.tools.composicao import ferramentas_de_composicao
 
 RECOMENDACAO = "recomendacao"
 
@@ -210,12 +211,23 @@ def registrar(nome: str, prompt: str, ferramentas: Sequence[Ferramenta]) -> Suba
 
 
 def recomendacao(busca: Busca, catalogo: Catalogo, timeout_seconds: float) -> Subagent:
-    """O subagent da S-03: conversa sobre catálogo, e só lê (RF-1.5)."""
+    """Conversa sobre catálogo e monta composição de evento — e só lê (RF-1.5).
+
+    `validar_composicao` entra aqui, e não num subagent de checkout, porque
+    **propor não é side effect**: ela lê o catálogo, soma e devolve um veredito.
+    A fronteira do ADR-002 não se move por causa dela — `registrar` continua
+    recusando qualquer tool de escrita neste nome, e o veredito não autoriza
+    venda nenhuma. Quem autoriza é `criar_pedido`, na S-04, e ele revalida do
+    zero no servidor (RF-2.7, ADR-013).
+    """
     return registrar(
         RECOMENDACAO,
         PROMPT_RECOMENDACAO,
         [
             Ferramenta(tool=tool, escreve=False)
-            for tool in ferramentas_de_catalogo(busca, catalogo, timeout_seconds)
+            for tool in (
+                *ferramentas_de_catalogo(busca, catalogo, timeout_seconds),
+                *ferramentas_de_composicao(catalogo, timeout_seconds),
+            )
         ],
     )

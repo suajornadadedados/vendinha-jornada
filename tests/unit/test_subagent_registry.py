@@ -86,10 +86,15 @@ class ModeloComTools(GenericFakeChatModel):
 
 
 @pytest.mark.risco("R1")
-def test_the_recommendation_subagent_is_registered_with_the_three_read_only_tools(
+def test_the_recommendation_subagent_is_registered_with_read_only_tools_only(
     seed: tuple[Produto, ...],
 ) -> None:
-    """R1, RF-1.5 — o subagent existe, e o que ele tem é leitura de catálogo."""
+    """R1, RF-1.5 — o subagent existe, e o que ele tem é leitura e validação.
+
+    `validar_composicao` entrou na S-11 e não move a fronteira: propor uma
+    composição é ler o catálogo e somar. O veredito não autoriza venda — quem
+    autoriza é `criar_pedido`, na S-04, e ele revalida do zero (ADR-013, RF-2.7).
+    """
     subagent = recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), SEM_TIMEOUT)
 
     assert subagent.nome == RECOMENDACAO
@@ -97,6 +102,7 @@ def test_the_recommendation_subagent_is_registered_with_the_three_read_only_tool
         "buscar_produtos",
         "detalhar_produto",
         "consultar_preco",
+        "validar_composicao",
     }
     assert subagent.escritoras == ()
     assert all(not ferramenta.escreve for ferramenta in subagent.ferramentas)

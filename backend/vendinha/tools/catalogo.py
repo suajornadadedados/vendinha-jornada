@@ -27,7 +27,7 @@ reprovaria casos que não mudaram.
 from decimal import Decimal
 
 from langchain_core.tools import BaseTool, StructuredTool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from vendinha.budget import run_with_timeout
 from vendinha.catalogo import Busca, Catalogo, Produto
@@ -42,10 +42,25 @@ LIMITE_MAXIMO = 8
 NOMES = ("buscar_produtos", "detalhar_produto", "consultar_preco")
 
 
-class ProdutoEncontrado(BaseModel):
-    """Um produto como a busca o apresenta. Tudo aqui veio do Postgres."""
+class ItemDeResultado(BaseModel):
+    """A base de tudo o que viaja em `Resultado.encontrados`.
+
+    Existe para que uma tool de outro módulo — `tools/composicao.py` — possa pôr o
+    veredito dela no mesmo envelope sem que `Resultado` precise importá-la de volta.
+    A alternativa era uma união crescente aqui dentro, e ela criaria um ciclo de
+    import no primeiro arquivo de tool que não fosse este.
+
+    Não é só arrumação. O portão de groundedness só enxerga `encontrados`
+    (`evals/groundedness.py`): um retorno de tool que inventasse envelope próprio
+    ficaria invisível para a régua, e um fato invisível para a régua é um fato que
+    ninguém está conferindo.
+    """
 
     model_config = ConfigDict(frozen=True)
+
+
+class ProdutoEncontrado(ItemDeResultado):
+    """Um produto como a busca o apresenta. Tudo aqui veio do Postgres."""
 
     id: str
     nome: str
@@ -89,15 +104,13 @@ class ProdutoDetalhado(ProdutoEncontrado):
     teor_alcoolico: str | None = None
 
 
-class PrecoDoCatalogo(BaseModel):
+class PrecoDoCatalogo(ItemDeResultado):
     """A resposta de `consultar_preco`: o valor, e se dá para vender.
 
     `disponivel` vem junto de propósito. Preço sem disponibilidade é o convite
     para o agente cotar com precisão um produto que a loja não tem — ancorado e
     errado ao mesmo tempo (`golden-006`).
     """
-
-    model_config = ConfigDict(frozen=True)
 
     id: str
     nome: str
@@ -111,9 +124,14 @@ class Resultado(BaseModel):
     `nao_encontrados` existe para que "não temos esse produto" seja um dado, e não
     uma lista mais curta que o modelo pode interpretar como quiser. Um id que não
     voltou some silenciosamente; um id em `nao_encontrados` é uma afirmação.
+
+    `SerializeAsAny` porque o campo é declarado pela base: sem ele o Pydantic
+    serializaria cada item pelo tipo **declarado** e um `ProdutoDetalhado` sairia
+    daqui com os campos de `ProdutoEncontrado` só — que é o mesmo sumiço silencioso
+    que `extra="forbid"` no `Produto` existe para impedir, um andar acima.
     """
 
-    encontrados: tuple[ProdutoEncontrado | ProdutoDetalhado | PrecoDoCatalogo, ...] = ()
+    encontrados: tuple[SerializeAsAny[ItemDeResultado], ...] = ()
     nao_encontrados: tuple[str, ...] = ()
     observacao: str | None = None
 
