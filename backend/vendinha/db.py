@@ -25,6 +25,7 @@ from vendinha.credentials import Vault
 from vendinha.fiscal import PostgresFiscal
 from vendinha.pedidos import PostgresPedidos
 from vendinha.redaction import redact
+from vendinha.telemetria import PostgresTelemetria
 
 # Without it, libpq waits forever on a host that accepts the packet and never
 # answers. The classic one on Windows is `localhost` resolving to ::1 while the
@@ -74,6 +75,10 @@ async def setup() -> None:
     # and not before: both reference `pedido(id)`, so the order matters here in a way
     # it does not elsewhere in this function.
     await PostgresFiscal(dsn).setup()
+    # O read model do painel (S-07). Depois de `pedido`, porque `sessao.pedido_id`
+    # o referencia — e a referência é `ON DELETE SET NULL`, não CASCADE: apagar um
+    # pedido não pode apagar a medida do atendimento que o gerou.
+    await PostgresTelemetria(dsn).setup()
 
 
 def main() -> int:
@@ -92,7 +97,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("checkpointer, instance_config, produto, pedido and nota ready. next: `make seed`.")
+    print(
+        "checkpointer, instance_config, produto, pedido, nota and telemetria ready. "
+        "next: `make seed`."
+    )
     return 0
 
 
