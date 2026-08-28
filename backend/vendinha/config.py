@@ -259,6 +259,24 @@ class Settings(BaseSettings):
         """
         return valor or None
 
+    @field_validator("llm_temperature", mode="before")
+    @classmethod
+    def _temperatura_vazia_e_o_default_do_provedor(cls, valor: object) -> object:
+        """`LLM_TEMPERATURE=` significa *não mande o parâmetro*, e não zero.
+
+        Mesma classe da linha acima, e descoberta do mesmo jeito: tentando usar. O
+        campo é `float | None`, mas a linha em branco chega como `""` — que o
+        Pydantic não converte em `None`, então o default `0.0` vencia. Uma
+        instância que apagasse o valor para pedir o comportamento do provedor
+        receberia `temperature=0` em silêncio, e é o oposto do que ela pediu.
+
+        O custo disso já foi pago uma vez nesta spec: a primeira tentativa de medir
+        o efeito da temperatura rodou **duas vezes a mesma configuração** e produziu
+        um A/B que não comparava nada. O relatório saiu plausível, que é o que torna
+        esse modo de falha caro (`docs/specs/relatorios/S-06-variancia-temperature.md`).
+        """
+        return None if valor == "" else valor
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

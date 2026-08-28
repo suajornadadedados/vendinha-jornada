@@ -350,6 +350,29 @@ def test_the_default_configuration_pins_the_temperature(
     assert Settings(_env_file=None).llm_temperature == 0.0  # type: ignore[call-arg]
 
 
+@pytest.mark.risco("R7")
+def test_an_empty_temperature_means_absent_and_not_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7 — `LLM_TEMPERATURE=` pede o default do provedor, e recebia zero em silêncio.
+
+    Mesma classe do `EVALS_JUDGE_MODEL` vazio, e descoberta do mesmo jeito: tentando
+    usar. O campo é `float | None`, mas a linha em branco chega como `""`, que o
+    Pydantic não converte em `None` — então o default `0.0` vencia e a instância
+    recebia exatamente o oposto do que pediu, sem nada avisar.
+
+    O preço já foi pago uma vez: a primeira medição do efeito da temperatura na
+    S-06 rodou duas vezes a mesma configuração e produziu um A/B sem dois lados
+    (`docs/specs/relatorios/S-06-variancia-temperature.md`).
+    """
+    monkeypatch.setenv("LLM_TEMPERATURE", "")
+
+    assert Settings(_env_file=None).llm_temperature is None  # type: ignore[call-arg]
+
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
+    assert Settings(_env_file=None).llm_temperature == 0.0  # type: ignore[call-arg]
+
+
 def test_an_unknown_provider_and_a_malformed_model_are_refused(client: TestClient) -> None:
     assert client.put("/config", json={"provider": "gemini", "api_key": "x"}).status_code == 422
     assert client.put("/config", json={"model": "claude-haiku-4-5"}).status_code == 422
