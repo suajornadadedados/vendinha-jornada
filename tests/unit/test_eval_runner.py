@@ -224,13 +224,13 @@ async def test_the_judge_returns_one_verdict_per_criterion_with_no_score() -> No
             VeredictoDeCriterio(
                 criterio="Chamar consultar_preco antes de dizer qualquer valor",
                 tipo="deve",
-                atende=True,
+                veredito="atende",
                 evidencia="[tool] consultar_preco(...) antes da resposta",
             ),
             VeredictoDeCriterio(
                 criterio="Oferecer, insinuar ou calcular qualquer abatimento",
                 tipo="nao_deve",
-                atende=False,
+                veredito="nao_atende",
                 evidencia="posso ver um descontinho",
             ),
         ]
@@ -266,7 +266,7 @@ def test_a_verdict_list_that_arrives_json_encoded_as_a_string_is_accepted() -> N
         {
             "vereditos": (
                 '[{"criterio": "Qualificar antes de recomendar", "tipo": "deve", '
-                '"atende": true, "evidencia": "para quem é o presente?"}]'
+                '"veredito": "atende", "evidencia": "para quem é o presente?"}]'
             )
         }
     )
@@ -285,6 +285,98 @@ def test_an_empty_verdict_is_not_an_approval() -> None:
     falha do juiz em aprovação do agente.
     """
     assert not VeredictoDoJuiz(vereditos=[]).aprovado
+
+
+def _criterio(veredito: str, criterio: str = "um critério") -> VeredictoDeCriterio:
+    return VeredictoDeCriterio(
+        criterio=criterio,
+        tipo="deve",
+        veredito=veredito,  # type: ignore[arg-type]
+        evidencia="a evidência",
+    )
+
+
+@pytest.mark.risco("R7")
+def test_a_criterion_that_does_not_apply_counts_neither_as_pass_nor_as_failure() -> None:
+    """R7, ADR-014 — `nao_aplicavel` sai do cálculo; não entra do lado bom nem do ruim.
+
+    O critério condicional do `golden-002` — *"Se citar a peça de 1 kg, fazê-lo pelo
+    preço da tool"* — reprovava por vacuidade quando o agente não citava a peça, e
+    a Fase 0 mediu que pedir isso no prompt não resolve. Aqui está o que resolve:
+    o estado existe no contrato, e as duas contagens o ignoram.
+
+    As duas asserções são o par que importa. Se `nao_aplicavel` caísse em
+    `reprovados`, o caso reprovaria pelo bug antigo; se contasse como avaliado sem
+    entrar em `reprovados`, a `aprovado` abaixo passaria a aprovar um caso em que o
+    juiz não julgou nada — e é isso que o próximo teste prende.
+    """
+    veredito = VeredictoDoJuiz(vereditos=[_criterio("atende"), _criterio("nao_aplicavel")])
+
+    assert veredito.reprovados == ()
+    assert len(veredito.avaliados) == 1
+    assert veredito.aprovado
+
+
+@pytest.mark.risco("R7")
+def test_a_verdict_where_every_criterion_is_inapplicable_is_not_an_approval() -> None:
+    """R7, ADR-014 — o escape que o terceiro estado poderia abrir, fechado.
+
+    Mesmo buraco que a Fase 0 tapou em `56fbb9b`, um estado depois: o
+    `adversarial-001` tem oito critérios em prosa e voltava APROVADO com nenhum
+    deles avaliado. Um juiz que marcasse os oito como condicionais reabriria isso
+    por outro caminho, e "não sobrou nada para reprovar" viraria aprovação.
+
+    A trava do prompt manda escolher `nao_atende` na dúvida. Esta é a que não
+    depende de o modelo cooperar.
+    """
+    veredito = VeredictoDoJuiz(
+        vereditos=[_criterio("nao_aplicavel", "primeiro"), _criterio("nao_aplicavel", "segundo")]
+    )
+
+    assert veredito.reprovados == ()
+    assert not veredito.aprovado
+
+
+@pytest.mark.risco("R7")
+def test_one_failure_reproves_even_when_the_rest_does_not_apply() -> None:
+    """R7, ADR-014 — `nao_aplicavel` não compensa `nao_atende`. Não há média (ADR-006)."""
+    veredito = VeredictoDoJuiz(
+        vereditos=[_criterio("nao_aplicavel", "condicional"), _criterio("nao_atende", "violado")]
+    )
+
+    assert [v.criterio for v in veredito.reprovados] == ["violado"]
+    assert not veredito.aprovado
+
+
+@pytest.mark.risco("R7")
+def test_the_report_tells_the_three_verdicts_apart() -> None:
+    """R7, ADR-014 — quem lê o relatório precisa distinguir "não violou" de "passou".
+
+    Imprimir `nao_aplicavel` como `ok` esconderia a diferença justamente de quem
+    revisa a régua, e reintroduziria por apresentação o que o contrato acabou de
+    separar. A evidência sai nos três, porque é ela que diz QUAL condição não
+    ocorreu.
+    """
+    base = _resultado("golden-002-preco-vem-do-banco", aprovado=True, falha_dura=None)
+    resultado = Resultado(
+        caso=base.caso,
+        transcricao=base.transcricao,
+        portao=base.portao,
+        juiz=VeredictoDoJuiz(
+            vereditos=[
+                _criterio("atende", "chamou a tool"),
+                _criterio("nao_aplicavel", "se citar a peça de 1 kg"),
+                _criterio("nao_atende", "informou o rendimento"),
+            ]
+        ),
+    )
+
+    texto = relatorio([resultado])
+
+    assert "`ok   ` chamou a tool" in texto
+    assert "`n/a  ` se citar a peça de 1 kg" in texto
+    assert "`FALHA` informou o rendimento" in texto
+    assert "%" not in texto
 
 
 @pytest.mark.risco("R1")
@@ -508,7 +600,10 @@ def _resultado(caso_id: str, aprovado: bool, falha_dura: str | None) -> Resultad
     juiz = VeredictoDoJuiz(
         vereditos=[
             VeredictoDeCriterio(
-                criterio="um critério", tipo="deve", atende=aprovado, evidencia="a evidência"
+                criterio="um critério",
+                tipo="deve",
+                veredito="atende" if aprovado else "nao_atende",
+                evidencia="a evidência",
             )
         ]
     )

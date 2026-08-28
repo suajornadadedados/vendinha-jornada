@@ -60,7 +60,7 @@ from vendinha.db import with_connect_timeout
 from vendinha.evals.caso import Caso, carregar_casos
 from vendinha.evals.gasto import Gasto, gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever, verificar
-from vendinha.evals.judge import VeredictoDoJuiz, julgar
+from vendinha.evals.judge import EstadoDoCriterio, VeredictoDoJuiz, julgar
 from vendinha.graph import (
     DEFAULT_BUDGET_TOKENS,
     build_graph,
@@ -88,6 +88,15 @@ SPEC_PADRAO = "S-03"
 # entregar velocidade. Cada caso ja tem grafo, checkpointer, pedidos e thread
 # proprios, entao subir este numero nao muda NADA do que se mede.
 CONCORRENCIA_PADRAO = 4
+
+# Como cada veredito do juiz aparece no relatório. Larguras iguais para as colunas
+# se alinharem quando alguém lê os critérios de um caso em sequência — que e o que
+# se faz com eles.
+SIMBOLO: dict[EstadoDoCriterio, str] = {
+    "atende": "ok   ",
+    "nao_atende": "FALHA",
+    "nao_aplicavel": "n/a  ",
+}
 
 # As specs cujos casos exercitam o checkout — supervisor, duas lanes, tools de
 # escrita. Fora delas o runner monta só a lane de recomendação, que é o agente que
@@ -818,8 +827,10 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
 
         linhas += ["### Critérios", ""]
         for veredito in (*resultado.juiz.deve, *resultado.juiz.nao_deve):
-            simbolo = "ok  " if veredito.atende else "FALHA"
-            linhas.append(f"- `{simbolo}` {veredito.criterio}")
+            linhas.append(f"- `{SIMBOLO[veredito.veredito]}` {veredito.criterio}")
+            # A evidência sai também no `n/a`, e é justamente ali que ela mais
+            # importa: é ela que diz QUAL condição não ocorreu, e portanto o que
+            # ler para discordar do juiz sem reler a conversa inteira.
             linhas.append(f"  - evidência: {veredito.evidencia}")
         linhas.append("")
 
