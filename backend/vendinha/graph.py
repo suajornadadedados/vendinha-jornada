@@ -38,7 +38,7 @@ from collections.abc import Hashable
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
@@ -46,7 +46,13 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from vendinha.budget import LIMIT_REACHED_MESSAGE, tools_still_affordable, within_budget
+from vendinha.budget import (
+    LIMIT_REACHED_MESSAGE,
+    NO_ROOM_TO_ACT_MESSAGE,
+    NO_TOOLS_LEFT_NOTICE,
+    tools_still_affordable,
+    within_budget,
+)
 from vendinha.subagents import Subagent
 from vendinha.supervisor import Supervisor
 
@@ -60,7 +66,7 @@ from vendinha.supervisor import Supervisor
 # ran on another number. The guard then unbound the tools mid-conversation and the
 # case failed looking exactly like a model that gave up. The runner passes it now —
 # a ruler that runs a different system than production measures the wrong system.
-DEFAULT_BUDGET_TOKENS = 250_000
+DEFAULT_BUDGET_TOKENS = 500_000
 
 
 class ConversationState(TypedDict):
@@ -128,19 +134,37 @@ def _adicionar_lane(
             return {"messages": [AIMessage(content=LIMIT_REACHED_MESSAGE)]}
 
         # Past the soft line the tools come off, which ends the loop: with nothing
-        # to call, `tools_condition` routes to END and the model has to answer from
-        # what the conversation already holds. It is a worse answer than the one it
-        # was building, and it is infinitely better than the turn that fetched
-        # everything and said nothing (see `budget.tools_still_affordable`).
-        pode_chamar_tools = tools and tools_still_affordable(state["messages"], budget_tokens)
-        quem_fala = falante if pode_chamar_tools else model
+        # to call, `tools_condition` routes to END (see
+        # `budget.tools_still_affordable`). What the agent may SAY once they are
+        # gone depends on where in the turn the line was crossed, and the two cases
+        # are not the same answer.
+        degradado = bool(tools) and not tools_still_affordable(state["messages"], budget_tokens)
+
+        # Crossed at the start of a turn: nothing was fetched, so there is no fresh
+        # result to deliver and nothing the model could honestly add. The code
+        # answers, because the only honest answer here is one the model cannot be
+        # trusted to give — it does not know its hands are tied, and a real
+        # conversation showed what it says instead: it took the company data, said
+        # "agora vou fechar o pedido para você", and `criar_pedido` was not bound.
+        # No order, no approval queue, no invoice, and nothing on screen that looked
+        # like a failure.
+        #
+        # A `ToolMessage` in the last position is what says we came back from the
+        # tool node — that is mid-turn, and the case below.
+        if degradado and not isinstance(state["messages"][-1], ToolMessage):
+            return {"messages": [AIMessage(content=NO_ROOM_TO_ACT_MESSAGE)]}
+
+        quem_fala = model if degradado else falante
+        # Crossed mid-turn: the tool results are in context and there is a real
+        # answer to give. The notice is what keeps that answer from promising the
+        # next call — a worse answer than the one it was building, and infinitely
+        # better than the turn that fetched everything and said nothing.
+        instrucao = subagent.prompt + NO_TOOLS_LEFT_NOTICE if degradado else subagent.prompt
 
         # The system prompt is prepended for the call and never stored in state:
         # storing it would append a copy on every turn, and the checkpoint would
         # grow a prompt per message.
-        answer = await quem_fala.ainvoke(
-            [SystemMessage(content=subagent.prompt), *state["messages"]]
-        )
+        answer = await quem_fala.ainvoke([SystemMessage(content=instrucao), *state["messages"]])
         return {"messages": [answer]}
 
     builder.add_node(conversa_no, conversa)

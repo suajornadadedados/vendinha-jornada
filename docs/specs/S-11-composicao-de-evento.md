@@ -134,6 +134,31 @@ Cenário: slot obrigatório faltando
 
 ## Descobertas (preenchido durante a execução)
 
+**D-9 — pós-merge, e é decisão do PO: o cliente pediu uma quantidade que a tool não
+sabe expressar.** Numa conversa real, o comprador pediu *"uma unidade de café e uma
+de manteiga de garrafa para cada pessoa"* — 50 de cada, para 50 pessoas. O
+`validar_composicao` **não tem campo de quantidade**: ela é derivada do `rendimento`,
+por construção do R10 e do ADR-013. Então o pedido é legítimo e **irrepresentável**.
+
+O agente, sem como validar, improvisou: apresentou 50 + 50 + 3 em texto com um total
+de **R$ 4.118,00** que não veio de tool nenhuma — e que não fecha nem com os itens da
+própria mensagem (50×66 + 50×34 + 3×28 = 5.084). O cartão na tela continuou mostrando
+a composição anterior, de R$ 418,00, e o banco confirma: três vereditos na sessão,
+nenhum deles daquela composição. **É R1 com dinheiro na tela.**
+
+Duas metades, e só uma foi feita:
+
+- **Feito** — o prompt da recomendação passou a dizer que quantidade sai do
+  rendimento, que não existe campo para forçá-la, e que quando o cliente pede uma
+  quantidade específica a resposta é dizer isso com o número do rendimento. Nunca um
+  total próprio.
+- **Não feito, e não deve ser sem decisão** — dar quantidade explícita a
+  `validar_composicao`. Isso muda o contrato do R10 e do ADR-013 (*"quantidade
+  derivada do rendimento"*), que existe para tirar a aritmética do modelo. Um campo
+  `quantidade` devolve ao modelo a decisão de quanto comprar, e o teto por pessoa
+  passaria a depender de um número que ele escolheu. Se a resposta for sim, é ADR
+  novo, não edição de tool.
+
 **D-1 — a task 1 já estava feita pela metade, e a metade que faltava não estava
 declarada em lugar nenhum.** A S-10 levou `rendimento` e `contem` até o `Produto`, o
 DDL do Postgres e o seed (descoberta D-1 dela). O que ela não podia prever é que os
