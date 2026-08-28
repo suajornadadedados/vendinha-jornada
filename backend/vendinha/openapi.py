@@ -44,24 +44,18 @@ from vendinha.schemas import (
 REF = "#/components/schemas/{model}"
 PADRAO = REPO_ROOT / "openapi.json"
 
-# As três rotas que devolvem `text/event-stream`, e o que cada uma emite.
-STREAMS: dict[str, tuple[str, str]] = {
-    "/chat": (
-        "EventosDoChat",
-        "Stream do atendimento: `session` primeiro, `token` a cada pedaço da "
-        "resposta, `error` quando falha depois do primeiro byte, e `done` sempre.",
-    ),
-    "/admin/eventos": (
-        "EventoDoPainel",
-        "Tudo que acontece no servidor, para o painel. O nome do `event:` é o campo "
-        "`tipo`. Um `atraso` significa que este assinante perdeu eventos.",
-    ),
-    "/eventos/sessao/{session_id}": (
-        "EventoDaSessao",
-        "Só os eventos desta conversa: mudança de status do pedido e decisão da "
-        "nota. É o que faz a NF aparecer no chat sem o cliente perguntar.",
-    ),
-}
+DO_CHAT = (
+    "Stream do atendimento: `session` primeiro, `token` a cada pedaço da resposta, "
+    "`error` quando falha depois do primeiro byte, e `done` sempre."
+)
+DO_PAINEL = (
+    "Tudo que acontece no servidor, para o painel. O nome do `event:` é o campo "
+    "`tipo`. Um `atraso` significa que este assinante perdeu eventos."
+)
+DA_SESSAO = (
+    "Só os eventos desta conversa — o barramento filtra por `session_id`. É o que "
+    "faz a NF aparecer no chat sem o cliente perguntar."
+)
 
 
 class EventosDoChat(BaseModel):
@@ -79,16 +73,11 @@ class EventosDoChat(BaseModel):
     done: DoneEvent
 
 
-class EventoDaSessao(BaseModel):
-    """O que `GET /eventos/sessao/{id}` pode emitir."""
-
-    evento: EventoDoPainel
-
-
 class _TodosOsEventos(BaseModel):
+    """Só existe para arrastar todo modelo de evento para `$defs`."""
+
     chat: EventosDoChat
     painel: EventoDoPainel
-    sessao: EventoDaSessao
 
 
 def esquema() -> dict[str, Any]:
@@ -103,14 +92,26 @@ def esquema() -> dict[str, Any]:
     for nome, definicao in (dos_eventos.get("$defs") or {}).items():
         componentes.setdefault(nome, definicao)
 
+    # A união do painel é **inlinada**, e não referenciada por nome.
+    # `EventoDoPainel` é um alias com discriminador, não um `BaseModel`: o Pydantic
+    # não cria um `$def` para ele, e um `$ref` a um nome que não existe quebra o
+    # gerador do cliente com uma mensagem que não diz isso. O gerador reclamando
+    # foi o que trouxe o erro à tona, e é o motivo de o portão existir.
+    uniao = {chave: valor for chave, valor in dos_eventos["properties"]["painel"].items()}
+
     caminhos: dict[str, Any] = documento.get("paths", {})
-    for caminho, (modelo, descricao) in STREAMS.items():
-        rota = caminhos.get(caminho, {}).get("get") or caminhos.get(caminho, {}).get("post")
+    for caminho, esquema_do_corpo, descricao in (
+        ("/chat", {"$ref": REF.format(model="EventosDoChat")}, DO_CHAT),
+        ("/admin/eventos", uniao, DO_PAINEL),
+        ("/eventos/sessao/{session_id}", uniao, DA_SESSAO),
+    ):
+        metodos = caminhos.get(caminho, {})
+        rota = metodos.get("get") or metodos.get("post")
         if rota is None:
             continue
         rota["responses"]["200"] = {
             "description": descricao,
-            "content": {"text/event-stream": {"schema": {"$ref": REF.format(model=modelo)}}},
+            "content": {"text/event-stream": {"schema": esquema_do_corpo}},
         }
 
     return documento

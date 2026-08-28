@@ -40,8 +40,21 @@ typecheck:  ## mypy strict no backend E na suite de testes
 	cd backend && uv run mypy .
 	uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
-types:  ## Regera o openapi.json (contrato -> cliente TypeScript da S-07)
+web-install:  ## Instala as dependencias do frontend
+	npm install --prefix frontend
+
+web:  ## Sobe o frontend em http://localhost:5173 (landing) e /admin.html
+	npm --prefix frontend run dev
+
+web-build:  ## Build de producao das duas entradas
+	npm --prefix frontend run build
+
+web-lint:  ## Typecheck do frontend
+	npm --prefix frontend run lint
+
+types:  ## Regera o openapi.json E o cliente TypeScript. Drift quebra o build.
 	uv run --project backend python -m vendinha.openapi
+	npm --prefix frontend run types
 
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	uv run --project backend python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q

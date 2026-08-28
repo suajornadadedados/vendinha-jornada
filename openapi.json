@@ -802,54 +802,6 @@
         "title": "ErrorEvent",
         "type": "object"
       },
-      "EventoDaSessao": {
-        "description": "O que `GET /eventos/sessao/{id}` pode emitir.",
-        "properties": {
-          "evento": {
-            "discriminator": {
-              "mapping": {
-                "aprovacao_pendente": "#/components/schemas/AprovacaoPendente",
-                "atraso": "#/components/schemas/AtrasoNoStream",
-                "composicao_avaliada": "#/components/schemas/ComposicaoAvaliada",
-                "mensagem": "#/components/schemas/MensagemRegistrada",
-                "nota_decidida": "#/components/schemas/NotaDecidida",
-                "pedido_atualizado": "#/components/schemas/PedidoAtualizado",
-                "sessao_iniciada": "#/components/schemas/SessaoIniciada"
-              },
-              "propertyName": "tipo"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/SessaoIniciada"
-              },
-              {
-                "$ref": "#/components/schemas/MensagemRegistrada"
-              },
-              {
-                "$ref": "#/components/schemas/ComposicaoAvaliada"
-              },
-              {
-                "$ref": "#/components/schemas/PedidoAtualizado"
-              },
-              {
-                "$ref": "#/components/schemas/AprovacaoPendente"
-              },
-              {
-                "$ref": "#/components/schemas/NotaDecidida"
-              },
-              {
-                "$ref": "#/components/schemas/AtrasoNoStream"
-              }
-            ],
-            "title": "Evento"
-          }
-        },
-        "required": [
-          "evento"
-        ],
-        "title": "EventoDaSessao",
-        "type": "object"
-      },
       "EventosDoChat": {
         "description": "Reúne os quatro eventos de `/chat` para que entrem no schema.\n\nNão é um corpo que alguma rota devolva: é o veículo que leva os quatro modelos\naté `components.schemas`. Está declarado como classe, e não montado à mão em\ndicionário, para que ele não possa divergir dos modelos que a rota realmente\nemite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.",
         "properties": {
@@ -2276,7 +2228,42 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventoDoPainel"
+                  "discriminator": {
+                    "mapping": {
+                      "aprovacao_pendente": "#/components/schemas/AprovacaoPendente",
+                      "atraso": "#/components/schemas/AtrasoNoStream",
+                      "composicao_avaliada": "#/components/schemas/ComposicaoAvaliada",
+                      "mensagem": "#/components/schemas/MensagemRegistrada",
+                      "nota_decidida": "#/components/schemas/NotaDecidida",
+                      "pedido_atualizado": "#/components/schemas/PedidoAtualizado",
+                      "sessao_iniciada": "#/components/schemas/SessaoIniciada"
+                    },
+                    "propertyName": "tipo"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SessaoIniciada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MensagemRegistrada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ComposicaoAvaliada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PedidoAtualizado"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AprovacaoPendente"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NotaDecidida"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AtrasoNoStream"
+                    }
+                  ],
+                  "title": "Painel"
                 }
               }
             },
@@ -2647,11 +2634,46 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventoDaSessao"
+                  "discriminator": {
+                    "mapping": {
+                      "aprovacao_pendente": "#/components/schemas/AprovacaoPendente",
+                      "atraso": "#/components/schemas/AtrasoNoStream",
+                      "composicao_avaliada": "#/components/schemas/ComposicaoAvaliada",
+                      "mensagem": "#/components/schemas/MensagemRegistrada",
+                      "nota_decidida": "#/components/schemas/NotaDecidida",
+                      "pedido_atualizado": "#/components/schemas/PedidoAtualizado",
+                      "sessao_iniciada": "#/components/schemas/SessaoIniciada"
+                    },
+                    "propertyName": "tipo"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SessaoIniciada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MensagemRegistrada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ComposicaoAvaliada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PedidoAtualizado"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AprovacaoPendente"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NotaDecidida"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AtrasoNoStream"
+                    }
+                  ],
+                  "title": "Painel"
                 }
               }
             },
-            "description": "Só os eventos desta conversa: mudança de status do pedido e decisão da nota. É o que faz a NF aparecer no chat sem o cliente perguntar."
+            "description": "Só os eventos desta conversa — o barramento filtra por `session_id`. É o que faz a NF aparecer no chat sem o cliente perguntar."
           },
           "422": {
             "content": {

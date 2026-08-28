@@ -44,3 +44,9 @@ Thumbs.db
 
 # Claude Code — preferência de máquina, não do projeto
 .claude/settings.local.json
+
+# Frontend (S-07). O `schema.d.ts` NAO entra aqui: ele e gerado, mas e
+# commitado de proposito -- e a metade do portao de contrato que o `git diff` do
+# CI compara. Gerado e ignorado nao sao sinonimos.
+frontend/node_modules/
+frontend/dist/
