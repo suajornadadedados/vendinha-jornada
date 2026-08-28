@@ -177,7 +177,39 @@ aqui porque é exatamente o registro que esta spec toca — e porque a mesma tab
 que faltava sobre `emitir_nf` e `registrar_aprovacao` não existirem em registro nenhum (D-3). É
 manutenção do mapa, não mudança de decisão.
 
-**DESC-7 — a coerência do corpus precisou de um ajuste, e ele é território de CODEOWNERS.**
+**DESC-7 — a verificação manual achou um bug que teste nenhum acharia, e a causa é estrutural.**
+`PostgresFiscal.registrar_decisao` devolvia `False` na gravação que **funcionou**. O motivo:
+`rowcount` era lido depois de o `async with conn.cursor()` fechar, e cursor fechado devolve `-1`.
+A implementação em memória devolvia `True` — as duas metades da mesma porta discordando em
+silêncio.
+
+Vale nomear por que nenhum teste pegaria: as duas camadas rodam contra `FiscalEmMemoria`, porque
+não existe camada de integração aqui (`docs/testes.md` §1). Divergência **entre** implementações
+de uma porta só aparece com o banco na frente, e é exatamente para isso que a verificação manual
+existe. Em produção o valor de retorno ainda não é usado — `decidir` relê a decisão vigente em vez
+de confiar nele —, então o defeito era latente; o que ele quebraria é o próximo chamador.
+
+Corrigido lendo `rowcount` dentro do bloco do cursor, com o porquê no comentário. E o teste que
+deixava passar ganhou a metade que faltava: `test_the_first_decision_wins_...` afirmava
+`segunda is False` e não afirmava `primeira is True`.
+
+**DESC-8 — os evals estão reprovando, e não é a S-05.**
+`CLAUDE.md` exige rodar os evals antes do PR quando o prompt muda, e os dois prompts mudaram.
+Rodados com `EVALS_JUDGE_MODEL=openai:gpt-4.1`, como a DESC-7 da S-04 recomenda: **as três suítes
+reprovam** — S-04 checkout 3 de 7, S-03 groundedness 0 de 6, S-11 composição 2 de 4.
+
+Antes de tratar isso como regressão desta spec, rodei um **A/B controlado**: `golden-013`, um caso
+puro da S-03, num worktree limpo da `main` — sem nenhuma linha desta branch. Ele reprova **com as
+mesmas duas falhas**. A conclusão é que o corpus já estava reprovando antes da S-05, e a hipótese
+mais provável é deriva do modelo (`anthropic:claude-haiku-4-5` não é uma versão pinada), não o
+parágrafo de nota fiscal que entrou nos prompts.
+
+Fica declarado e **não resolvido aqui**: investigar e reancorar a régua é da **S-06**, que é a spec
+dona do portão de evals (ADR-006, R7), e mexer em caso de `evals/` para destravar um PR é
+justamente o que aquele ADR proíbe. O PO decidiu parar a execução das suítes neste ponto.
+Registrado para a verificação independente saber que o número existe e de onde ele vem.
+
+**DESC-9 — a coerência do corpus precisou de um ajuste, e ele é território de CODEOWNERS.**
 O `golden-004` ancorava `numero_nota` em `tool:emitir_nf` e listava `emitir_nf` em
 `tools.permitidas`. Com a D-3, `emitir_nf` nunca será tool — então o caso descrevia um sistema que
 não vai existir, e um cruzamento que falha em silêncio é pior do que uma lacuna declarada
@@ -251,6 +283,8 @@ o interrupt.
 | Fase 2 — rejeição | ok — motivo gravado, nenhuma nota, pedido em `nota_rejeitada` |
 | Fase 2 — aprovar um pedido já rejeitado | ok — a decisão vigente continua `rejeitada`, e nada foi emitido |
 | `INSERT` à mão de uma rejeição sem motivo | **recusado pelo banco**: `CheckViolation: rejeicao_exige_motivo` — a regra não é só o validador do Pydantic |
+| `registrar_decisao` contra o Postgres, conferindo o valor de retorno | **achou um bug** — devolvia `False` na gravação que funcionou (`rowcount` lido depois de o cursor fechar). Corrigido, reverificado: `True` na primeira, `False` na segunda, decisão vigente correta, `PedidoInexistente` no id fantasma. Ver DESC-7 |
+| Transições de status contra o Postgres | ok — `registrar_emissao` num pedido ainda `aguardando_pagamento` **não** muda nada; depois do pagamento leva a `nota_emitida`; `registrar_rejeicao` num já emitido **não** o reverte; a fila esvazia; `PedidoInexistente` no id fantasma |
 | API de pé (`OPERADOR_API_TOKEN` definido): fila sem token / com token errado | 401 nos dois |
 | API: página do mock → confirmar → fila | ok — `{"resultado": "registrado"}` e o pedido aparece na fila com destinatário PJ completo e a composição item a item |
 | API: DANFE antes da aprovação | 404 |

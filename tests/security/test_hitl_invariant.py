@@ -460,15 +460,21 @@ async def test_the_first_decision_wins_and_a_rejection_never_becomes_an_approval
     Um pedido rejeitado que virasse aprovado numa segunda chamada apagaria a decisão
     que valeu — e a auditoria mostraria uma aprovação onde houve uma recusa.
     """
-    await fiscal.registrar_decisao(
+    primeira = await fiscal.registrar_decisao(
         Aprovacao(pedido_id=PEDIDO_ID, decisao=Decisao.REJEITADA, operador=OPERADOR, motivo=MOTIVO)
     )
 
-    aceitou = await fiscal.registrar_decisao(
+    segunda = await fiscal.registrar_decisao(
         Aprovacao(pedido_id=PEDIDO_ID, decisao=Decisao.APROVADA, operador="outro.operador")
     )
 
-    assert aceitou is False
+    # As DUAS asserções, e a primeira não é decoração: `registrar_decisao` devolvendo
+    # `False` na gravação que funcionou faria as duas implementações da porta
+    # discordarem em silêncio. Foi exatamente o defeito que a verificação manual
+    # contra o Postgres encontrou nesta spec — `rowcount` lido depois de o cursor
+    # fechar —, e ele passava por aqui porque só a segunda metade era afirmada.
+    assert primeira is True
+    assert segunda is False
     vigente = await fiscal.decisao_de(PEDIDO_ID)
     assert vigente is not None
     assert vigente.decisao is Decisao.REJEITADA

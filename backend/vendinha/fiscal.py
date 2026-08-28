@@ -265,8 +265,16 @@ class PostgresFiscal:
                         aprovacao.motivo,
                     ),
                 )
+                # `rowcount` é lido DENTRO do `async with conn.cursor()`. Fora dele o
+                # cursor já foi fechado e o valor vira -1 — o que fazia esta função
+                # devolver `False` na primeira gravação, discordando de
+                # `FiscalEmMemoria`. Achado na verificação manual contra o Postgres,
+                # e não por teste: as duas camadas rodam contra a implementação em
+                # memória (`docs/testes.md` §1), então divergência entre as duas só
+                # aparece com o banco na frente.
+                gravou = inserido.rowcount == 1
             await conn.commit()
-        return inserido.rowcount == 1
+        return gravou
 
     async def decisao_de(self, pedido_id: str) -> Aprovacao | None:
         encontradas = await self.decisoes_de((pedido_id,))
