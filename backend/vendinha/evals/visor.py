@@ -147,6 +147,13 @@ def registrar(
         return
 
     registrados = 0
+    # **Duas contagens, e nao uma.** A verificacao independente da S-06 (ACH-4)
+    # mostrou que `registrados` sozinho reproduz o incidente que ele foi criado
+    # para pegar: `create_score` aceita `trace_id=None`, entao um caso sem trace
+    # incrementa o contador, o `dataset_run_items.create` e pulado sem
+    # contabilizar, e o runner imprime a frase tranquilizadora com zero runs do
+    # outro lado — que e literalmente o sintoma do incidente, por outro caminho.
+    com_run_item = 0
     for resultado in resultados:
         try:
             if resultado.trace_id is not None:
@@ -160,6 +167,14 @@ def registrar(
                         "modelo": resultado.modelo,
                         "juiz": resultado.juiz_nome,
                     },
+                )
+                com_run_item += 1
+            else:
+                # Sem isto o caso sai do run sem deixar rastro nenhum: o
+                # `_trace_do_caso` engole a excecao e faz `yield None`, e
+                # `get_current_trace_id()` tambem devolve `None` legitimamente.
+                logger.warning(
+                    "%s nao tem trace_id: fica fora do run %s", resultado.caso.id, execucao
                 )
             cliente.create_score(
                 name=SCORE,
@@ -192,13 +207,15 @@ def registrar(
     # Uma linha no stderr é o que torna a próxima quebra visível sem pôr o portão
     # atrás do SaaS. `registrados < len(resultados)` é o sinal, e a frase diz o que
     # fazer com ele.
-    if registrados == len(resultados):
+    total = len(resultados)
+    if registrados == total and com_run_item == total:
         print(f"visor: {registrados} casos em `{dataset}`, run `{execucao}`.", file=sys.stderr)
     else:
         print(
-            f"AVISO: so {registrados} de {len(resultados)} casos chegaram ao Langfuse "
-            f"(dataset `{dataset}`, run `{execucao}`). O veredito acima NAO depende "
-            f"disso — mas o visor esta cego, e o log diz por que.",
+            f"AVISO: {registrados} de {total} casos chegaram ao Langfuse e "
+            f"{com_run_item} de {total} entraram no run `{execucao}` "
+            f"(dataset `{dataset}`). O veredito acima NAO depende disso — mas o "
+            f"visor esta cego, e o log diz por que.",
             file=sys.stderr,
         )
 

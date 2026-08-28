@@ -31,7 +31,9 @@ from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz
 from vendinha.evals.runner import EVALS, Resultado
 
 
-def _resultado(aprovado: bool) -> Resultado:
+def _resultado(
+    aprovado: bool, trace_id: str | None = "0af7651916cd43dd8448eb211c80319c"
+) -> Resultado:
     caso = next(iter(carregar_casos(EVALS, spec="S-03")))
     return Resultado(
         caso=caso,
@@ -47,7 +49,7 @@ def _resultado(aprovado: bool) -> Resultado:
                 )
             ]
         ),
-        trace_id="0af7651916cd43dd8448eb211c80319c",
+        trace_id=trace_id,
     )
 
 
@@ -303,6 +305,44 @@ def test_a_visor_that_silently_registered_nothing_says_so_out_loud(
         "o aviso precisa dizer que o veredito não depende do visor, ou alguém vai "
         "ler um problema de observabilidade como suíte reprovada"
     )
+
+
+@pytest.mark.risco("R7")
+def test_a_case_without_a_trace_id_is_not_counted_as_reaching_the_run(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7, ADR-014 — o mesmo incidente por outro caminho, e sem exceção nenhuma.
+
+    O teste vizinho cobre o caminho em que `api` levanta. Este cobre o que a
+    verificação independente da S-06 encontrou (ACH-4) e que nenhum teste tocava:
+    `create_score` aceita `trace_id=None` sem reclamar, então o caso incrementava
+    o contador enquanto o `dataset_run_items.create` era pulado em silêncio. Com o
+    Langfuse configurado e todos os traces falhando — `_trace_do_caso` engole a
+    exceção e faz `yield None`, e `get_current_trace_id()` também devolve `None`
+    legitimamente — o resultado era **zero run items** e a frase tranquilizadora.
+
+    Que é, literalmente, o sintoma do incidente que o aviso foi criado para pegar:
+    dataset sincronizado, run vazio, suíte "deu certo".
+    """
+    espiao = _ClienteEspiao()
+    monkeypatch.setattr(observability, "client", lambda: espiao)
+
+    visor.registrar(
+        [_resultado(aprovado=True, trace_id=None), _resultado(aprovado=False, trace_id=None)],
+        "S-03",
+        "uma-execucao",
+        "um-dataset",
+    )
+
+    # Os scores foram — e é por isso que contar só eles mentia.
+    assert len(espiao.scores) == 2
+    assert espiao.itens == []
+
+    aviso = capsys.readouterr().err
+    assert "AVISO" in aviso
+    assert "0 de 2" in aviso, "o aviso precisa dizer que NENHUM caso entrou no run"
+    assert "NAO depende" in aviso
 
 
 @pytest.mark.risco("R7")
