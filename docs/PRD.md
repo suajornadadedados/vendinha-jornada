@@ -52,7 +52,7 @@ Ao mesmo tempo, a operação de venda tem etapas onde erro é inaceitável: pre�
 - Pagamento com dinheiro real (apenas sandbox). 
 - Autenticação de clientes finais, contas, histórico entre sessões.
 - Gestão de estoque, frete, logística, trocas e devoluções.
-- Multi-tenancy (múltiplas lojas) e painel administrativo completo.
+- Multi-tenancy (múltiplas lojas). *O painel administrativo completo saiu desta lista em 2026-08-28: o painel de observação do operador é entregável da S-07 (ADR-015). Continua fora o CRUD administrativo — catálogo, pedido e composição não são editáveis pela interface, e prompt é read-only.*
 - Preço escalonado por faixa de quantidade. *Motivo: seria legítimo (tabela no banco, não negociação), mas dá a R1 uma segunda forma de estar errado em troca de realismo que a demonstração não precisa (ADR-013).*
 - Variante por pessoa dentro de uma mesma composição. *Motivo: "12 cestas, 2 sem álcool" se resolve como duas composições no mesmo pedido, sem entidade nova.*
 - Itens não alimentícios no kit de boas-vindas (caneca, camiseta). *Motivo: pedem estoque e personalização, ambos fora de escopo.*

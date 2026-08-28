@@ -1,0 +1,549 @@
+/* O atendimento no canto da tela.
+ *
+ * Verde de WhatsApp no botão flutuante de propósito: ele é o sinal universal de
+ * "fale comigo aqui", e a demo depende de a pessoa reconhecê-lo em meio segundo. Da
+ * borda da janela para dentro, a marca é a Vendinha — o verde-mata da paleta, não o
+ * verde do aplicativo. */
+
+.visualmente-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------------- FAB */
+
+.fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background: #25d366;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 20px rgb(37 211 102 / 40%);
+  z-index: 40;
+  transition: transform var(--transicao), box-shadow var(--transicao);
+}
+
+.fab:hover {
+  transform: scale(1.06);
+  box-shadow: 0 8px 26px rgb(37 211 102 / 50%);
+}
+
+.fab__pulso {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #25d366;
+  animation: pulso 2.4s ease-out infinite;
+}
+
+@keyframes pulso {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.retomar {
+  position: fixed;
+  right: 96px;
+  bottom: 38px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--linha);
+  background: var(--cartao);
+  color: var(--tinta-suave);
+  font-size: 13px;
+  box-shadow: var(--sombra);
+}
+
+/* ----------------------------------------------------------------- janela */
+
+.janela {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: min(420px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 48px));
+  background: var(--papel);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  box-shadow: 0 12px 48px rgb(26 23 20 / 18%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 50;
+  animation: subir 220ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.janela__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+  padding: 12px 14px;
+  background: var(--verde);
+  color: #fff;
+}
+
+.janela__quem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.janela__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 18%);
+  display: grid;
+  place-items: center;
+  font-family: var(--f-display);
+  font-size: 19px;
+}
+
+.janela__nome {
+  margin: 0;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.janela__estado {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.janela__topo button {
+  background: none;
+  border: none;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  /* 44x44 mesmo com ícone de 20: alvo de toque é requisito do checklist, e a demo
+   * pode ser num laptop com trackpad. */
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.janela__topo button:hover {
+  background: rgb(255 255 255 / 15%);
+}
+
+.janela__corpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--e-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.convite {
+  color: var(--tinta-suave);
+  font-size: 14px;
+  border: 1px dashed var(--linha);
+  border-radius: var(--raio);
+  padding: var(--e-2);
+}
+
+.convite p {
+  margin: 0 0 6px;
+}
+
+.convite__exemplo em {
+  color: var(--tinta);
+  font-style: normal;
+}
+
+/* ----------------------------------------------------------------- balões */
+
+.balao {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 14px;
+  max-width: 84%;
+  font-size: 14.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.balao--cliente {
+  align-self: flex-end;
+  background: var(--verde);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.balao--atendente {
+  align-self: flex-start;
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-bottom-left-radius: 4px;
+}
+
+.balao--escrevendo::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--tinta-suave);
+  vertical-align: text-bottom;
+  animation: cursor 1s steps(2) infinite;
+}
+
+@keyframes cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Mede a espera até o primeiro token — some quando ele chega, porque a partir dali
+ * o texto aparecendo já é o feedback. */
+.digitando {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.digitando span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tinta-suave);
+  animation: pontinho 1.2s ease-in-out infinite;
+}
+
+.digitando span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.digitando span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes pontinho {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* ------------------------------------------------------------ composição */
+
+.composicao {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-left: 3px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 12px;
+  font-size: 13px;
+}
+
+.composicao--ok {
+  border-left-color: var(--verde);
+}
+
+.composicao--recusa {
+  border-left-color: var(--vermelho);
+}
+
+.composicao__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-1);
+  margin-bottom: 10px;
+}
+
+.composicao__pessoas {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+
+.composicao__atende {
+  color: var(--tinta-suave);
+  font-weight: 400;
+}
+
+.composicao__itens {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.composicao__itens th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--tinta-suave);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.composicao__itens th.num,
+.composicao__itens td.num {
+  text-align: right;
+}
+
+.composicao__itens td {
+  padding: 5px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--linha) 55%, transparent);
+}
+
+.composicao__totais {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--e-2);
+  margin: 10px 0 0;
+}
+
+.composicao__totais div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.composicao__totais dt {
+  color: var(--tinta-suave);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.composicao__totais dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.composicao__excedente dd {
+  color: var(--vermelho);
+}
+
+.composicao__problemas {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--linha);
+  display: grid;
+  gap: 6px;
+}
+
+.composicao__problemas li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+
+.composicao__motivo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vermelho);
+  background: var(--vermelho-fundo);
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------ cartões de estado */
+
+.cartao-estado {
+  border-radius: var(--raio);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  border: 1px solid var(--linha);
+  background: var(--cartao);
+}
+
+.cartao-estado p {
+  margin: 0 0 6px;
+}
+
+.cartao-estado p:last-child {
+  margin-bottom: 0;
+}
+
+.cartao-estado__titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.cartao-estado__valor {
+  font-family: var(--f-display);
+  font-size: 24px;
+}
+
+.cartao-estado__nota {
+  color: var(--tinta-suave);
+  font-size: 12.5px;
+}
+
+.cartao-estado--acao {
+  border-color: var(--verde);
+  background: var(--verde-fundo);
+}
+
+.cartao-estado--espera {
+  border-color: var(--ocre);
+  background: var(--ocre-fundo);
+}
+
+.cartao-estado--espera .cartao-estado__titulo {
+  color: var(--ocre);
+}
+
+.cartao-estado--ok {
+  border-color: var(--verde);
+  background: var(--verde-fundo);
+}
+
+.cartao-estado--ok .cartao-estado__titulo {
+  color: var(--verde);
+}
+
+.cartao-estado--recusa {
+  border-color: var(--vermelho);
+  background: var(--vermelho-fundo);
+}
+
+.cartao-estado--recusa .cartao-estado__titulo {
+  color: var(--vermelho);
+}
+
+.botao-pagar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px 16px;
+  min-height: 44px;
+  border-radius: 8px;
+  background: var(--verde);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cartao-estado__links {
+  display: flex;
+  gap: var(--e-1);
+  margin-top: 8px;
+}
+
+.cartao-estado__links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  min-height: 40px;
+  border: 1px solid var(--verde);
+  border-radius: 8px;
+  color: var(--verde);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.erro {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: var(--raio);
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ campo */
+
+.janela__campo {
+  display: flex;
+  gap: var(--e-1);
+  padding: 10px;
+  border-top: 1px solid var(--linha);
+  background: var(--cartao);
+}
+
+.janela__campo input {
+  flex: 1;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-family: inherit;
+  font-size: 14.5px;
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+.janela__campo button {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: var(--verde);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  transition: opacity var(--transicao);
+}
+
+.janela__campo button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .janela {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+}

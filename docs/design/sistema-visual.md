@@ -1,0 +1,274 @@
+# Sistema visual da Vendinha
+
+> Produzido na S-07 pela skill `ui-ux-pro-max` **antes** do primeiro componente, como o
+> harness manda (`.claude/skills/vendinha-harness/SKILL.md`): *decidir, então implementar.
+> Inverter produz componente bonito sem sistema.*
+>
+> Este documento é o insumo dos commits 12 a 17 da S-07 e a régua da verificação
+> independente: ele existe para que o revisor julgue **consistência**, e não gosto.
+
+## O problema de desenho
+
+Um produto, **dois registros**, e eles não podem ser o mesmo desenho nem duas marcas
+diferentes:
+
+| | Landing pública | Painel do operador |
+|---|---|---|
+| Quem lê | comprador corporativo decidindo se confia | operador decidindo emitir nota fiscal |
+| O que precisa | respiro, prova, uma ação clara | densidade, estado atual, nenhuma ambiguidade |
+| Tempo na tela | 40 segundos | a manhã inteira |
+| Erro caro | não converter | aprovar a nota errada |
+
+A resolução é **uma paleta e uma tipografia, duas escalas de espaço**. A marca é a mesma;
+o que muda é a densidade e a temperatura.
+
+## O que a consulta devolveu, e o que fizemos com ele
+
+| Eixo | Recomendação da skill | Decisão |
+|---|---|---|
+| Pattern | *Trust & Authority + Conversion* — hero de credibilidade, prova, visão da solução, CTA | **Adotado** na estrutura da landing |
+| Style | *Accessible & Ethical* — contraste 4.5:1, navegação por teclado, foco visível, reduced-motion, alvo 44×44 | **Adotado como requisito**, não como sugestão |
+| Paleta | navy `#0F172A` + azul `#0369A1` ("Professional navy + blue CTA") | **Recusada.** É o SaaS genérico que o PO descartou nominalmente. Mantida a paleta terrosa dos diagramas do repo — mas submetida à régua de contraste do style acima, que reprovou um tom (abaixo) |
+| Tipografia | *SaaS Mobile Boutique*: **Calistoga** + **Inter** + **JetBrains Mono** — "warm, editorial, human warmth", B2B SaaS e dashboards | **Adotada com uma troca.** A serifa quente serve o empório e a mono serve dinheiro e id, mas a Inter saiu no lugar da **Nunito** por decisão do PO (ver "O corpo é Nunito", abaixo) |
+| Ícones | **Phosphor** | **Adotado, e um set só** |
+| Gráfico: KPI contra alvo | *Bullet chart* (Performance vs Target, compacto; grid de bullets para 3+ KPIs) | **Adotado** para o tempo até a resposta começar, contra a meta de 3s (RNF-4 — que é como o requisito se chama aqui e **nunca** na tela) |
+| Gráfico: série temporal | *Line chart*; nunca distinguir série só por matiz | **Adotado** para custo ao longo do tempo |
+| Gráfico: categórico | a busca devolveu radar/scatter — **não é o caso**. A própria ficha nomeia *grouped bar* como a alternativa quando a comparação precisa ser precisa | **Barra horizontal ordenada** para recusas por motivo. Registrado que aqui a escolha foi nossa, e não um match do banco |
+| Estado de conexão perdida | **nenhum match no banco** (duas tentativas) | Regra escrita por nós, abaixo, e marcada como tal |
+
+## Paleta
+
+Uma paleta, e **cada tom com um trabalho declarado**. Contraste medido contra `#FAF8F5`.
+
+| Token | Hex | Contraste | Para quê |
+|---|---|---|---|
+| `--tinta` | `#1A1714` | 16.84 | texto principal, títulos |
+| `--tinta-suave` | `#5F5850` | 6.61 | texto secundário, rótulos |
+| `--papel` | `#FAF8F5` | — | fundo da landing |
+| `--cartao` | `#FFFFFF` | — | superfície elevada, linhas de tabela |
+| `--linha` | `#E3DCD2` | 1.28 | **só borda e divisória.** Nunca texto |
+| `--verde` | `#1F6F5C` | 5.68 | aprovado, sucesso, CTA |
+| `--ocre` | `#8A5714` | 5.74 | **pendente, atenção — em texto e ícone** |
+| `--ocre-fundo` | `#B4711F` | 3.72 | **só preenchimento** — barra de gráfico, tarja |
+| `--vermelho` | `#A03A3A` | 6.27 | recusado, rejeitado, erro |
+
+> **O ocre foi dividido em dois, e essa é a única mudança na paleta de partida.** O
+> `#B4711F` dos diagramas do repositório mede **3.72** sobre papel e **3.95** com branco por
+> cima — reprova em texto nos dois sentidos, e "pendente" é justamente o estado que aparece
+> como texto num badge, na tela onde alguém decide emitir documento fiscal. `#8A5714` mede
+> 5.74 e 6.08, e continua sendo ocre. O tom original fica vivo onde 3:1 basta: preenchimento
+> de gráfico e tarja.
+
+**Estado nunca se distingue só por matiz.** Aprovado, pendente e rejeitado carregam sempre
+**cor + ícone Phosphor + palavra**. É requisito de acessibilidade e é também requisito de
+demo: a tela vai ser projetada.
+
+## Tipografia
+
+```
+Calistoga        títulos e números de destaque      display
+Nunito           corpo, UI, tabelas                 400 / 500 / 600 / 700
+JetBrains Mono   dinheiro, id, token, latência      400 / 500
+```
+
+> **O corpo é Nunito, e não a Inter que a skill recomendou.** Decisão do PO ao ver o painel
+> montado: a Inter é uma grotesca fechada, desenhada para densidade máxima, e o resultado
+> ficou frio para um empório mineiro e cansativo de ler numa tabela por muito tempo. A Nunito
+> é humanista de terminais arredondados — contraforma mais aberta, `l` que não se confunde com
+> `1`, e uma voz que combina com a marca sem perder a legibilidade em 13px. Métrica parecida o
+> bastante para não mexer em nenhuma escala abaixo; um peso a mais (800) disponível para o
+> destaque no painel.
+
+**Dinheiro e id nunca em fonte proporcional.** `R$ 1.920,00` e `R$ 1.020,00` precisam alinhar
+na coluna, e um `session_id` precisa ser conferível caractere a caractere. É a mesma razão
+pela qual o backend devolve `Decimal` como string.
+
+### Escala — os dois registros
+
+| Papel | Landing | Painel |
+|---|---|---|
+| Display | 44–56px / 1.05 | 28px / 1.15 |
+| Título de seção | 30px / 1.2 | 18px / 1.3 |
+| Corpo | 18px / 1.65 | 14px / 1.5 |
+| Rótulo | 13px / 1.4, mono, maiúscula, tracking 0.08em | igual |
+| Número de destaque | — | 26px Calistoga |
+
+### Espaço
+
+A skill oferece o dial de densidade; usamos os dois extremos dele.
+
+| | Landing (respiro) | Painel (denso) |
+|---|---|---|
+| escala | 8 / 16 / 24 / 40 / 64 / 96 | 4 / 8 / 12 / 16 / 24 / 32 |
+| altura de linha de tabela | — | 40px |
+| raio | 12px | 8px |
+
+## Regras de interação
+
+### Fila de aprovação — a tela onde o erro é irreversível
+
+Match do banco: *Confirmation Dialogs — confirm before delete/irreversible actions*, severidade
+**alta**; e *Confirmation Messages — brief success message, don't: silent success*.
+
+1. **Aprovar e rejeitar pedem confirmação**, e a confirmação **repete o que está em jogo**:
+   razão social, CNPJ e total. Um "tem certeza?" sem o dado é um clique a mais, não uma
+   defesa.
+2. **Rejeitar exige motivo**, e o campo é obrigatório na UI porque é obrigatório no servidor
+   (`fiscal.Aprovacao`). A UI não inventa a regra; ela a antecipa.
+3. **Nada de sucesso silencioso**: a decisão volta com o número da nota emitida ou o motivo
+   registrado.
+4. Os dois botões **não são espelhados**. Aprovar é sólido verde; rejeitar é contorno
+   vermelho. Peso visual igual em ações de consequência desigual é como se clica errado.
+
+### Streaming de texto
+
+Match do banco: *Loading Indicators — o feedback deve corresponder à espera esperada, sem
+piscar em trabalho quase instantâneo; preserve foco e `aria-busy`.*
+
+- Enquanto não chega o primeiro token: **três pontos**, com `aria-busy` no contêiner da
+  conversa. Não é spinner de página: a página está inteira.
+- Chegado o primeiro token, o indicador **some** — ele mede a espera, não a digitação.
+- O painel recebe a fala do atendente **inteira**, no fim do turno. Streaming em dez
+  conversas ao mesmo tempo é ruído que nenhuma decisão usa.
+
+### Conexão perdida
+
+> **Sem match no banco.** Duas consultas, nenhuma devolveu regra sobre estado de rede ou dado
+> velho. As três regras abaixo são nossas, e estão aqui declaradas como tal — porque a
+> verificação independente da S-07 manda derrubar o backend com as telas abertas e julgar a
+> honestidade delas.
+
+1. **Um indicador de conexão persistente** na topbar do painel e no cabeçalho do widget:
+   conectado / reconectando / desconectado.
+2. **Desconectado esmaece o conteúdo e carimba a hora da última atualização.** Número velho
+   apresentado como atual é a falha que a spec reprova; número velho **rotulado como velho**
+   é informação.
+3. **O evento `atraso` é visível.** Quando o servidor avisa que este assinante perdeu
+   eventos, a tela diz que perdeu e oferece recarregar — em vez de aplicar a próxima
+   atualização por cima de um estado furado.
+
+### Tabelas densas
+
+Match do banco: *Table Handling — `overflow-x-auto`, nunca tabela larga estourando o
+layout.*
+
+- Toda tabela vive num `overflow-x-auto`; a página nunca rola na horizontal.
+- Cabeçalho fixo (`position: sticky`) — numa fila de 30 pedidos, rolar e perder a coluna é o
+  que faz aprovar a linha errada.
+- Números alinhados à direita, em mono, com casas fixas.
+- Linha inteira clicável, **e** um alvo de 44×44 para a ação — o requisito de toque vale no
+  desktop porque a demo pode ser num laptop com trackpad.
+
+### Vocabulário — a regra que não veio de skill nenhuma
+
+**Nenhum nome de variável, chave de JSON, sigla de requisito ou nome de subagente aparece na
+tela.** O painel é operado por quem vende, não por quem escreveu o backend; a primeira versão
+mostrava o argumento de cada tool como `<pre>` de JSON e chamava o requisito de latência de
+"RNF-4", e as duas coisas são legíveis exatamente para quem não precisa da tela.
+
+A tradução vive em `frontend/src/admin/traducao.tsx` e obedece a três regras:
+
+1. **Cada ferramenta tem duas frases**, uma para o que o agente pediu e outra para o que o
+   sistema respondeu — é a regra de ouro ficando visível para quem nunca vai abrir um trace.
+2. **Campo sem rótulo cadastrado não some**: `valor_por_pessoa` vira "Valor por pessoa" pela
+   regra geral. Esconder um dado porque ninguém atualizou o dicionário seria pior do que um
+   rótulo tosco, e uma tool nova nasce legível.
+3. **Traduzir é escolher palavra, nunca calcular.** Todo número exibido chega pronto do
+   backend. Um "helper" de tradução que somasse um subtotal seria conta de dinheiro no
+   navegador com outro nome — a métrica da spec é zero, e é aqui que ela vazaria sem
+   aparecer no diff como uma conta.
+
+O corolário para os indicadores: **cada número diz o que mede, em uma linha, ao lado dele.**
+"p50 do primeiro token" virou "Numa resposta comum — metade das respostas começou a aparecer
+antes disto". O nome curto é para o eixo do gráfico; a frase é para a pessoa.
+
+E o corolário do corolário, na tipografia: rótulo curto continua **mono maiúscula**; rótulo
+que virou frase usa a fonte do corpo (`.rotulo--frase`). "PEDIDOS" funciona no primeiro
+tratamento; "TEMPO ATÉ A RESPOSTA COMEÇAR A APARECER" vira sopa.
+
+### Uma tela, uma pergunta
+
+**Visão geral é a loja; Métricas é a máquina.** As duas nasceram lendo a mesma consulta e
+repetindo quatro KPIs, o bullet de latência e o gráfico de recusas inteiro — e a pergunta do PO
+("qual a diferença entre as duas?") é a prova de que a repetição não é gratuita: duas telas que
+dizem o mesmo treinam a pessoa a abrir só uma.
+
+| | Visão geral | Métricas |
+|---|---|---|
+| Pergunta | como foi o dia da loja | a máquina está saindo cara ou lenta |
+| Mostra | vendido, conversão, valor médio do pedido, duração do atendimento completo, o que a conferência barrou, últimos atendimentos, fila pendente | custo de IA, custo sobre o vendido, tokens lidos e escritos por modelo, tempo até o primeiro token, respostas que travaram |
+| Nunca mostra | token, dólar, latência de modelo | receita, conversão, ticket |
+
+A regra que sustenta isso: **nenhum bloco aparece nas duas.** Se um número serve às duas
+perguntas, ele fica na tela de quem decide com ele — e a outra tela linka.
+
+## Gráficos
+
+| KPI | Forma | Por quê |
+|---|---|---|
+| p95 do primeiro token vs. 3s (RNF-4) | **Bullet chart** | Match do banco para *Performance vs Target*, versão compacta, recomendada para grid de dashboard. O alvo é uma marca no eixo, não uma cor de fundo |
+| Recusas do validador por motivo | **Barra horizontal ordenada** | Comparação categórica precisa. Escolha nossa — ver a tabela acima |
+| Custo por dia | **Linha** | Match do banco para *Trend Over Time*. Menos de 4 pontos vira cartão de número, não gráfico |
+| Conversão, ticket, custo por conversa | **Cartão de número** | Um valor não é um gráfico |
+
+### A paleta categórica que não precisou existir
+
+A skill `dataviz` manda **rodar o validador em vez de raciocinar sobre Delta E**, e o
+resultado foi útil justamente por reprovar:
+
+```
+#1F6F5C, #B4711F, #A03A3A, #5F5850, #4A6572  sobre #FAF8F5
+  [FAIL] Chroma floor        verde, cinza e ardósia "leem cinza"
+  [FAIL] CVD separation      cinza ↔ vermelho  ΔE 4.0 (protan)
+  [FAIL] Normal-vision floor ardósia ↔ cinza   ΔE 5.9
+```
+
+**Paleta de marca não é escala categórica**, e forçá-la a ser uma teria produzido um
+gráfico ilegível para daltonismo protan — no painel onde se decide emitir nota fiscal.
+
+A correção não foi re-escalonar os tons. Foi olhar de novo para os três gráficos e ver
+que **nenhum tem mais de uma série**: o bullet mede um valor contra um alvo; a linha de
+custo é uma série; e as recusas por motivo têm a categoria **no eixo**, não na cor.
+Pintar cada barra de uma cor codificaria com cor o que o rótulo já diz — que é a
+definição do anti-padrão. Então: **uma cor por gráfico, e nenhuma paleta categórica.**
+
+Para o dia em que houver duas séries (tokens de entrada e de saída, por exemplo), o par
+medido e aprovado é **`#1F6F5C` + `#B4711F`**: ΔE 10.7 em protan e 20.6 em visão normal.
+O validador ainda reclama do *chroma floor* do verde — ele é dessaturado por ser cor de
+marca —, e essa é uma ressalva aceita conscientemente, com legenda e rótulo direto
+obrigatórios, como a própria skill permite.
+
+Regras que valem para os três, do banco: **nunca distinguir por cor apenas**; o número e o
+alvo aparecem em texto ao lado da forma; foco de teclado revela o mesmo que o hover.
+
+E uma nossa, que vem do ADR-015: **um valor ausente não é zero.** Custo sem preço cadastrado,
+p95 sem amostra e conversão sem conversa são **traço**, com a razão no `title`. Um gráfico que
+desenha zero onde não há medida mente com mais autoridade do que uma tabela.
+
+## Ícones
+
+**Phosphor, weight `regular`, 20px na UI e 16px em linha de tabela.** Um set só — misturar
+famílias é a coisa mais visível e mais barata de errar.
+
+Ícone decorativo ao lado de texto visível recebe `aria-hidden="true"`; ícone que carrega
+significado sozinho recebe alternativa textual; ícone dentro de controle interativo exige
+nome acessível no controle.
+
+| Estado | Ícone | Cor |
+|---|---|---|
+| Aprovado / emitida | `CheckCircle` | `--verde` |
+| Pendente / aguardando | `Clock` | `--ocre` |
+| Rejeitado / erro | `XCircle` | `--vermelho` |
+| Atenção, dado incompleto | `Warning` | `--ocre` |
+| Desconectado | `WifiSlash` | `--vermelho` |
+
+## Checklist de entrega (da skill, e vale para as duas entradas)
+
+- [ ] Nenhum emoji como ícone — SVG do Phosphor
+- [ ] `cursor: pointer` em tudo que é clicável
+- [ ] Transições de 150–300ms; nenhuma mudança de estado em 0ms
+- [ ] Contraste de texto ≥ 4.5:1 (a tabela acima é a prova, e o ocre já custou uma correção)
+- [ ] Foco visível em navegação por teclado — anel de 3px, nunca removido
+- [ ] `prefers-reduced-motion` respeitado
+- [ ] Responsivo em 375 / 768 / 1024 / 1440
+- [ ] Nenhum estado distinguível só por matiz

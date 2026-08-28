@@ -1,0 +1,180 @@
+/* Os tokens da Vendinha. A fonte é docs/design/sistema-visual.md.
+ *
+ * Uma paleta e uma tipografia; o que muda entre a landing e o painel é a escala de
+ * espaço e a densidade. Toda cor tem um trabalho declarado — em particular o ocre,
+ * que é DOIS tokens porque o tom dos diagramas do repositório reprova em contraste
+ * de texto (3.72 sobre papel) e "pendente" é justamente um badge com palavra dentro.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Calistoga&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  /* ------------------------------------------------------------- cor */
+  --tinta: #1a1714;
+  --tinta-suave: #5f5850;
+  --papel: #faf8f5;
+  --cartao: #ffffff;
+  --linha: #e3dcd2;
+
+  --verde: #1f6f5c;
+  --verde-fundo: #e7f1ee;
+  /* Ocre de TEXTO: 5.74 sobre papel. O 5F5850 dos diagramas media 3.72. */
+  --ocre: #8a5714;
+  --ocre-fundo: #f7eddc;
+  /* Ocre de PREENCHIMENTO: 3.72, suficiente para barra e tarja, nunca para texto. */
+  --ocre-cheio: #b4711f;
+  --vermelho: #a03a3a;
+  --vermelho-fundo: #f7e9e9;
+
+  /* ------------------------------------------------------ tipografia */
+  /* O corpo é Nunito: terminais arredondados, contraforma aberta e um `l` que não
+   * se confunde com `1`. Trocou a Inter, cujo desenho é mais fechado e mais frio do
+   * que um empório mineiro pede — e mais duro de ler numa tabela densa por muito
+   * tempo. A escala de peso é a mesma, então nenhum componente muda de tamanho. */
+  --f-display: Calistoga, Georgia, "Times New Roman", serif;
+  --f-corpo: Nunito, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* --------------------------------------------------------- espaço */
+  /* A landing respira; o painel sobrescreve estes valores em admin.css. */
+  --e-1: 8px;
+  --e-2: 16px;
+  --e-3: 24px;
+  --e-4: 40px;
+  --e-5: 64px;
+  --e-6: 96px;
+  --raio: 12px;
+
+  --sombra: 0 1px 2px rgb(26 23 20 / 6%), 0 8px 24px rgb(26 23 20 / 6%);
+  --transicao: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: var(--f-corpo);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--f-display);
+  font-weight: 400;
+  line-height: 1.15;
+  margin: 0;
+}
+
+/* Nunca removido. O anel de foco é a única forma de saber onde se está sem mouse,
+ * e a fila de aprovação é operável inteira pelo teclado. */
+:focus-visible {
+  outline: 3px solid var(--verde);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button,
+a {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Dinheiro, id, token e latência. Alinhados e conferíveis caractere a caractere. */
+.mono {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Um valor ausente é um traço, e o motivo vai no `title`. Nunca zero — o zero
+ * mentiroso é o que o ADR-015 recusa, e ele começa no backend e termina aqui. */
+.ausente {
+  color: var(--tinta-suave);
+  font-family: var(--f-mono);
+}
+
+.rotulo {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+/* Rótulo que é FRASE, e não etiqueta.
+ *
+ * A mono maiúscula com tracking funciona em "PEDIDOS" e vira sopa em "TEMPO ATÉ A
+ * RESPOSTA COMEÇAR A APARECER" — que é exatamente o tipo de rótulo que o painel
+ * passou a usar quando cada indicador ganhou nome de gente. Etiqueta curta continua
+ * mono; título de seção e rótulo de gráfico usam a fonte do corpo. */
+.rotulo--frase {
+  font-family: var(--f-corpo);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--tinta);
+}
+
+/* -------------------------------------------------------------- estados
+ * Cor + ícone + palavra, sempre. Nenhum estado se distingue só por matiz —
+ * é acessibilidade e é também requisito de demo projetada. */
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.estado--ok {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.estado--espera {
+  background: var(--ocre-fundo);
+  color: var(--ocre);
+}
+
+.estado--recusa {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.estado--neutro {
+  background: var(--linha);
+  color: var(--tinta-suave);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

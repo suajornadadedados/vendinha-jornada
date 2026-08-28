@@ -63,6 +63,22 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha"
 
+    # De onde o navegador pode chamar esta API (S-07). Lista separada por vírgula.
+    #
+    # Até a S-07 não havia middleware nenhum no app, e não fazia falta: o único
+    # cliente era `curl` e o runner de evals. Um navegador é outra coisa — sem
+    # `Access-Control-Allow-Origin` o painel recebe erro de rede numa API que está
+    # perfeitamente de pé, que é a falha mais confusa de diagnosticar do conjunto.
+    #
+    # Origem explícita e nunca `*`: com credencial no header (`X-Operador-Token`),
+    # curinga é o que transforma qualquer página aberta pelo operador num cliente
+    # do painel dele.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def origens_permitidas(self) -> list[str]:
+        return [origem.strip() for origem in self.cors_origins.split(",") if origem.strip()]
+
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
     #
     # **Pinned to a dated snapshot, and that is the R7 line itself.** The plain

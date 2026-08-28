@@ -13,13 +13,14 @@ one thing while the emitter reads another. Reuse is not laziness here, it is the
 requirement (RF-3.2).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 
 from vendinha.pedidos import ComposicaoDoPedido, Endereco
+from vendinha.tools.composicao import ComposicaoValidada
 
 # `strip_whitespace` before `min_length` is the whole point: a message of three
 # spaces is an empty message, and refusing it in the contract keeps the check out
@@ -63,6 +64,17 @@ class TokenEvent(BaseModel):
     """
 
     text: str
+    fala: int = Field(
+        default=0,
+        description=(
+            "Qual fala do atendente este pedaço continua, dentro deste turno. Um turno "
+            "produz VÁRIAS falas quando o agente chama tools no meio ('vou consultar os "
+            "preços' → tool → 'aqui está'), e sem este número o cliente não tem como "
+            "saber onde uma acaba e a outra começa: a tela emendava as duas no mesmo "
+            "balão, saindo 'consultar os preços:Perfeito! Aqui'. Índice e não booleano "
+            "porque um evento perdido no meio deixaria o booleano mentindo para sempre."
+        ),
+    )
 
 
 class DoneEvent(BaseModel):
@@ -242,3 +254,330 @@ class DecisaoRegistrada(BaseModel):
         default=None, description="Preenchido quando a emissão já aconteceu."
     )
     chave_da_nota: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Os eventos do painel (S-07)
+#
+# Ficam aqui, e não em `eventos.py`, porque são contrato de fronteira como todo o
+# resto deste arquivo: eles saem por SSE e viram tipos TypeScript. Espalhar eventos
+# de SSE por dois módulos deixaria `SessionEvent` e `TokenEvent` de um lado e estes
+# do outro, sem que a divisão dissesse nada.
+#
+# `tipo` é literal em todos e é o discriminador da união — e é também o nome do
+# `event:` na linha do SSE, para que o cliente não precise inspecionar o corpo para
+# saber o que chegou.
+# ---------------------------------------------------------------------------
+
+
+class SessaoIniciada(BaseModel):
+    """Uma conversa nova apareceu. É o que faz a linha surgir na lista do painel."""
+
+    tipo: Literal["sessao_iniciada"] = "sessao_iniciada"
+    em: datetime
+    session_id: str
+    canal: str
+
+
+class MensagemRegistrada(BaseModel):
+    """Uma fala completa, do cliente ou do atendente.
+
+    O painel recebe a fala do atendente **inteira**, no fim do turno, e não token a
+    token como o cliente. O cliente espera a frase se formar porque é a conversa
+    dele; o operador está olhando uma lista de conversas, e streaming em todas ao
+    mesmo tempo é ruído que nenhuma decisão usa.
+    """
+
+    tipo: Literal["mensagem"] = "mensagem"
+    em: datetime
+    session_id: str
+    papel: Literal["cliente", "atendente"]
+    texto: str
+
+
+class ComposicaoAvaliada(BaseModel):
+    """O veredito do validador, **como ele voltou** — nunca reprojetado.
+
+    É o evento que carrega a regra de ouro até a tela: o modelo propôs, o código
+    respondeu isto, e o painel mostra a resposta do código. Reprojetar aqui seria
+    dar ao painel a chance de discordar do validador.
+    """
+
+    tipo: Literal["composicao_avaliada"] = "composicao_avaliada"
+    em: datetime
+    session_id: str
+    veredito: ComposicaoValidada
+
+
+class PedidoAtualizado(BaseModel):
+    """O pedido mudou de estado. `session_id` é o que permite avisar o cliente."""
+
+    tipo: Literal["pedido_atualizado"] = "pedido_atualizado"
+    em: datetime
+    pedido_id: str
+    session_id: str | None = None
+    status: str
+    total: Decimal
+    razao_social: str
+    url_pagamento: str | None = Field(
+        default=None,
+        description=(
+            "O link do gateway, quando já existe. Vai no evento porque a REQ-8 pede "
+            "o link RENDERIZADO no widget, e um link que só existe no meio da frase "
+            "do atendente obriga o cliente a caçá-lo no histórico."
+        ),
+    )
+
+
+class AprovacaoPendente(BaseModel):
+    """Uma nota entrou na fila e espera decisão humana. É a notificação do HITL.
+
+    Deliberadamente magro: id, valor e razão social — o bastante para o sino tocar
+    com contexto. O detalhe que autoriza a decisão continua vindo de
+    `GET /operador/fila`, que é a projeção que o RF-3.2 governa. Um evento gordo
+    seria uma segunda projeção da nota, e a que fica velha.
+    """
+
+    tipo: Literal["aprovacao_pendente"] = "aprovacao_pendente"
+    em: datetime
+    pedido_id: str
+    total: Decimal
+    razao_social: str
+
+
+class NotaDecidida(BaseModel):
+    """A decisão saiu. Com `session_id`, é o que faz o cartão da NF aparecer no chat."""
+
+    tipo: Literal["nota_decidida"] = "nota_decidida"
+    em: datetime
+    pedido_id: str
+    session_id: str | None = None
+    decisao: Literal["aprovada", "rejeitada"]
+    numero_nota: int | None = None
+    motivo: str | None = None
+
+
+class AtrasoNoStream(BaseModel):
+    """Eventos foram descartados porque este assinante não os consumiu a tempo.
+
+    Existe para que a tela possa dizer *"você perdeu N atualizações, recarregando"*
+    em vez de seguir exibindo um estado furado. É o preço da fila limitada, e a
+    alternativa — bloquear quem publica — faria um painel lento segurar a resposta
+    de um cliente.
+    """
+
+    tipo: Literal["atraso"] = "atraso"
+    em: datetime
+    perdidos: int
+
+
+EventoDoPainel = Annotated[
+    SessaoIniciada
+    | MensagemRegistrada
+    | ComposicaoAvaliada
+    | PedidoAtualizado
+    | AprovacaoPendente
+    | NotaDecidida
+    | AtrasoNoStream,
+    Field(discriminator="tipo"),
+]
+
+
+# ---------------------------------------------------------------------------
+# O painel (S-07, ADR-015) — tudo leitura, tudo já somado no backend.
+#
+# A regra que governa esta seção: se um número aparece aqui, ele foi calculado em
+# `Decimal` no servidor. O frontend formata; não soma. É métrica da spec, e é a
+# forma mais fácil de furar a regra de ouro sem ninguém notar no diff.
+# ---------------------------------------------------------------------------
+
+
+class MensagemDaConversa(BaseModel):
+    """Uma fala da conversa, lida do checkpointer — não de uma cópia nossa.
+
+    `ferramenta` e `argumentos` existem para a tela de rastreabilidade: é ali que se
+    vê **o que o modelo propôs** ao lado do que o código respondeu. Sem os
+    argumentos, a proposta do modelo some e sobra só o veredito.
+    """
+
+    papel: Literal["cliente", "atendente", "ferramenta"]
+    texto: str
+    ferramenta: str | None = None
+    argumentos: str | None = None
+
+
+class CustoApurado(BaseModel):
+    """O custo como a tela deve exibi-lo — inclusive quando não dá para saber.
+
+    `completo` é falso quando algum modelo não tem preço ou algum turno não
+    informou consumo. A tela que ignora esse campo apresenta um parcial como total,
+    que é o modo de falha que o ADR-015 nomeia.
+    """
+
+    usd: Decimal | None = None
+    brl: Decimal | None = None
+    completo: bool = True
+    modelos_sem_preco: tuple[str, ...] = ()
+    turnos_sem_uso: int = 0
+
+
+class UsoPorModelo(BaseModel):
+    modelo: str
+    tokens_entrada: int
+    tokens_saida: int
+    turnos: int
+
+
+class ConversaNaLista(BaseModel):
+    """Uma linha da lista de conversas."""
+
+    session_id: str
+    canal: str
+    iniciada_em: datetime
+    ultima_atividade: datetime
+    turnos: int
+    erros: int
+    custo: CustoApurado
+    pedido_id: str | None = None
+    status_do_pedido: str | None = None
+
+
+class PaginaDeConversas(BaseModel):
+    conversas: tuple[ConversaNaLista, ...]
+
+
+class TurnoDoPainel(BaseModel):
+    """Um turno com o que ele custou e quanto o cliente esperou."""
+
+    modelo: str
+    tokens_entrada: int | None = None
+    tokens_saida: int | None = None
+    primeiro_token_ms: int | None = None
+    duracao_ms: int
+    iniciado_em: datetime
+    erro: bool
+    custo: CustoApurado
+
+
+class VeredictoNoPainel(BaseModel):
+    """Uma passagem pelo validador, como ele a devolveu."""
+
+    aprovada: bool
+    tipo_de_evento: str
+    pessoas: int
+    total: Decimal
+    valor_por_pessoa: Decimal
+    motivos: tuple[str, ...] = ()
+    avaliado_em: datetime
+
+
+class DetalheDaConversa(BaseModel):
+    """A conversa inteira para a tela de rastreabilidade."""
+
+    resumo: ConversaNaLista
+    mensagens: tuple[MensagemDaConversa, ...]
+    turnos: tuple[TurnoDoPainel, ...]
+    vereditos: tuple[VeredictoNoPainel, ...]
+    uso: tuple[UsoPorModelo, ...]
+    mensagens_indisponiveis: bool = Field(
+        default=False,
+        description=(
+            "Verdadeiro quando o checkpointer não devolveu a conversa. A tela diz "
+            "isso em vez de mostrar uma conversa vazia como se fosse curta."
+        ),
+    )
+
+
+class PedidoNoPainel(BaseModel):
+    """Um pedido como a tela de pedidos o lista e detalha."""
+
+    pedido_id: str
+    criado_em: datetime
+    status: str
+    total: Decimal
+    razao_social: str
+    cnpj: str
+    url_pagamento: str | None = None
+    composicoes: tuple[ComposicaoDoPedido, ...] = ()
+    status_nf: str
+    numero_nota: int | None = None
+    url_danfe: str | None = None
+    url_xml: str | None = None
+
+
+class PaginaDePedidos(BaseModel):
+    pedidos: tuple[PedidoNoPainel, ...]
+
+
+class RecusaDoValidador(BaseModel):
+    motivo: str
+    recusas: int
+
+
+class Metricas(BaseModel):
+    """Os KPIs da janela. Cada número já somado, e cada ausência explícita."""
+
+    janela: str
+    desde: datetime
+
+    conversas: int
+    conversas_com_pedido: int
+    taxa_de_conversao: Decimal | None = None
+    turnos: int
+    turnos_por_conversa: Decimal | None = None
+    atendimento_medio_ms: int | None = None
+    erros_de_stream: int
+
+    uso: tuple[UsoPorModelo, ...] = ()
+    custo: CustoApurado = CustoApurado()
+
+    primeiro_token_p50_ms: int | None = None
+    primeiro_token_p95_ms: int | None = None
+    primeiro_token_alvo_ms: int = Field(
+        default=3000, description="RNF-4. Vai no contrato para a régua aparecer na tela."
+    )
+
+    pedidos: int
+    receita: Decimal
+    ticket_medio: Decimal | None = None
+    custo_sobre_ticket: Decimal | None = Field(
+        default=None,
+        description=(
+            "Custo de LLM como fração da receita. `None` sem cotação do dólar "
+            "configurada — comparar dólar com real por uma taxa inventada seria pior "
+            "que não comparar."
+        ),
+    )
+
+    fila_pendentes: int
+    decisoes: int
+    aprovadas: int
+    taxa_de_aprovacao: Decimal | None = None
+
+    recusas_do_validador: tuple[RecusaDoValidador, ...] = ()
+
+
+class PromptVigente(BaseModel):
+    """Um prompt do agente, em modo leitura. Nunca editável — ADR-015.
+
+    `sha` é do texto, não do arquivo: é o que permite conferir numa demo que o
+    prompt em memória é o do commit, sem abrir o repositório.
+    """
+
+    subagent: str
+    texto: str
+    arquivo: str
+    sha: str
+    ferramentas: tuple[str, ...] = ()
+
+
+class PromptsDoAgente(BaseModel):
+    prompts: tuple[PromptVigente, ...]
+    editavel: Literal[False] = Field(
+        default=False,
+        description=(
+            "Sempre falso, em todo ambiente. Prompt muda por PR com evals — editá-lo "
+            "em runtime contornaria o portão do ADR-014 (ADR-015)."
+        ),
+    )
+    tabela_de_precos_atualizada_em: date | None = None

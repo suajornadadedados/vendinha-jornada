@@ -1,0 +1,3144 @@
+{
+  "components": {
+    "schemas": {
+      "AprovacaoPendente": {
+        "description": "Uma nota entrou na fila e espera decisão humana. É a notificação do HITL.\n\nDeliberadamente magro: id, valor e razão social — o bastante para o sino tocar\ncom contexto. O detalhe que autoriza a decisão continua vindo de\n`GET /operador/fila`, que é a projeção que o RF-3.2 governa. Um evento gordo\nseria uma segunda projeção da nota, e a que fica velha.",
+        "properties": {
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          },
+          "razao_social": {
+            "title": "Razao Social",
+            "type": "string"
+          },
+          "tipo": {
+            "const": "aprovacao_pendente",
+            "default": "aprovacao_pendente",
+            "title": "Tipo",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "required": [
+          "em",
+          "pedido_id",
+          "total",
+          "razao_social"
+        ],
+        "title": "AprovacaoPendente",
+        "type": "object"
+      },
+      "AtrasoNoStream": {
+        "description": "Eventos foram descartados porque este assinante não os consumiu a tempo.\n\nExiste para que a tela possa dizer *\"você perdeu N atualizações, recarregando\"*\nem vez de seguir exibindo um estado furado. É o preço da fila limitada, e a\nalternativa — bloquear quem publica — faria um painel lento segurar a resposta\nde um cliente.",
+        "properties": {
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "perdidos": {
+            "title": "Perdidos",
+            "type": "integer"
+          },
+          "tipo": {
+            "const": "atraso",
+            "default": "atraso",
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "em",
+          "perdidos"
+        ],
+        "title": "AtrasoNoStream",
+        "type": "object"
+      },
+      "ChatRequest": {
+        "description": "One customer turn.",
+        "properties": {
+          "message": {
+            "description": "O que o cliente escreveu.",
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Modelo a usar, no formato `provedor:modelo`. Precisa estar entre os que `GET /models` devolve — texto livre aqui deixaria o cliente escolher para qual fornecedor o servidor autentica e quanto gasta (ADR-012).",
+            "title": "Model"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Identificador da conversa. Ausente na primeira mensagem: o servidor gera um e devolve no primeiro evento do stream.",
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ComposicaoAvaliada": {
+        "description": "O veredito do validador, **como ele voltou** — nunca reprojetado.\n\nÉ o evento que carrega a regra de ouro até a tela: o modelo propôs, o código\nrespondeu isto, e o painel mostra a resposta do código. Reprojetar aqui seria\ndar ao painel a chance de discordar do validador.",
+        "properties": {
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tipo": {
+            "const": "composicao_avaliada",
+            "default": "composicao_avaliada",
+            "title": "Tipo",
+            "type": "string"
+          },
+          "veredito": {
+            "$ref": "#/components/schemas/ComposicaoValidada"
+          }
+        },
+        "required": [
+          "em",
+          "session_id",
+          "veredito"
+        ],
+        "title": "ComposicaoAvaliada",
+        "type": "object"
+      },
+      "ComposicaoDoPedido": {
+        "additionalProperties": false,
+        "description": "Uma composição já validada pelo servidor, do jeito que ela é persistida.",
+        "properties": {
+          "itens": {
+            "items": {
+              "$ref": "#/components/schemas/ItemDoPedido"
+            },
+            "minItems": 1,
+            "title": "Itens",
+            "type": "array"
+          },
+          "orcamento_por_pessoa": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orcamento Por Pessoa"
+          },
+          "pessoas": {
+            "minimum": 1.0,
+            "title": "Pessoas",
+            "type": "integer"
+          },
+          "restricoes": {
+            "default": [],
+            "items": {
+              "enum": [
+                "lactose",
+                "gluten",
+                "ovos",
+                "castanhas",
+                "amendoim",
+                "alcool",
+                "acucar"
+              ],
+              "type": "string"
+            },
+            "title": "Restricoes",
+            "type": "array"
+          },
+          "tipo_de_evento": {
+            "$ref": "#/components/schemas/TipoDeEvento"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          },
+          "valor_por_pessoa": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor Por Pessoa",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tipo_de_evento",
+          "pessoas",
+          "itens",
+          "total",
+          "valor_por_pessoa"
+        ],
+        "title": "ComposicaoDoPedido",
+        "type": "object"
+      },
+      "ComposicaoValidada": {
+        "description": "O veredito, do jeito que o modelo o lê.\n\nOs nomes `total_composicao`, `valor_por_pessoa` e `problemas_composicao` são os\nque o corpus de `evals/` já usa em `fatos_ancorados` — o vocabulário do caso é de\nquem define a régua, e a tool se ajusta a ele, não o contrário.\n\n`orcamento_por_pessoa` e `excedente_por_pessoa` voltam no retorno de propósito.\nSão dinheiro, e todo valor em dinheiro que o modelo disser ao cliente tem que ter\nsaído de uma tool: o teto e o estouro repetidos de memória seriam preço sem\norigem, mesmo quando certos (`groundedness._precos_divergentes`, RF-1.3).",
+        "properties": {
+          "aprovada": {
+            "title": "Aprovada",
+            "type": "boolean"
+          },
+          "atende_pessoas": {
+            "title": "Atende Pessoas",
+            "type": "integer"
+          },
+          "excedente_por_pessoa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Excedente Por Pessoa"
+          },
+          "itens": {
+            "items": {
+              "$ref": "#/components/schemas/ItemDaComposicao"
+            },
+            "title": "Itens",
+            "type": "array"
+          },
+          "orcamento_por_pessoa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Orcamento Por Pessoa"
+          },
+          "pessoas": {
+            "title": "Pessoas",
+            "type": "integer"
+          },
+          "problemas_composicao": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProblemaDaComposicao"
+            },
+            "title": "Problemas Composicao",
+            "type": "array"
+          },
+          "tipo_de_evento": {
+            "title": "Tipo De Evento",
+            "type": "string"
+          },
+          "total_composicao": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Total Composicao"
+          },
+          "valor_por_pessoa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Valor Por Pessoa"
+          }
+        },
+        "required": [
+          "aprovada",
+          "tipo_de_evento",
+          "pessoas",
+          "atende_pessoas",
+          "itens",
+          "total_composicao",
+          "valor_por_pessoa"
+        ],
+        "title": "ComposicaoValidada",
+        "type": "object"
+      },
+      "ConfigResponse": {
+        "description": "The configuration as the API is allowed to describe it. No secrets, ever.",
+        "properties": {
+          "editable": {
+            "description": "Se este ambiente aceita gravar configuracao. Fora de APP_ENV=local e `false` ate existir autenticacao — a rota guarda credencial (S-02, D-8).",
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "encryption_ready": {
+            "description": "Se CONFIG_ENCRYPTION_KEY esta definida. Sem ela, gravar chave e recusado.",
+            "title": "Encryption Ready",
+            "type": "boolean"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderStatus"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "selected_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Model"
+          }
+        },
+        "required": [
+          "selected_model",
+          "providers",
+          "editable",
+          "encryption_ready"
+        ],
+        "title": "ConfigResponse",
+        "type": "object"
+      },
+      "ConfigUpdate": {
+        "description": "What the operator may change. Both fields optional, at least one required.",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Credencial do provedor. Nunca volta em nenhuma resposta.",
+            "title": "Api Key"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Modelo default, `provedor:modelo`.",
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "anthropic | openai",
+            "title": "Provider"
+          }
+        },
+        "title": "ConfigUpdate",
+        "type": "object"
+      },
+      "ConversaNaLista": {
+        "description": "Uma linha da lista de conversas.",
+        "properties": {
+          "canal": {
+            "title": "Canal",
+            "type": "string"
+          },
+          "custo": {
+            "$ref": "#/components/schemas/CustoApurado"
+          },
+          "erros": {
+            "title": "Erros",
+            "type": "integer"
+          },
+          "iniciada_em": {
+            "format": "date-time",
+            "title": "Iniciada Em",
+            "type": "string"
+          },
+          "pedido_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pedido Id"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status_do_pedido": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Do Pedido"
+          },
+          "turnos": {
+            "title": "Turnos",
+            "type": "integer"
+          },
+          "ultima_atividade": {
+            "format": "date-time",
+            "title": "Ultima Atividade",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "canal",
+          "iniciada_em",
+          "ultima_atividade",
+          "turnos",
+          "erros",
+          "custo"
+        ],
+        "title": "ConversaNaLista",
+        "type": "object"
+      },
+      "CustoApurado": {
+        "description": "O custo como a tela deve exibi-lo — inclusive quando não dá para saber.\n\n`completo` é falso quando algum modelo não tem preço ou algum turno não\ninformou consumo. A tela que ignora esse campo apresenta um parcial como total,\nque é o modo de falha que o ADR-015 nomeia.",
+        "properties": {
+          "brl": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brl"
+          },
+          "completo": {
+            "default": true,
+            "title": "Completo",
+            "type": "boolean"
+          },
+          "modelos_sem_preco": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Modelos Sem Preco",
+            "type": "array"
+          },
+          "turnos_sem_uso": {
+            "default": 0,
+            "title": "Turnos Sem Uso",
+            "type": "integer"
+          },
+          "usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd"
+          }
+        },
+        "title": "CustoApurado",
+        "type": "object"
+      },
+      "DadosDoEvento": {
+        "description": "O `data` da notificação do Mercado Pago: o id do pagamento, e nada mais.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DadosDoEvento",
+        "type": "object"
+      },
+      "DecisaoDoOperador": {
+        "description": "O corpo de aprovar e de rejeitar. Um contrato para as duas rotas.\n\n`motivo` é opcional aqui e **obrigatório na rejeição** — quem impõe isso é\n`fiscal.Aprovacao`, não esta classe. Duas classes quase iguais fariam o cliente\nTypeScript da S-07 ter dois tipos para o mesmo formulário, e a regra continuaria\nvalendo no servidor de qualquer jeito.",
+        "properties": {
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Obrigatório na rejeição — é o que o cliente recebe.",
+            "title": "Motivo"
+          },
+          "operador": {
+            "description": "Quem está decidindo. Gravado como veio: este projeto ainda não tem autenticação, então é uma declaração, não uma identidade provada.",
+            "minLength": 1,
+            "title": "Operador",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operador"
+        ],
+        "title": "DecisaoDoOperador",
+        "type": "object"
+      },
+      "DecisaoRegistrada": {
+        "description": "O que a rota responde depois de decidir — e o que **valeu**.\n\nPode não ser a decisão que acabou de chegar: a primeira vence (a chave primária\nde `aprovacao_de_nf`). Um segundo operador clicando em \"aprovar\" num pedido já\nrejeitado recebe de volta a rejeição, com quem e quando, em vez de um 200 que o\nfaria acreditar que aprovou.",
+        "properties": {
+          "chave_da_nota": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chave Da Nota"
+          },
+          "decidido_em": {
+            "format": "date-time",
+            "title": "Decidido Em",
+            "type": "string"
+          },
+          "decisao": {
+            "enum": [
+              "aprovada",
+              "rejeitada"
+            ],
+            "title": "Decisao",
+            "type": "string"
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo"
+          },
+          "numero_nota": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Preenchido quando a emissão já aconteceu.",
+            "title": "Numero Nota"
+          },
+          "operador": {
+            "title": "Operador",
+            "type": "string"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pedido_id",
+          "decisao",
+          "operador",
+          "decidido_em"
+        ],
+        "title": "DecisaoRegistrada",
+        "type": "object"
+      },
+      "DestinatarioDaNota": {
+        "description": "O comprador PJ como o operador precisa vê-lo para conferir a nota.\n\n**CNPJ em claro, e formatado.** É o oposto do que `mascarar_cnpj` faz no retorno\nde tool, e a diferença é o destinatário: lá o leitor é o modelo, e o número\nmascarado existe para não haver de onde copiá-lo para a resposta (ADR-007, R5).\nAqui o leitor é a pessoa que vai autorizar a emissão, e conferir o documento **é\no trabalho dela** — o `golden-011` rejeita uma nota justamente por um dado do\ndestinatário. Uma fila com o CNPJ mascarado pediria uma decisão sobre um dado que\nela não pode ler.",
+        "properties": {
+          "cnpj": {
+            "description": "Formatado, para conferência humana.",
+            "title": "Cnpj",
+            "type": "string"
+          },
+          "contato_email": {
+            "title": "Contato Email",
+            "type": "string"
+          },
+          "contato_nome": {
+            "title": "Contato Nome",
+            "type": "string"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          },
+          "inscricao_estadual": {
+            "description": "Como sairá na nota: a IE informada, ou ISENTO quando não houver.",
+            "title": "Inscricao Estadual",
+            "type": "string"
+          },
+          "razao_social": {
+            "title": "Razao Social",
+            "type": "string"
+          }
+        },
+        "required": [
+          "razao_social",
+          "cnpj",
+          "inscricao_estadual",
+          "contato_nome",
+          "contato_email",
+          "endereco"
+        ],
+        "title": "DestinatarioDaNota",
+        "type": "object"
+      },
+      "DetalheDaConversa": {
+        "description": "A conversa inteira para a tela de rastreabilidade.",
+        "properties": {
+          "mensagens": {
+            "items": {
+              "$ref": "#/components/schemas/MensagemDaConversa"
+            },
+            "title": "Mensagens",
+            "type": "array"
+          },
+          "mensagens_indisponiveis": {
+            "default": false,
+            "description": "Verdadeiro quando o checkpointer não devolveu a conversa. A tela diz isso em vez de mostrar uma conversa vazia como se fosse curta.",
+            "title": "Mensagens Indisponiveis",
+            "type": "boolean"
+          },
+          "resumo": {
+            "$ref": "#/components/schemas/ConversaNaLista"
+          },
+          "turnos": {
+            "items": {
+              "$ref": "#/components/schemas/TurnoDoPainel"
+            },
+            "title": "Turnos",
+            "type": "array"
+          },
+          "uso": {
+            "items": {
+              "$ref": "#/components/schemas/UsoPorModelo"
+            },
+            "title": "Uso",
+            "type": "array"
+          },
+          "vereditos": {
+            "items": {
+              "$ref": "#/components/schemas/VeredictoNoPainel"
+            },
+            "title": "Vereditos",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resumo",
+          "mensagens",
+          "turnos",
+          "vereditos",
+          "uso"
+        ],
+        "title": "DetalheDaConversa",
+        "type": "object"
+      },
+      "DoneEvent": {
+        "description": "End of stream. A client that never sees this one is still waiting.",
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "DoneEvent",
+        "type": "object"
+      },
+      "Endereco": {
+        "additionalProperties": false,
+        "description": "Onde a entrega chega — e o que a DANFE modelo 55 exige do destinatário.\n\nO B2C não coletava endereço, e o ADR-013 registra isso como furo que o pivô\nfechou: nota de destinatário PJ sem endereço não é nota fiel, é nota no que dava.",
+        "properties": {
+          "bairro": {
+            "minLength": 1,
+            "title": "Bairro",
+            "type": "string"
+          },
+          "cep": {
+            "minLength": 1,
+            "title": "Cep",
+            "type": "string"
+          },
+          "cidade": {
+            "minLength": 1,
+            "title": "Cidade",
+            "type": "string"
+          },
+          "complemento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complemento"
+          },
+          "logradouro": {
+            "minLength": 1,
+            "title": "Logradouro",
+            "type": "string"
+          },
+          "numero": {
+            "minLength": 1,
+            "title": "Numero",
+            "type": "string"
+          },
+          "uf": {
+            "minLength": 1,
+            "title": "Uf",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logradouro",
+          "numero",
+          "bairro",
+          "cidade",
+          "uf",
+          "cep"
+        ],
+        "title": "Endereco",
+        "type": "object"
+      },
+      "ErrorEvent": {
+        "description": "Something failed mid-stream, after the HTTP status was already sent as 200.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorEvent",
+        "type": "object"
+      },
+      "EventosDoChat": {
+        "description": "Reúne os quatro eventos de `/chat` para que entrem no schema.\n\nNão é um corpo que alguma rota devolva: é o veículo que leva os quatro modelos\naté `components.schemas`. Está declarado como classe, e não montado à mão em\ndicionário, para que ele não possa divergir dos modelos que a rota realmente\nemite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.",
+        "properties": {
+          "done": {
+            "$ref": "#/components/schemas/DoneEvent"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorEvent"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionEvent"
+          },
+          "token": {
+            "$ref": "#/components/schemas/TokenEvent"
+          }
+        },
+        "required": [
+          "session",
+          "token",
+          "error",
+          "done"
+        ],
+        "title": "EventosDoChat",
+        "type": "object"
+      },
+      "FilaDoOperador": {
+        "description": "A fila inteira, do mais antigo para o mais novo.",
+        "properties": {
+          "pendentes": {
+            "items": {
+              "$ref": "#/components/schemas/PedidoNaFila"
+            },
+            "title": "Pendentes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pendentes"
+        ],
+        "title": "FilaDoOperador",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "ItemDaComposicao": {
+        "description": "Uma linha da composição, com a quantidade que o código derivou.",
+        "properties": {
+          "nome": {
+            "title": "Nome",
+            "type": "string"
+          },
+          "preco_unitario": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Preco Unitario"
+          },
+          "produto_id": {
+            "title": "Produto Id",
+            "type": "string"
+          },
+          "quantidade": {
+            "title": "Quantidade",
+            "type": "integer"
+          },
+          "rendimento": {
+            "title": "Rendimento",
+            "type": "integer"
+          },
+          "subtotal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Subtotal"
+          },
+          "tipo": {
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "produto_id",
+          "nome",
+          "tipo",
+          "rendimento",
+          "quantidade",
+          "preco_unitario",
+          "subtotal"
+        ],
+        "title": "ItemDaComposicao",
+        "type": "object"
+      },
+      "ItemDoPedido": {
+        "additionalProperties": false,
+        "description": "Uma linha, congelada no preço que valia quando o pedido foi criado.",
+        "properties": {
+          "nome": {
+            "minLength": 1,
+            "title": "Nome",
+            "type": "string"
+          },
+          "preco_unitario": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Preco Unitario",
+            "type": "string"
+          },
+          "produto_id": {
+            "minLength": 1,
+            "title": "Produto Id",
+            "type": "string"
+          },
+          "quantidade": {
+            "minimum": 1.0,
+            "title": "Quantidade",
+            "type": "integer"
+          },
+          "rendimento": {
+            "minimum": 1.0,
+            "title": "Rendimento",
+            "type": "integer"
+          },
+          "subtotal": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Subtotal",
+            "type": "string"
+          },
+          "tipo": {
+            "enum": [
+              "queijo",
+              "cafe",
+              "doce",
+              "cachaca",
+              "licor",
+              "petisco"
+            ],
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "produto_id",
+          "nome",
+          "tipo",
+          "rendimento",
+          "quantidade",
+          "preco_unitario",
+          "subtotal"
+        ],
+        "title": "ItemDoPedido",
+        "type": "object"
+      },
+      "MensagemDaConversa": {
+        "description": "Uma fala da conversa, lida do checkpointer — não de uma cópia nossa.\n\n`ferramenta` e `argumentos` existem para a tela de rastreabilidade: é ali que se\nvê **o que o modelo propôs** ao lado do que o código respondeu. Sem os\nargumentos, a proposta do modelo some e sobra só o veredito.",
+        "properties": {
+          "argumentos": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Argumentos"
+          },
+          "ferramenta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ferramenta"
+          },
+          "papel": {
+            "enum": [
+              "cliente",
+              "atendente",
+              "ferramenta"
+            ],
+            "title": "Papel",
+            "type": "string"
+          },
+          "texto": {
+            "title": "Texto",
+            "type": "string"
+          }
+        },
+        "required": [
+          "papel",
+          "texto"
+        ],
+        "title": "MensagemDaConversa",
+        "type": "object"
+      },
+      "MensagemRegistrada": {
+        "description": "Uma fala completa, do cliente ou do atendente.\n\nO painel recebe a fala do atendente **inteira**, no fim do turno, e não token a\ntoken como o cliente. O cliente espera a frase se formar porque é a conversa\ndele; o operador está olhando uma lista de conversas, e streaming em todas ao\nmesmo tempo é ruído que nenhuma decisão usa.",
+        "properties": {
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "papel": {
+            "enum": [
+              "cliente",
+              "atendente"
+            ],
+            "title": "Papel",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "texto": {
+            "title": "Texto",
+            "type": "string"
+          },
+          "tipo": {
+            "const": "mensagem",
+            "default": "mensagem",
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "em",
+          "session_id",
+          "papel",
+          "texto"
+        ],
+        "title": "MensagemRegistrada",
+        "type": "object"
+      },
+      "Metricas": {
+        "description": "Os KPIs da janela. Cada número já somado, e cada ausência explícita.",
+        "properties": {
+          "aprovadas": {
+            "title": "Aprovadas",
+            "type": "integer"
+          },
+          "atendimento_medio_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atendimento Medio Ms"
+          },
+          "conversas": {
+            "title": "Conversas",
+            "type": "integer"
+          },
+          "conversas_com_pedido": {
+            "title": "Conversas Com Pedido",
+            "type": "integer"
+          },
+          "custo": {
+            "$ref": "#/components/schemas/CustoApurado",
+            "default": {
+              "completo": true,
+              "modelos_sem_preco": [],
+              "turnos_sem_uso": 0
+            }
+          },
+          "custo_sobre_ticket": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Custo de LLM como fração da receita. `None` sem cotação do dólar configurada — comparar dólar com real por uma taxa inventada seria pior que não comparar.",
+            "title": "Custo Sobre Ticket"
+          },
+          "decisoes": {
+            "title": "Decisoes",
+            "type": "integer"
+          },
+          "desde": {
+            "format": "date-time",
+            "title": "Desde",
+            "type": "string"
+          },
+          "erros_de_stream": {
+            "title": "Erros De Stream",
+            "type": "integer"
+          },
+          "fila_pendentes": {
+            "title": "Fila Pendentes",
+            "type": "integer"
+          },
+          "janela": {
+            "title": "Janela",
+            "type": "string"
+          },
+          "pedidos": {
+            "title": "Pedidos",
+            "type": "integer"
+          },
+          "primeiro_token_alvo_ms": {
+            "default": 3000,
+            "description": "RNF-4. Vai no contrato para a régua aparecer na tela.",
+            "title": "Primeiro Token Alvo Ms",
+            "type": "integer"
+          },
+          "primeiro_token_p50_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primeiro Token P50 Ms"
+          },
+          "primeiro_token_p95_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primeiro Token P95 Ms"
+          },
+          "receita": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Receita",
+            "type": "string"
+          },
+          "recusas_do_validador": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RecusaDoValidador"
+            },
+            "title": "Recusas Do Validador",
+            "type": "array"
+          },
+          "taxa_de_aprovacao": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxa De Aprovacao"
+          },
+          "taxa_de_conversao": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxa De Conversao"
+          },
+          "ticket_medio": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket Medio"
+          },
+          "turnos": {
+            "title": "Turnos",
+            "type": "integer"
+          },
+          "turnos_por_conversa": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnos Por Conversa"
+          },
+          "uso": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UsoPorModelo"
+            },
+            "title": "Uso",
+            "type": "array"
+          }
+        },
+        "required": [
+          "janela",
+          "desde",
+          "conversas",
+          "conversas_com_pedido",
+          "turnos",
+          "erros_de_stream",
+          "pedidos",
+          "receita",
+          "fila_pendentes",
+          "decisoes",
+          "aprovadas"
+        ],
+        "title": "Metricas",
+        "type": "object"
+      },
+      "ModelsResponse": {
+        "description": "What the picker in the UI is offered — read from the providers, not from memory.",
+        "properties": {
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "required": [
+          "models",
+          "selected"
+        ],
+        "title": "ModelsResponse",
+        "type": "object"
+      },
+      "NotaDecidida": {
+        "description": "A decisão saiu. Com `session_id`, é o que faz o cartão da NF aparecer no chat.",
+        "properties": {
+          "decisao": {
+            "enum": [
+              "aprovada",
+              "rejeitada"
+            ],
+            "title": "Decisao",
+            "type": "string"
+          },
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Motivo"
+          },
+          "numero_nota": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Numero Nota"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Id"
+          },
+          "tipo": {
+            "const": "nota_decidida",
+            "default": "nota_decidida",
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "em",
+          "pedido_id",
+          "decisao"
+        ],
+        "title": "NotaDecidida",
+        "type": "object"
+      },
+      "NotificacaoDePagamento": {
+        "description": "O corpo do webhook do Mercado Pago (S-04, RF-2.5).\n\n`extra=\"ignore\"` de propósito: o gateway acrescenta campos com o tempo, e uma\nnotificação recusada por um campo novo é um pagamento que fica sem efeito por\num motivo que nada tem a ver com dinheiro. O que precisa estar presente está\ntipado; o resto passa.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DadosDoEvento"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`payment` é o que nos interessa.",
+            "title": "Type"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "NotificacaoDePagamento",
+        "type": "object"
+      },
+      "PaginaDeConversas": {
+        "properties": {
+          "conversas": {
+            "items": {
+              "$ref": "#/components/schemas/ConversaNaLista"
+            },
+            "title": "Conversas",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversas"
+        ],
+        "title": "PaginaDeConversas",
+        "type": "object"
+      },
+      "PaginaDePedidos": {
+        "properties": {
+          "pedidos": {
+            "items": {
+              "$ref": "#/components/schemas/PedidoNoPainel"
+            },
+            "title": "Pedidos",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pedidos"
+        ],
+        "title": "PaginaDePedidos",
+        "type": "object"
+      },
+      "PedidoAtualizado": {
+        "description": "O pedido mudou de estado. `session_id` é o que permite avisar o cliente.",
+        "properties": {
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          },
+          "razao_social": {
+            "title": "Razao Social",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tipo": {
+            "const": "pedido_atualizado",
+            "default": "pedido_atualizado",
+            "title": "Tipo",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Total"
+          },
+          "url_pagamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "O link do gateway, quando já existe. Vai no evento porque a REQ-8 pede o link RENDERIZADO no widget, e um link que só existe no meio da frase do atendente obriga o cliente a caçá-lo no histórico.",
+            "title": "Url Pagamento"
+          }
+        },
+        "required": [
+          "em",
+          "pedido_id",
+          "status",
+          "total",
+          "razao_social"
+        ],
+        "title": "PedidoAtualizado",
+        "type": "object"
+      },
+      "PedidoNaFila": {
+        "description": "Um pedido esperando decisão, com os dados completos da nota (RF-3.2).\n\n`composicoes` são os **modelos persistidos**, reusados e não reprojetados. É\ndeliberado: o operador precisa ver item a item exatamente o que a nota vai ler,\ne uma segunda projeção do mesmo dado é a que fica velha — aprovando-se então uma\ncoisa e emitindo-se outra.",
+        "properties": {
+          "composicoes": {
+            "items": {
+              "$ref": "#/components/schemas/ComposicaoDoPedido"
+            },
+            "title": "Composicoes",
+            "type": "array"
+          },
+          "criado_em": {
+            "format": "date-time",
+            "title": "Criado Em",
+            "type": "string"
+          },
+          "destinatario": {
+            "$ref": "#/components/schemas/DestinatarioDaNota"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pedido_id",
+          "criado_em",
+          "total",
+          "destinatario",
+          "composicoes"
+        ],
+        "title": "PedidoNaFila",
+        "type": "object"
+      },
+      "PedidoNoPainel": {
+        "description": "Um pedido como a tela de pedidos o lista e detalha.",
+        "properties": {
+          "cnpj": {
+            "title": "Cnpj",
+            "type": "string"
+          },
+          "composicoes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ComposicaoDoPedido"
+            },
+            "title": "Composicoes",
+            "type": "array"
+          },
+          "criado_em": {
+            "format": "date-time",
+            "title": "Criado Em",
+            "type": "string"
+          },
+          "numero_nota": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Nota"
+          },
+          "pedido_id": {
+            "title": "Pedido Id",
+            "type": "string"
+          },
+          "razao_social": {
+            "title": "Razao Social",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_nf": {
+            "title": "Status Nf",
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          },
+          "url_danfe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Danfe"
+          },
+          "url_pagamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Pagamento"
+          },
+          "url_xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Xml"
+          }
+        },
+        "required": [
+          "pedido_id",
+          "criado_em",
+          "status",
+          "total",
+          "razao_social",
+          "cnpj",
+          "status_nf"
+        ],
+        "title": "PedidoNoPainel",
+        "type": "object"
+      },
+      "ProblemaDaComposicao": {
+        "description": "Um motivo de recusa, com o `motivo` tipado ao lado da frase.\n\nO motivo separado da mensagem é o que deixa `golden-014` ser verificável: uma\nreprovação por slot precisa ser distinguível de uma reprovação por preço sem que\nalguém tenha que interpretar o texto.",
+        "properties": {
+          "mensagem": {
+            "title": "Mensagem",
+            "type": "string"
+          },
+          "motivo": {
+            "title": "Motivo",
+            "type": "string"
+          },
+          "produto_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Produto Id"
+          }
+        },
+        "required": [
+          "motivo",
+          "mensagem"
+        ],
+        "title": "ProblemaDaComposicao",
+        "type": "object"
+      },
+      "PromptVigente": {
+        "description": "Um prompt do agente, em modo leitura. Nunca editável — ADR-015.\n\n`sha` é do texto, não do arquivo: é o que permite conferir numa demo que o\nprompt em memória é o do commit, sem abrir o repositório.",
+        "properties": {
+          "arquivo": {
+            "title": "Arquivo",
+            "type": "string"
+          },
+          "ferramentas": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Ferramentas",
+            "type": "array"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          },
+          "subagent": {
+            "title": "Subagent",
+            "type": "string"
+          },
+          "texto": {
+            "title": "Texto",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subagent",
+          "texto",
+          "arquivo",
+          "sha"
+        ],
+        "title": "PromptVigente",
+        "type": "object"
+      },
+      "PromptsDoAgente": {
+        "properties": {
+          "editavel": {
+            "const": false,
+            "default": false,
+            "description": "Sempre falso, em todo ambiente. Prompt muda por PR com evals — editá-lo em runtime contornaria o portão do ADR-014 (ADR-015).",
+            "title": "Editavel",
+            "type": "boolean"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptVigente"
+            },
+            "title": "Prompts",
+            "type": "array"
+          },
+          "tabela_de_precos_atualizada_em": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tabela De Precos Atualizada Em"
+          }
+        },
+        "required": [
+          "prompts"
+        ],
+        "title": "PromptsDoAgente",
+        "type": "object"
+      },
+      "ProviderStatus": {
+        "description": "Whether a provider can be used — and never how.\n\n`hint` is the last four characters of the key. Enough for a person to recognise\nwhich credential is in place, useless to anyone who wants to spend it.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "banco",
+              "ambiente",
+              "nenhuma"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "configured",
+          "source"
+        ],
+        "title": "ProviderStatus",
+        "type": "object"
+      },
+      "RecusaDoValidador": {
+        "properties": {
+          "motivo": {
+            "title": "Motivo",
+            "type": "string"
+          },
+          "recusas": {
+            "title": "Recusas",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "motivo",
+          "recusas"
+        ],
+        "title": "RecusaDoValidador",
+        "type": "object"
+      },
+      "SessaoIniciada": {
+        "description": "Uma conversa nova apareceu. É o que faz a linha surgir na lista do painel.",
+        "properties": {
+          "canal": {
+            "title": "Canal",
+            "type": "string"
+          },
+          "em": {
+            "format": "date-time",
+            "title": "Em",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tipo": {
+            "const": "sessao_iniciada",
+            "default": "sessao_iniciada",
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "em",
+          "session_id",
+          "canal"
+        ],
+        "title": "SessaoIniciada",
+        "type": "object"
+      },
+      "SessionEvent": {
+        "description": "First event of every stream, so the client can continue the conversation.",
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "SessionEvent",
+        "type": "object"
+      },
+      "TipoDeEvento": {
+        "description": "Os quatro eventos que a Vendinha monta (ADR-013).",
+        "enum": [
+          "cafe_da_manha",
+          "happy_hour",
+          "cesta_de_fim_de_ano",
+          "kit_boas_vindas"
+        ],
+        "title": "TipoDeEvento",
+        "type": "string"
+      },
+      "TokenEvent": {
+        "description": "One chunk of the answer.\n\nJSON-encoded rather than raw text on the SSE `data:` line: a token that happens\nto contain a newline would otherwise be split across two events and silently\nchange the message.",
+        "properties": {
+          "fala": {
+            "default": 0,
+            "description": "Qual fala do atendente este pedaço continua, dentro deste turno. Um turno produz VÁRIAS falas quando o agente chama tools no meio ('vou consultar os preços' → tool → 'aqui está'), e sem este número o cliente não tem como saber onde uma acaba e a outra começa: a tela emendava as duas no mesmo balão, saindo 'consultar os preços:Perfeito! Aqui'. Índice e não booleano porque um evento perdido no meio deixaria o booleano mentindo para sempre.",
+            "title": "Fala",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TokenEvent",
+        "type": "object"
+      },
+      "TurnoDoPainel": {
+        "description": "Um turno com o que ele custou e quanto o cliente esperou.",
+        "properties": {
+          "custo": {
+            "$ref": "#/components/schemas/CustoApurado"
+          },
+          "duracao_ms": {
+            "title": "Duracao Ms",
+            "type": "integer"
+          },
+          "erro": {
+            "title": "Erro",
+            "type": "boolean"
+          },
+          "iniciado_em": {
+            "format": "date-time",
+            "title": "Iniciado Em",
+            "type": "string"
+          },
+          "modelo": {
+            "title": "Modelo",
+            "type": "string"
+          },
+          "primeiro_token_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primeiro Token Ms"
+          },
+          "tokens_entrada": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Entrada"
+          },
+          "tokens_saida": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Saida"
+          }
+        },
+        "required": [
+          "modelo",
+          "duracao_ms",
+          "iniciado_em",
+          "erro",
+          "custo"
+        ],
+        "title": "TurnoDoPainel",
+        "type": "object"
+      },
+      "UsoPorModelo": {
+        "properties": {
+          "modelo": {
+            "title": "Modelo",
+            "type": "string"
+          },
+          "tokens_entrada": {
+            "title": "Tokens Entrada",
+            "type": "integer"
+          },
+          "tokens_saida": {
+            "title": "Tokens Saida",
+            "type": "integer"
+          },
+          "turnos": {
+            "title": "Turnos",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "modelo",
+          "tokens_entrada",
+          "tokens_saida",
+          "turnos"
+        ],
+        "title": "UsoPorModelo",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VeredictoNoPainel": {
+        "description": "Uma passagem pelo validador, como ele a devolveu.",
+        "properties": {
+          "aprovada": {
+            "title": "Aprovada",
+            "type": "boolean"
+          },
+          "avaliado_em": {
+            "format": "date-time",
+            "title": "Avaliado Em",
+            "type": "string"
+          },
+          "motivos": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Motivos",
+            "type": "array"
+          },
+          "pessoas": {
+            "title": "Pessoas",
+            "type": "integer"
+          },
+          "tipo_de_evento": {
+            "title": "Tipo De Evento",
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          },
+          "valor_por_pessoa": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor Por Pessoa",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aprovada",
+          "tipo_de_evento",
+          "pessoas",
+          "total",
+          "valor_por_pessoa",
+          "avaliado_em"
+        ],
+        "title": "VeredictoNoPainel",
+        "type": "object"
+      },
+      "WebhookProcessado": {
+        "description": "O que a rota responde. Sempre 200 quando a origem confere.\n\n`resultado` distingue o que aconteceu sem transformar duplicata em erro: um\ngateway que recebe 4xx ou 5xx reenvia o evento, e reenviar é justamente o que\na idempotência existe para tolerar.",
+        "properties": {
+          "resultado": {
+            "enum": [
+              "registrado",
+              "duplicado",
+              "ignorado"
+            ],
+            "title": "Resultado",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resultado"
+        ],
+        "title": "WebhookProcessado",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Agente de vendas do empório mineiro digital.",
+    "title": "Vendinha",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin/conversas": {
+      "get": {
+        "operationId": "conversas_admin_conversas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeConversas"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversas",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/conversas/{session_id}": {
+      "get": {
+        "operationId": "conversa_admin_conversas__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalheDaConversa"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversa",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/eventos": {
+      "get": {
+        "description": "O barramento, como SSE. É o que faz o painel dispensar polling.\n\nA autenticação acontece **antes** de abrir o stream, na função da rota, e\nnão dentro do gerador: um 401 emitido de dentro do stream já teria mandado\n200 na linha de status, e o cliente aprenderia a tratar não-autorizado como\nsucesso.",
+        "operationId": "eventos_do_painel_admin_eventos_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "aprovacao_pendente": "#/components/schemas/AprovacaoPendente",
+                      "atraso": "#/components/schemas/AtrasoNoStream",
+                      "composicao_avaliada": "#/components/schemas/ComposicaoAvaliada",
+                      "mensagem": "#/components/schemas/MensagemRegistrada",
+                      "nota_decidida": "#/components/schemas/NotaDecidida",
+                      "pedido_atualizado": "#/components/schemas/PedidoAtualizado",
+                      "sessao_iniciada": "#/components/schemas/SessaoIniciada"
+                    },
+                    "propertyName": "tipo"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SessaoIniciada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MensagemRegistrada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ComposicaoAvaliada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PedidoAtualizado"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AprovacaoPendente"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NotaDecidida"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AtrasoNoStream"
+                    }
+                  ],
+                  "title": "Painel"
+                }
+              }
+            },
+            "description": "Tudo que acontece no servidor, para o painel. O nome do `event:` é o campo `tipo`. Um `atraso` significa que este assinante perdeu eventos."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Eventos Do Painel",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/metricas": {
+      "get": {
+        "operationId": "metricas_admin_metricas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "janela",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Janela",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metricas"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metricas",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/pedidos": {
+      "get": {
+        "operationId": "lista_de_pedidos_admin_pedidos_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDePedidos"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lista De Pedidos",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/pedidos/{pedido_id}": {
+      "get": {
+        "operationId": "pedido_no_painel_admin_pedidos__pedido_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PedidoNoPainel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pedido No Painel",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/admin/prompts": {
+      "get": {
+        "description": "Os prompts vigentes, **em leitura**. Não existe rota que os escreva.\n\n`editavel` é um literal `False` no contrato, e não um booleano calculado:\no cliente TypeScript passa a ter o tipo `false`, e um botão de salvar nem\nchega a compilar. É a forma mais barata de manter a decisão do ADR-015\ndepois que alguém esquecer por que ela existe.",
+        "operationId": "prompts_admin_prompts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptsDoAgente"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prompts",
+        "tags": [
+          "painel"
+        ]
+      }
+    },
+    "/chat": {
+      "post": {
+        "operationId": "chat_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventosDoChat"
+                }
+              }
+            },
+            "description": "Stream do atendimento: `session` primeiro, `token` a cada pedaço da resposta, `error` quando falha depois do primeiro byte, e `done` sempre."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat"
+      }
+    },
+    "/config": {
+      "get": {
+        "operationId": "read_config_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Config"
+      },
+      "put": {
+        "operationId": "write_config_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Config"
+      }
+    },
+    "/eventos/sessao/{session_id}": {
+      "get": {
+        "description": "O push para o chat do cliente — e o que fecha a ressalva R-2 da S-05.\n\nO RF-3.6 diz que o cliente **recebe** a confirmação da nota. Até aqui ele\nperguntava e o agente consultava (S-05, D-8), e a verificação independente\nregistrou o estreitamento com a observação de que *\"a S-07 deveria fechar de\nverdade\"*. Com esta rota, aprovar no painel faz o cartão da NF aparecer no\nwidget sem que ninguém digite nada.\n\n**Sem token, e protegida pelo mesmo segredo que protege `nota.xml`:** o id\nopaco da sessão. Quem o tem é quem está na conversa. Exigir credencial aqui\nseria exigir login de um visitante anônimo para receber a própria nota.\n\n**O assinante é filtrado por sessão no barramento**, por inclusão explícita:\nsó chega o evento que carrega este `session_id`. Um evento sem sessão — a\nfila de aprovação, por exemplo — não vaza para cá por construção, e não por\numa lista de proibidos que alguém esquece de atualizar.",
+        "operationId": "eventos_da_sessao_eventos_sessao__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "aprovacao_pendente": "#/components/schemas/AprovacaoPendente",
+                      "atraso": "#/components/schemas/AtrasoNoStream",
+                      "composicao_avaliada": "#/components/schemas/ComposicaoAvaliada",
+                      "mensagem": "#/components/schemas/MensagemRegistrada",
+                      "nota_decidida": "#/components/schemas/NotaDecidida",
+                      "pedido_atualizado": "#/components/schemas/PedidoAtualizado",
+                      "sessao_iniciada": "#/components/schemas/SessaoIniciada"
+                    },
+                    "propertyName": "tipo"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SessaoIniciada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MensagemRegistrada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ComposicaoAvaliada"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PedidoAtualizado"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AprovacaoPendente"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NotaDecidida"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AtrasoNoStream"
+                    }
+                  ],
+                  "title": "Painel"
+                }
+              }
+            },
+            "description": "Só os eventos desta conversa — o barramento filtra por `session_id`. É o que faz a NF aparecer no chat sem o cliente perguntar."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Eventos Da Sessao"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/models": {
+      "get": {
+        "operationId": "models_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Models"
+      }
+    },
+    "/operador/fila": {
+      "get": {
+        "description": "Os pedidos pagos esperando decisao (RF-3.2, REQ-2).\n\nA fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja\npausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o\ngrafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que\nperde pedido em silencio.",
+        "operationId": "fila_do_operador_operador_fila_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilaDoOperador"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fila Do Operador"
+      }
+    },
+    "/operador/pedidos/{pedido_id}/aprovar": {
+      "post": {
+        "description": "Aprova e retoma o grafo, que entao emite (RF-3.3, REQ-3).\n\nRepare no que esta rota **nao** faz: ela nao emite. Ela grava a decisao e\nconduz o grafo; quem emite e `fiscal.emitir`, que rele a decisao do banco\nantes de agir. Parece um rodeio e e a garantia inteira — a autorizacao e o\nregistro, nunca a chamada.",
+        "operationId": "aprovar_a_nota_operador_pedidos__pedido_id__aprovar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisaoDoOperador"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisaoRegistrada"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Aprovar A Nota"
+      }
+    },
+    "/operador/pedidos/{pedido_id}/rejeitar": {
+      "post": {
+        "description": "Rejeita com motivo, e tira o pedido do caminho de emissao (RF-4.2).\n\nO motivo nao e burocracia: ele e o que o cliente le no chat quando pergunta\npela nota, por `consultar_pedido`. Uma rejeicao sem motivo vira silencio para\nquem pagou, e e o que o `golden-011` existe para nao deixar acontecer.",
+        "operationId": "rejeitar_a_nota_operador_pedidos__pedido_id__rejeitar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operador-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Operador-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisaoDoOperador"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisaoRegistrada"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rejeitar A Nota"
+      }
+    },
+    "/pagamento/mock/{pedido_id}": {
+      "get": {
+        "operationId": "pagina_de_pagamento_falsa_pagamento_mock__pedido_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pagina De Pagamento Falsa"
+      }
+    },
+    "/pagamento/mock/{pedido_id}/confirmar": {
+      "post": {
+        "operationId": "confirmar_pagamento_falso_pagamento_mock__pedido_id__confirmar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookProcessado"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirmar Pagamento Falso"
+      }
+    },
+    "/pedidos/{pedido_id}/nota.pdf": {
+      "get": {
+        "description": "A DANFE em PDF. `inline` para abrir no navegador, com nome ao salvar.",
+        "operationId": "danfe_da_nota_pedidos__pedido_id__nota_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Danfe Da Nota"
+      }
+    },
+    "/pedidos/{pedido_id}/nota.xml": {
+      "get": {
+        "description": "O XML da NF-e, para o contador da empresa compradora (RF-3.6, REQ-6).\n\n**Aberta por link, e o link e o id opaco do pedido** — mesmo raciocinio do\nlink de pagamento (S-04). Diferente da pagina do mock, este documento\n*carrega* dados do destinatario: e da natureza dele, e a alternativa seria\nautenticar o comprador, que e um sistema que este projeto ainda nao tem. O\n`uuid4` de `pedidos.novo_id` e o que sustenta a decisao, e ela esta escrita\naqui em vez de escondida.",
+        "operationId": "xml_da_nota_pedidos__pedido_id__nota_xml_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pedido_id",
+            "required": true,
+            "schema": {
+              "title": "Pedido Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Xml Da Nota"
+      }
+    },
+    "/webhooks/pagamento": {
+      "post": {
+        "description": "A confirmação de pagamento. Zero IA neste caminho (RF-2.5, R8).\n\nTrês decisões, e cada uma existe por causa de uma falha concreta.\n\n**Origem verificada antes de qualquer coisa.** Sem assinatura válida, 401 e\nnada acontece — inclusive quando o segredo não está configurado. O oposto\ntransformaria uma variável de ambiente esquecida num endpoint aberto que\nmuda o estado de um pedido pago.\n\n**Quem afirma que foi pago é o gateway, não o POST.** A notificação diz\n*\"olhe o pagamento 123\"*; o servidor pergunta ao gateway o que aconteceu\ncom ele e só então age. Confiar no corpo da requisição seria deixar o\nmensageiro decidir sobre dinheiro.\n\n**Duplicata responde 200.** Ela é comportamento normal de gateway, não\nfalha, e um 4xx faria o Mercado Pago reenviar para sempre o evento que já\nteve efeito. A idempotência de verdade está uma camada abaixo, na chave\nprimária de `evento_de_pagamento` — não num `SELECT` antes do `INSERT`,\nque é a corrida que dois webhooks simultâneos ganham.",
+        "operationId": "webhook_de_pagamento_webhooks_pagamento_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-signature",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Signature"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificacaoDePagamento"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookProcessado"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Webhook De Pagamento"
+      }
+    }
+  }
+}

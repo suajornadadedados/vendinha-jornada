@@ -38,7 +38,7 @@ make hooks                 # instala os portões locais (pre-commit)
 Para **conversar com o agente**, é preciso mais três passos e duas chaves de API:
 
 ```bash
-make db-setup              # cria as tabelas (checkpointer, config, produto, pedido, nota)
+make db-setup              # cria as tabelas (checkpointer, config, produto, pedido, nota, telemetria)
 make seed                  # carrega os 50 produtos no Postgres e no Qdrant
 make api                   # sobe a API em http://127.0.0.1:8000
 ```
@@ -54,6 +54,28 @@ Para **aprovar a nota fiscal** no fim do fluxo é preciso mais uma linha no `.en
 401 — é o lado seguro, porque essa fila lista dados de compradoras e autoriza uma emissão
 irreversível (S-05). O token vai no header `X-Operador-Token`; a nota que sai é um mock fiel,
 com tarja "SEM VALOR FISCAL", e nenhuma conta externa é necessária para chegar até ela.
+
+Para ver **as duas telas** — a landing onde o cliente é atendido e o painel onde o operador
+vê o atendimento acontecer — é preciso Node 22 e mais dois comandos, num segundo terminal:
+
+```bash
+make web-install           # npm install --prefix frontend
+make web                   # http://localhost:5173 (landing) e /admin (painel)
+```
+
+A porta 5173 é fixa (`strictPort`) porque ela está na allowlist de CORS do backend
+(`CORS_ORIGINS` no `.env`): cair para a 5174 em silêncio produziria um erro de CORS numa API
+perfeitamente de pé, que é a falha mais confusa de diagnosticar do conjunto.
+
+O painel pede o `OPERADOR_API_TOKEN` numa tela de conexão — **não há autenticação**, e o token
+vale só para a aba. É aceitável numa demo local e não é aceitável num host público; ver o
+ADR-015. O roteiro da demonstração das duas abas está em
+[`docs/specs/S-07-roteiro-de-demo.md`](docs/specs/S-07-roteiro-de-demo.md).
+
+O contrato entre os dois lados é **gerado**: `make types` roda
+`python -m vendinha.openapi` e regenera o cliente TypeScript a partir dele. O CI compara o
+resultado com o que está commitado, então mudar um campo no backend sem rodar `make types`
+quebra o build em vez de quebrar a tela.
 
 A API **recusa subir** se a tabela `produto` não existir ou estiver vazia, e a mensagem diz
 qual dos dois comandos falta. É deliberado: sem catálogo o atendente responde "não encontrei

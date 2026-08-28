@@ -198,6 +198,8 @@ class Fiscal(Protocol):
 
     async def decisoes_de(self, pedido_ids: Sequence[str]) -> dict[str, Aprovacao]: ...
 
+    async def decisoes_desde(self, desde: datetime) -> tuple[Aprovacao, ...]: ...
+
     async def proximo_numero(self) -> int: ...
 
     async def registrar_nota(self, emitida: NotaEmitida) -> NotaEmitida: ...
@@ -331,6 +333,31 @@ class PostgresFiscal:
             for linha in linhas
         }
 
+    async def decisoes_desde(self, desde: datetime) -> tuple[Aprovacao, ...]:
+        """As decisões de uma janela, para a taxa de aprovação do painel.
+
+        Por `decidido_em` e não pela data do pedido: a métrica é sobre o trabalho do
+        operador, e um pedido de terça decidido na quinta é trabalho de quinta.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (
+                await conn.execute(
+                    "SELECT pedido_id, decisao, operador, decidido_em, motivo"
+                    " FROM aprovacao_de_nf WHERE decidido_em >= %s ORDER BY decidido_em",
+                    (desde,),
+                )
+            ).fetchall()
+        return tuple(
+            Aprovacao(
+                pedido_id=str(linha[0]),
+                decisao=Decisao(linha[1]),
+                operador=str(linha[2]),
+                decidido_em=linha[3],
+                motivo=linha[4],
+            )
+            for linha in linhas
+        )
+
     async def proximo_numero(self) -> int:
         """`nextval` — e é por isso que a numeração é do banco e não do adapter.
 
@@ -437,6 +464,14 @@ class FiscalEmMemoria:
             for pedido_id in pedido_ids
             if pedido_id in self.decisoes
         }
+
+    async def decisoes_desde(self, desde: datetime) -> tuple[Aprovacao, ...]:
+        return tuple(
+            sorted(
+                (a for a in self.decisoes.values() if a.decidido_em >= desde),
+                key=lambda aprovacao: aprovacao.decidido_em,
+            )
+        )
 
     async def proximo_numero(self) -> int:
         self._ultimo_numero += 1
