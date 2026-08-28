@@ -48,12 +48,20 @@ de quem lê o relatório.
 """
 
 import json
+import re
 from collections.abc import Sequence
 from typing import Any, Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from vendinha.evals.caso import Caso
 from vendinha.evals.groundedness import Transcricao
@@ -123,6 +131,53 @@ Regras do seu trabalho:
 EstadoDoCriterio = Literal["atende", "nao_atende", "nao_aplicavel"]
 
 
+# A segunda trava do `nao_aplicavel`, e a que não depende de o modelo cooperar.
+#
+# A verificação independente da S-06 leu os sete `nao_aplicavel` da suíte inteira
+# contra a regra que o próprio juiz recebe, e achou três errados: dois no
+# `golden-004` (*"Emitir somente depois da aprovação do operador, com quem e quando
+# gravados"*, *"Emitir com destinatário PJ…"*) e um no `golden-011` (*"Manter o
+# pedido fora do caminho de emissão após a rejeição"*). Nos três, "a condição faltou
+# por conduta do agente" foi lida como "a condição não se aplica" — que é o escape
+# que o REQ-1 existe para recusar. Nenhum veredito virou naquela execução, porque os
+# casos já reprovavam por outro motivo; o próximo vira.
+#
+# Pedir de novo no prompt é a resposta que a Fase 0 já mediu e que já falhou — foi
+# ela que motivou o terceiro estado existir. Então a resposta é a mesma do REQ-1 um
+# nível abaixo: **estrutura**. Se o critério não escreve uma condição, o juiz não
+# pode dizer que ela não ocorreu, e o código rebaixa o veredito para `nao_atende` —
+# que é a mesma saída que o prompt já manda escolher na dúvida.
+#
+# As duas exclusões abaixo não são gramática geral: são as duas construções que o
+# corpus tem hoje e que carregam a palavra sem carregar a condição.
+_MARCADOR_DE_CONDICAO = re.compile(r"\b(se|caso|quando)\b", re.IGNORECASE)
+
+# "como se a compra estivesse encaminhada" é comparação, não condição.
+_COMPARATIVO = re.compile(r"\bcomo\s+se\b", re.IGNORECASE)
+
+# "com quem e quando gravados", "com quem, quando e motivo" — enumeração de
+# interrogativos pedindo metadado. É a que produziu o `nao_aplicavel` errado do
+# `golden-004`, e a que uma busca ingênua pela palavra deixaria passar.
+_ENUMERACAO_DE_INTERROGATIVOS = re.compile(
+    r"\bquem\b[\s,]*(?:e[\s,]*)?\bquando\b|\bquando\b[\s,]*(?:e[\s,]*)?\bquem\b",
+    re.IGNORECASE,
+)
+
+RECUSA_DE_NAO_APLICAVEL = "[nao_aplicavel recusado: o critério não escreve condição]"
+
+
+def traz_condicao_escrita(criterio: str) -> bool:
+    """O critério escreve uma condição, ou só contém a palavra?
+
+    Conferível no texto, sem chamar modelo nenhum — que é o ponto: se um critério é
+    condicional deixa de ser opinião do juiz sobre si mesmo e passa a ser fato do
+    corpus, escrito por quem redigiu o caso e legível por qualquer um.
+    """
+    texto = _COMPARATIVO.sub(" ", criterio)
+    texto = _ENUMERACAO_DE_INTERROGATIVOS.sub(" ", texto)
+    return bool(_MARCADOR_DE_CONDICAO.search(texto))
+
+
 class VeredictoDeCriterio(BaseModel):
     """O veredito de uma linha de `deve` ou `nao_deve`. Três estados, não dois.
 
@@ -148,6 +203,35 @@ class VeredictoDeCriterio(BaseModel):
         description="Citação curta da transcrição que sustenta o veredito, o que faltou, "
         "ou qual condição não ocorreu."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _nao_aplicavel_exige_condicao_escrita(cls, value: Any) -> Any:
+        """Critério sem condição escrita não pode voltar `nao_aplicavel`.
+
+        Rebaixa para `nao_atende` em vez de levantar: uma régua que reprova por
+        `ValidationError` troca o veredito de um caso por uma falha de
+        infraestrutura, e este arquivo já decidiu duas vezes que erro de forma do
+        juiz vira dado, não exceção. O rebaixamento é o que o prompt manda fazer
+        na dúvida — a diferença é que aqui não é pedido, é código.
+
+        A recusa vai **escrita na evidência**, e não silenciosa: quem lê o
+        relatório precisa ver que o juiz tentou o terceiro estado e o código não
+        deixou. Rebaixamento invisível seria o mesmo defeito do vazamento, virado
+        para o outro lado.
+        """
+        if not isinstance(value, dict):
+            return value
+        if value.get("veredito") != "nao_aplicavel":
+            return value
+        if traz_condicao_escrita(str(value.get("criterio") or "")):
+            return value
+
+        recusado = dict(value)
+        recusado["veredito"] = "nao_atende"
+        evidencia = str(value.get("evidencia") or "").strip()
+        recusado["evidencia"] = f"{RECUSA_DE_NAO_APLICAVEL} {evidencia}".strip()
+        return recusado
 
 
 class VeredictoDoJuiz(BaseModel):

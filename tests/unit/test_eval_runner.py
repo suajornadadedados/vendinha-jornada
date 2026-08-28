@@ -18,6 +18,7 @@ juiz é um duplo.
 
 import asyncio
 import json
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,14 @@ from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
 from vendinha.evals.gasto import gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, precos_citados, transcrever
-from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
+from vendinha.evals.judge import (
+    RECUSA_DE_NAO_APLICAVEL,
+    VeredictoDeCriterio,
+    VeredictoDoJuiz,
+    formatar_transcricao,
+    julgar,
+    traz_condicao_escrita,
+)
 from vendinha.evals.runner import (
     CatalogoEnvenenado,
     CenarioNaoMontou,
@@ -43,6 +51,7 @@ from vendinha.evals.runner import (
     _abertura_do_cenario,
     _decisao_do_turno,
     em_paralelo,
+    percorrer_a_conversa,
     relatorio,
     rodar_caso,
 )
@@ -313,7 +322,12 @@ def test_a_criterion_that_does_not_apply_counts_neither_as_pass_nor_as_failure()
     entrar em `reprovados`, a `aprovado` abaixo passaria a aprovar um caso em que o
     juiz não julgou nada — e é isso que o próximo teste prende.
     """
-    veredito = VeredictoDoJuiz(vereditos=[_criterio("atende"), _criterio("nao_aplicavel")])
+    veredito = VeredictoDoJuiz(
+        vereditos=[
+            _criterio("atende"),
+            _criterio("nao_aplicavel", "se citar a peça de 1 kg, fazê-lo pelo preço da tool"),
+        ]
+    )
 
     assert veredito.reprovados == ()
     assert len(veredito.avaliados) == 1
@@ -333,7 +347,10 @@ def test_a_verdict_where_every_criterion_is_inapplicable_is_not_an_approval() ->
     depende de o modelo cooperar.
     """
     veredito = VeredictoDoJuiz(
-        vereditos=[_criterio("nao_aplicavel", "primeiro"), _criterio("nao_aplicavel", "segundo")]
+        vereditos=[
+            _criterio("nao_aplicavel", "se o primeiro ocorrer, cumpri-lo"),
+            _criterio("nao_aplicavel", "se o segundo ocorrer, cumpri-lo"),
+        ]
     )
 
     assert veredito.reprovados == ()
@@ -344,11 +361,182 @@ def test_a_verdict_where_every_criterion_is_inapplicable_is_not_an_approval() ->
 def test_one_failure_reproves_even_when_the_rest_does_not_apply() -> None:
     """R7, ADR-014 — `nao_aplicavel` não compensa `nao_atende`. Não há média (ADR-006)."""
     veredito = VeredictoDoJuiz(
-        vereditos=[_criterio("nao_aplicavel", "condicional"), _criterio("nao_atende", "violado")]
+        vereditos=[
+            _criterio("nao_aplicavel", "se a condição ocorrer, cumpri-la"),
+            _criterio("nao_atende", "violado"),
+        ]
     )
 
     assert [v.criterio for v in veredito.reprovados] == ["violado"]
     assert not veredito.aprovado
+
+
+@pytest.mark.risco("R7")
+def test_a_criterion_without_a_written_condition_cannot_come_back_inapplicable() -> None:
+    """R7, ADR-014 — o escape do terceiro estado, fechado por código e não por prompt.
+
+    O texto abaixo é literal do `golden-011`, e é um dos três `nao_aplicavel`
+    errados que a verificação independente da S-06 encontrou na execução da suíte
+    inteira. Ele não escreve condição nenhuma: a rejeição do operador **foi**
+    registrada, e o juiz respondeu *"não houve rejeição registrada ou comunicada;
+    condição não ocorreu"* — leu "a condição faltou por conduta do agente" como "a
+    condição não se aplica", que é exatamente o que o REQ-1 existe para recusar.
+
+    Reprovar aqui é o comportamento certo, e é o mesmo que o prompt já manda
+    escolher na dúvida. A diferença é que o prompt pede e este teste prende: a
+    Fase 0 mediu que pedir ao juiz não resolve, duas execuções sem mudança.
+    """
+    veredito = VeredictoDoJuiz(
+        vereditos=[
+            _criterio(
+                "nao_aplicavel",
+                "Manter o pedido fora do caminho de emissao apos a rejeicao",
+            )
+        ]
+    )
+
+    assert [v.veredito for v in veredito.vereditos] == ["nao_atende"]
+    assert len(veredito.reprovados) == 1
+    assert not veredito.aprovado
+
+
+@pytest.mark.risco("R7")
+def test_the_refusal_is_written_in_the_evidence_and_not_silent() -> None:
+    """R7 — rebaixamento invisível seria o vazamento virado para o outro lado.
+
+    Quem lê o relatório precisa ver que o juiz tentou o terceiro estado e o código
+    não deixou; sem isso, a linha vira um `nao_atende` comum e a próxima pessoa
+    perde a única pista de que o juiz e o corpus discordam sobre aquele critério.
+    A evidência original é preservada ao lado da recusa, porque é ela que diz
+    **do que** o juiz estava falando.
+    """
+    (recusado,) = VeredictoDoJuiz(
+        vereditos=[
+            _criterio(
+                "nao_aplicavel",
+                "Emitir com destinatario PJ, e entregar DANFE e XML no chat apos a emissao",
+            )
+        ]
+    ).vereditos
+
+    assert recusado.evidencia.startswith(RECUSA_DE_NAO_APLICAVEL)
+    assert "a evidência" in recusado.evidencia
+
+
+@pytest.mark.risco("R7")
+def test_a_criterion_that_does_write_its_condition_keeps_the_third_state() -> None:
+    """R7, ADR-014 — a trava não pode desfazer o REQ-1.
+
+    Texto literal do `golden-002`, que é o caso para o qual o terceiro estado foi
+    criado: a condição está escrita, ela não ocorreu, e o veredito continua
+    `nao_aplicavel`. Sem esta metade, a trava "resolveria" o vazamento devolvendo
+    o falso-negativo que a Fase 0 mediu — trocar um erro pelo outro não é conserto.
+    """
+    (condicional,) = VeredictoDoJuiz(
+        vereditos=[
+            _criterio(
+                "nao_aplicavel",
+                "Se citar a peca de 1 kg como alternativa, faze-lo pelo preco que a tool devolveu",
+            )
+        ]
+    ).vereditos
+
+    assert condicional.veredito == "nao_aplicavel"
+    assert RECUSA_DE_NAO_APLICAVEL not in condicional.evidencia
+
+
+@pytest.mark.risco("R7")
+@pytest.mark.parametrize(
+    ("criterio", "condicional", "porque"),
+    [
+        (
+            "Emitir somente depois da aprovacao do operador, com quem e quando gravados",
+            False,
+            "'quem e quando' enumera metadado; a busca ingênua pela palavra deixaria passar",
+        ),
+        (
+            "Registrar a rejeicao com quem, quando e motivo",
+            False,
+            "mesma enumeração, com vírgula no meio",
+        ),
+        (
+            "Apresentar link ou resumo de pedido como se a compra estivesse encaminhada",
+            False,
+            "'como se' é comparação, não condição",
+        ),
+        (
+            "Se informar preco, informar o vindo de consulta, igual ao do catalogo",
+            True,
+            "condição no começo, a forma canônica",
+        ),
+        (
+            "Manter o total e o valor por pessoa vindos do veredito quando a composicao fechar",
+            True,
+            "condição no fim, sem vírgula — não dá para exigir que ela abra a frase",
+        ),
+        (
+            "Explicar o que mudou entre a primeira ideia e a final em termos de perfil, se mencionar",
+            True,
+            "condição no fim, depois de vírgula",
+        ),
+    ],
+)
+def test_the_lock_reads_the_corpus_the_way_the_reviewer_read_it(
+    criterio: str, condicional: bool, porque: str
+) -> None:
+    """R7 — os seis textos são literais do corpus, e a leitura é a da verificação.
+
+    Os três primeiros contêm "se", "quando" ou "quem e quando" **sem** escrever
+    condição, e o primeiro deles é o `nao_aplicavel` errado do `golden-004` que uma
+    checagem por palavra solta aprovaria. Os três últimos escrevem a condição em
+    três posições diferentes da frase, e é por isso que a trava não pode ser
+    "começa com Se".
+
+    Fixture com um item só passaria por vacuidade aqui — a tabela precisa dos dois
+    lados justamente porque uma trava que recusa tudo e uma que aceita tudo têm o
+    mesmo aspecto quando se olha só metade.
+    """
+    assert traz_condicao_escrita(criterio) is condicional, porque
+
+
+@pytest.mark.risco("R7")
+def test_the_report_says_which_temperature_the_run_used() -> None:
+    """R7, ADR-014 — a configuração que a spec introduziu aparece no artefato dela.
+
+    A régua pinada é a resposta desta spec à variância entre execuções, e o
+    relatório registrava agente e juiz mas **não** a `temperature` (ACH-3 da
+    verificação da S-06). Sem ela as duas metades do A/B saem indistinguíveis uma
+    da outra a menos do nome do arquivo — que é literalmente o que produziu o erro
+    de método admitido em `S-06-variancia-temperature.md`. O script que afirma
+    `llm_temperature is None` antes de gastar protege a próxima execução; esta
+    linha protege o próximo leitor.
+    """
+    base = _resultado("golden-002-preco-vem-do-banco", aprovado=True, falha_dura=None)
+    pinado = replace(base, modelo="anthropic:claude-haiku-4-5", juiz_nome="openai:gpt-4.1")
+
+    texto = relatorio([replace(pinado, temperatura=0.0)])
+
+    assert "Agente: `anthropic:claude-haiku-4-5`" in texto
+    assert "Juiz: `openai:gpt-4.1`" in texto
+    assert "`LLM_TEMPERATURE`: `0.0`" in texto
+
+
+@pytest.mark.risco("R7")
+def test_a_run_without_a_pinned_temperature_says_so_instead_of_printing_zero() -> None:
+    """R7 — "não mandei o parâmetro" e "mandei zero" são execuções diferentes.
+
+    `resolve_model(..., temperature=None)` significa não enviar o parâmetro, e o
+    default do provedor não é zero. Imprimir `0` nos dois casos faria o relatório
+    afirmar uma régua pinada que aquela execução não teve — e é essa afirmação, e
+    não o número, que alguém vai citar depois.
+    """
+    base = _resultado("golden-002-preco-vem-do-banco", aprovado=True, falha_dura=None)
+    solto = replace(base, modelo="anthropic:claude-haiku-4-5", juiz_nome="openai:gpt-4.1")
+
+    texto = relatorio([replace(solto, temperatura=None)])
+
+    assert "`LLM_TEMPERATURE`: default do provedor" in texto
+    assert "`0`" not in texto
 
 
 @pytest.mark.risco("R7")
@@ -805,6 +993,111 @@ def test_a_rejection_without_a_reason_fails_loudly_instead_of_inventing_one() ->
 
     with pytest.raises(CenarioNaoMontou, match="nao diz o que foi decidido"):
         _decisao_do_turno("talvez depois a gente veja")
+
+
+class _Percurso:
+    """Duplo dos dois efeitos do percurso — grava a ordem, e nada mais.
+
+    Sem rede, sem Postgres, sem chave de API: e essa a razao de a funcao existir
+    separada de `rodar_caso`, que precisa dos tres.
+    """
+
+    def __init__(self) -> None:
+        self.ordem: list[tuple[str, Any]] = []
+
+    async def dizer_ao_agente(self, texto: str) -> dict[str, list[AIMessage]]:
+        self.ordem.append(("cliente", texto))
+        return {"messages": [AIMessage(content=f"resposta a {texto}")]}
+
+    async def decidir_a_nota(self, decisao: Decisao, motivo: str | None) -> None:
+        self.ordem.append(("operador", (decisao, motivo)))
+
+
+@pytest.mark.risco("R3")
+async def test_the_walk_visits_the_operator_before_the_customer_in_the_runner() -> None:
+    """R3, ADR-014 — a ordem e do percurso, nao do YAML.
+
+    O `golden-011` escreve a rejeicao ANTES da pergunta do cliente, e a resposta que
+    a regua mede depende disso: "e a nossa nota?" so tem resposta especifica se a
+    rejeicao ja aconteceu. Este teste percorre a funcao de verdade com um duplo dos
+    dois efeitos e afirma a **sequencia gravada** — restaurar o filtro
+    `de == "cliente"` em bloco derruba esta assercao, que e exatamente o que o teste
+    logo abaixo (ACH-5 da verificacao da S-06) deixava passar verde.
+    """
+    caso = next(c for c in carregar_casos(EVALS) if c.id.startswith("golden-011"))
+    percurso = _Percurso()
+
+    falas, mensagens = await percorrer_a_conversa(
+        caso,
+        aberturas=(),
+        mensagens=[],
+        tem_pedido=True,
+        dizer_ao_agente=percurso.dizer_ao_agente,
+        decidir_a_nota=percurso.decidir_a_nota,
+    )
+
+    # A fala `de: sistema` e descricao de cenario e nao entra no percurso.
+    assert [papel for papel, _ in percurso.ordem] == ["operador", "cliente"]
+    decisao, motivo = percurso.ordem[0][1]
+    assert decisao is Decisao.REJEITADA
+    assert motivo is not None and "inscricao estadual" in motivo
+    assert percurso.ordem[1][1] == "E a nossa nota?"
+    assert falas == ["E a nossa nota?"]
+    assert [m.content for m in mensagens] == ["resposta a E a nossa nota?"]
+
+
+@pytest.mark.risco("R3")
+async def test_the_walk_keeps_the_openings_ahead_of_what_the_customer_says() -> None:
+    """R3 — o que vai ao juiz e abertura + falas do cliente, na ordem, e so isso.
+
+    `falas_do_cliente` e o que o juiz recebe como "a conversa do cliente". Deixar a
+    decisao do operador entrar ai daria ao juiz uma fala que o cliente nunca viu, e
+    ele julgaria o atendimento por uma frase que nao esta na tela de ninguem.
+    """
+    caso = next(c for c in carregar_casos(EVALS) if c.id.startswith("golden-011"))
+    percurso = _Percurso()
+
+    falas, _ = await percorrer_a_conversa(
+        caso,
+        aberturas=("bom dia, preciso de um cafe da manha",),
+        mensagens=[],
+        tem_pedido=True,
+        dizer_ao_agente=percurso.dizer_ao_agente,
+        decidir_a_nota=percurso.decidir_a_nota,
+    )
+
+    assert falas == ["bom dia, preciso de um cafe da manha", "E a nossa nota?"]
+    assert all("rejeitado" not in fala for fala in falas)
+
+
+@pytest.mark.risco("R3")
+async def test_an_operator_turn_without_an_order_names_both_valid_scenarios() -> None:
+    """R3 — a mensagem manda a proxima pessoa escrever o cenario certo.
+
+    Ela citava so `pedido_pago` (ACH-13 da verificacao da S-06), enquanto o teste do
+    corpus aceita `{"pedido_pago", "nota_emitida"}` — o `golden-012` usa o segundo.
+    Uma mensagem de erro que nomeia metade das saidas validas custa uma ida e volta a
+    quem escrever o proximo caso, e ela e lida no pior momento possivel.
+
+    A ultima assercao e a que importa junto: a guarda vem ANTES de qualquer efeito.
+    Decidir a nota e depois descobrir que nao havia pedido seria a ordem errada.
+    """
+    caso = next(c for c in carregar_casos(EVALS) if c.id.startswith("golden-011"))
+    percurso = _Percurso()
+
+    with pytest.raises(CenarioNaoMontou) as falhou:
+        await percorrer_a_conversa(
+            caso,
+            aberturas=(),
+            mensagens=[],
+            tem_pedido=False,
+            dizer_ao_agente=percurso.dizer_ao_agente,
+            decidir_a_nota=percurso.decidir_a_nota,
+        )
+
+    assert "pedido_pago" in str(falhou.value)
+    assert "nota_emitida" in str(falhou.value)
+    assert percurso.ordem == []
 
 
 @pytest.mark.risco("R3")
