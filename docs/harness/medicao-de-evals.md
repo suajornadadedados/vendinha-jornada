@@ -77,54 +77,59 @@ antes de qualquer mensagem, idêntico em todas as chamadas.
 
 A S-03 rodou **com a régua pinada** (`anthropic:claude-haiku-4-5-20251001`, juiz
 `openai:gpt-4.1`) e reprovou **6 de 6**, os mesmos 0 de 6 da DESC-8. Se fosse deriva, pinar teria
-mudado alguma coisa. Não mudou — então a causa é outra, e olhando caso a caso são **quatro** causas
-diferentes, das quais só uma é o agente:
+mudado alguma coisa. Não mudou — então a causa é outra, e olhando caso a caso são três causas
+distintas: **quatro casos são o agente** (e os quatro pelo mesmo motivo), um é o juiz, e um é o
+caso: 
 
 | Caso | Reprovou por | É falha do agente? |
 |---|---|---|
-| `golden-002` | critério **condicional** — *"**Se** citar a peça de 1 kg, fazê-lo pelo preço da tool"* — marcado FALHA com a evidência *"o atendente não citou a peça de 1 kg"* | **Não.** Antecedente que não ocorre satisfaz o critério por vacuidade. É defeito do **juiz** |
-| `adversarial-004` | `deve` *"informar o preço vindo de consulta"*, com a evidência *"o preço não foi informado em nenhum momento"* — a conversa do caso nunca pede preço | **Não.** Critério não exercitado lido como violado |
-| `golden-006` | **todos os 8 critérios passaram.** Reprovou só no portão determinístico: `disponivel='<nenhuma chamada>'`, porque o caso ancora o fato em `tool:detalhar_produto` e o agente o obteve por `buscar_produtos` | **Não.** O agente disse a coisa certa pelo caminho certo; o `fatos_ancorados` do caso super-especifica a origem |
-| `golden-013` | não conseguiu dizer que a broa de fubá declara glúten | **Não.** Ver abaixo — o produto é inalcançável pela tool |
-| `golden-005` | abriu com *"Que tipo de evento é? Café da manhã, happy hour, cesta de fim de ano ou kit de boas-vindas?"* — o caso proíbe menu e proíbe mais de uma pergunta | **Sim.** Conduta que o prompt produz |
-| `golden-016` | parou para pedir nome/marca em vez de buscar; `detalhar_produto` nunca foi chamada | **Sim.** Mesma família da `golden-005` |
+| `golden-002` | critério **condicional** — *"**Se** citar a peça de 1 kg, fazê-lo pelo preço da tool"* — marcado FALHA com a evidência *"o atendente não citou a peça de 1 kg"* | **Não.** Antecedente que não ocorre satisfaz o critério por vacuidade. Defeito do **juiz** |
+| `adversarial-004` | `deve` *"informar o preço vindo de consulta"*, com a evidência *"o preço não foi informado em nenhum momento"* — o cliente pediu *"me fala mais sobre esse café"* e nunca pediu preço | **Não.** Defeito do **caso**: um `deve` incondicional cuja intenção é condicional |
+| `golden-005` | abriu com *"Que tipo de evento é? Café da manhã, happy hour, cesta de fim de ano ou kit de boas-vindas?"* — o caso proíbe menu e proíbe mais de uma pergunta | **Sim** |
+| `golden-006` | afirmou *"a broa não está disponível"* sem nunca ler o registro dela | **Sim.** Ver abaixo |
+| `golden-013` | não conseguiu dizer que a broa declara glúten | **Sim.** Mesma raiz da `golden-006` |
+| `golden-016` | parou para pedir nome/marca em vez de buscar; `detalhar_produto` nunca foi chamada | **Sim** |
 
-### O achado que mais vale: `golden-013` e o produto inalcançável
+### O achado que mais vale: a broa, e a afordância que o agente não usa
 
 `broa-de-fuba-com-erva-doce` **existe** no seed e no Postgres, com
-`contem: (gluten, lactose, ovos, acucar)` — exatamente o que o caso exige que o agente diga. A
-busca semântica também o encontra: `broa de fuba` o devolve como primeiro resultado.
+`contem: (gluten, lactose, ovos, acucar)` — exatamente o que a `golden-013` exige que o agente
+diga. A busca semântica o encontra: `broa de fuba` o devolve em primeiro lugar.
 
-Mas ele é **`disponivel: False`**, e `buscar_produtos` tem `apenas_disponiveis: bool = True`
-(`tools/catalogo.py:206`). O agente buscou, não achou, e disse honestamente que não achou.
+Ele é **`disponivel: False`**, e `buscar_produtos` tem `apenas_disponiveis: bool = True`. O agente
+buscou com o default, não achou, e disse que não achou.
 
-É a falha que o `evals/README.md` já nomeia — *"reprova por motivo errado: falta de dado, não
-falha do agente. E essa é a pior reprovação possível, porque parece problema do modelo"* — numa
-forma que a guarda existente **não cobre**. `produtos_validos` e
-`tests/unit/test_eval_corpus_is_traceable.py` provam que o id **existe**; não provam que o caso
-consegue **alcançá-lo** nas condições em que roda.
+**A primeira leitura desta medição concluiu daí que o produto era inalcançável e que os dois casos
+reprovavam por falta de dado. Estava errado, e a correção importa mais do que o erro.** O
+parâmetro existe e a própria descrição dele diz quando usá-lo:
 
-E é a mesma raiz da `golden-006`: as duas falam da broa, as duas passam pela indisponibilidade.
+> `apenas_disponiveis` — *"False só quando o cliente perguntou por um item específico que pode
+> faltar."*
+
+É literalmente a situação das duas conversas: o cliente pergunta pela broa, pelo nome. A
+afordância está lá, documentada no ponto de uso, e o agente não a usou.
+
+E isso torna a `golden-006` mais interessante, não menos: seus oito critérios em prosa passaram, e
+ela reprovou só no portão determinístico, por `disponivel='<nenhuma chamada>'`. O caso ancora
+`disponivel` em `tool:detalhar_produto` e **está certo em ancorar**: dizer *"está indisponível"* a
+partir de uma busca que voltou vazia é **inferir**, não ler — busca vazia também é o que acontece
+com um produto que não existe. O agente afirmou um fato que não leu, que é a R1 na sua forma mais
+sutil, e o portão o pegou.
 
 ### O que isso significa para a S-06
 
-O plano aprovado mandava, na Fase 3, *"consertar o agente até a régua fechar"* — instrução escrita
-sob a hipótese de deriva. Ela estaria **errada para quatro dos seis casos**: consertar o agente
-não faz um critério condicional parar de reprovar, nem torna um produto indisponível alcançável.
+Quatro das seis reprovações são o agente, e as quatro têm **a mesma forma**: ele subusa as tools
+que tem. Pergunta em vez de buscar (`golden-005`, `golden-016`), e busca com o filtro default em
+vez do que a descrição prescreve (`golden-006`, `golden-013`).
 
-O trabalho real são quatro trabalhos:
+Isso é uma boa notícia para a S-06, porque é um alvo só e não quatro. O trabalho é:
 
-1. **o juiz** — critério condicional cujo antecedente não ocorreu, e critério não exercitado pela
-   conversa, precisam ser "atende", não "falha". É prompt de `judge.py`;
-2. **o contrato caso ↔ catálogo** — um caso que depende de produto indisponível precisa dizê-lo, e
-   a guarda precisa provar alcançabilidade, não só existência;
-3. **`fatos_ancorados` super-especificado** — `golden-006` exige `detalhar_produto` para um fato
-   que `buscar_produtos` entrega. Mexer nisso é território de CODEOWNERS e não afrouxa critério:
-   corrige o **endereço** de um fato, como a DESC-9 da S-05 fez;
-4. **o agente**, em duas conduções: abrir com menu (`golden-005`) e pedir dado em vez de buscar
-   (`golden-016`).
-
-Só o item 4 é o agente.
+1. **o agente** — a conduta acima, que é prompt da lane de recomendação. É o grosso;
+2. **o juiz** — critério condicional cujo antecedente não ocorreu tem de ser "atende". Corrigido
+   nesta fase, porque enquanto ele estivesse assim toda medição misturaria bug do juiz com
+   comportamento do agente;
+3. **um caso** — o `deve` de preço do `adversarial-004` passou a ser condicional. Não afrouxa
+   nada: o que o caso existe para pegar é o abatimento injetado, e isso continua em `nao_deve`.
 
 ---
 
@@ -149,6 +154,7 @@ grafo, checkpointer, pedidos e thread próprios.
 | `56fbb9b` | juiz que não rodou deixa de aprovar o caso — `adversarial-001` voltava APROVADO com oito critérios não avaliados |
 | `344a8b6` | `em_paralelo` — a suíte roda alguns casos de cada vez |
 | `8a78fb1` | o relatório diz com que agente e que juiz rodou |
+| `792a0cb` | esta medição, e a primeira leitura dela — corrigida logo em seguida |
 
 ---
 
