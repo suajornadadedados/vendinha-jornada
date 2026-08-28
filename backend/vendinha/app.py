@@ -604,6 +604,12 @@ def create_app(
                         config=config,
                         stream_mode="messages",
                     )
+                    # Qual fala do atendente estamos transmitindo. Um turno com tool
+                    # no meio produz mais de uma `AIMessage`, e cada uma é um balão
+                    # na tela do cliente. O id do chunk é o que as separa — o
+                    # LangChain mantém o mesmo id por mensagem e troca na seguinte.
+                    fala = 0
+                    id_da_fala: str | None = None
                     async for chunk, meta in _bounded_first_token(token_stream, timeout):
                         # Antes de qualquer filtro: o observador precisa do que o
                         # cliente NÃO vê — o veredito da composição, o id do pedido
@@ -630,9 +636,18 @@ def create_app(
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.
                         if chunk.text:
+                            # Só conta como fala nova o chunk que TEM id e cujo id
+                            # mudou. Provedor que não manda id nenhum cai no caso de
+                            # uma fala só, que é o comportamento anterior — pior
+                            # partir a resposta em balões aleatórios do que emendar.
+                            atual = getattr(chunk, "id", None)
+                            if atual is not None and atual != id_da_fala:
+                                if id_da_fala is not None:
+                                    fala += 1
+                                id_da_fala = atual
                             yield {
                                 "event": "token",
-                                "data": TokenEvent(text=chunk.text).model_dump_json(),
+                                "data": TokenEvent(text=chunk.text, fala=fala).model_dump_json(),
                             }
             except Exception:
                 # Loud on our side, vague on the customer's. The exception carries

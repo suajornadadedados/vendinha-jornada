@@ -296,3 +296,66 @@ def test_the_stream_never_carries_a_tool_return_to_the_customer() -> None:
     assert "encontrados" not in dito, f"o retorno da tool vazou para o cliente: {dito!r}"
     assert "queijo-canastra-meia-cura" not in dito, "o id interno vazou para o cliente"
     assert "consultar_preco" not in dito, "o nome da tool vazou para o cliente"
+
+
+def test_duas_falas_do_atendente_no_mesmo_turno_sao_baloes_diferentes() -> None:
+    """Um turno com tool no meio produz DUAS falas, e a tela precisa saber disso.
+
+    O agente diz "deixa eu conferir", chama a tool, e volta com a resposta. Sao
+    duas `AIMessage`, e no chat sao dois baloes. O stream, porem, e uma fila de
+    tokens sem costura: sem um marcador, o cliente nao tem como saber onde uma
+    acaba e a outra comeca, e emenda as duas — "Deixa eu conferir.Sai por R$ 89,90."
+    num balao so. Foi visto assim no navegador, antes deste teste.
+
+    O `fala` do `TokenEvent` e esse marcador. Indice, e nao booleano: um evento
+    perdido no meio deixaria um booleano mentindo para o resto do turno.
+    """
+    seed = carregar_seed(CATALOGO_DO_SEED)
+    pedido = AIMessage(
+        id="fala-1",
+        content="Deixa eu conferir.",
+        tool_calls=[
+            {
+                "name": "consultar_preco",
+                "args": {"produto_ids": ["queijo-canastra-meia-cura"]},
+                "id": "chamada-1",
+            }
+        ],
+    )
+
+    graph = build_graph(
+        ModeloQuePedeTool(respostas=[pedido, AIMessage(id="fala-2", content="Sai por R$ 89,90.")]),
+        InMemorySaver(),
+        recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), 30.0),
+    )
+
+    with TestClient(
+        create_app(graph=graph, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as cliente:
+        resposta = cliente.post("/chat", json={"message": "quanto custa o Canastra?"})
+
+    tokens = [dados for nome, dados in _events(resposta.text) if nome == "token"]
+    assert tokens, "o turno nao produziu token nenhum"
+
+    por_fala: dict[int, str] = {}
+    for dados in tokens:
+        indice = int(dados["fala"])
+        por_fala[indice] = por_fala.get(indice, "") + dados["text"]
+
+    assert len(por_fala) == 2, f"esperava duas falas, vieram {len(por_fala)}: {por_fala}"
+    assert "Deixa eu conferir." in por_fala[0]
+    assert "Sai por R$ 89,90." in por_fala[1]
+    assert "Sai por" not in por_fala[0], "a segunda fala emendou na primeira"
+
+
+def test_uma_fala_so_continua_sendo_um_balao_so(client: TestClient) -> None:
+    """O marcador nao pode picotar uma resposta simples.
+
+    Uma resposta sem tool no meio e UMA `AIMessage`, por mais chunks que o
+    provedor mande. Todos tem que sair com o mesmo `fala` — um indice que subisse
+    por chunk transformaria cada palavra num balao.
+    """
+    resposta = client.post("/chat", json={"message": "oi"})
+
+    indices = {int(dados["fala"]) for nome, dados in _events(resposta.text) if nome == "token"}
+    assert indices == {0}, f"uma resposta sem tool virou {len(indices)} baloes: {indices}"

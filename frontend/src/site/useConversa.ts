@@ -29,6 +29,14 @@ export interface Fala {
   readonly texto: string;
   /** Verdadeiro enquanto os tokens ainda estão chegando nesta fala. */
   readonly escrevendo?: boolean;
+  /**
+   * Qual fala do atendente esta é, dentro do turno — vem do backend.
+   *
+   * Um turno com tool no meio produz mais de uma: "vou consultar os preços" →
+   * tool → "aqui está". São dois balões, e sem este índice o segundo emendava no
+   * primeiro, saindo "consultar os preços:Perfeito! Aqui".
+   */
+  readonly indice?: number;
 }
 
 export interface EstadoDoPedido {
@@ -131,7 +139,6 @@ export function useConversa() {
     setEsperando(true);
     setFalas((atuais) => [...atuais, { de: "cliente", texto: limpo }]);
 
-    let respostaAberta = false;
     try {
       const corpo: Record<string, unknown> = { message: limpo };
       if (sessaoAtual.current) corpo["session_id"] = sessaoAtual.current;
@@ -157,15 +164,30 @@ export function useConversa() {
           const pedaco = String(evento.corpo["text"] ?? "");
           if (!pedaco) continue;
           setEsperando(false);
+          // A decisão "abrir fala nova × continuar a de cima" sai do PRÓPRIO estado,
+          // e não de uma variável de fora.
+          //
+          // A versão anterior guardava um `respostaAberta` no escopo do `enviar` e o
+          // escrevia de dentro deste updater. Updater do React tem que ser função
+          // pura: no StrictMode ele roda DUAS vezes para cada chamada. A primeira
+          // abria a fala do atendente e marcava a flag; a segunda via a flag já
+          // marcada, caía no ramo de "continuar", e emendava a resposta do agente na
+          // última fala de `atuais` — que era a do CLIENTE. Daí "Olá, tudo bem?Opa,
+          // tudo certo!" num balão verde só.
+          const indice = Number(evento.corpo["fala"] ?? 0);
           setFalas((atuais) => {
-            if (!respostaAberta) {
-              respostaAberta = true;
-              return [...atuais, { de: "atendente", texto: pedaco, escrevendo: true }];
-            }
-            const anteriores = atuais.slice(0, -1);
             const ultima = atuais[atuais.length - 1];
-            if (!ultima) return atuais;
-            return [...anteriores, { ...ultima, texto: ultima.texto + pedaco }];
+            if (
+              ultima &&
+              ultima.de === "atendente" &&
+              ultima.escrevendo &&
+              (ultima.indice ?? 0) === indice
+            ) {
+              return [...atuais.slice(0, -1), { ...ultima, texto: ultima.texto + pedaco }];
+            }
+            // Fala nova: a anterior para de piscar o cursor no mesmo instante.
+            const fechadas = atuais.map((f) => (f.escrevendo ? { ...f, escrevendo: false } : f));
+            return [...fechadas, { de: "atendente", texto: pedaco, escrevendo: true, indice }];
           });
           continue;
         }
@@ -183,13 +205,14 @@ export function useConversa() {
       setErro("não consegui falar com a loja agora. verifique a conexão e tente de novo.");
     } finally {
       setEsperando(false);
-      // Fecha a última fala do atendente: sem isto o cursor de digitação ficaria
-      // piscando para sempre no fim de uma resposta que já terminou.
-      setFalas((atuais) => {
-        const ultima = atuais[atuais.length - 1];
-        if (!ultima || ultima.de !== "atendente" || !ultima.escrevendo) return atuais;
-        return [...atuais.slice(0, -1), { ...ultima, escrevendo: false }];
-      });
+      // Fecha toda fala ainda aberta: sem isto o cursor de digitação ficaria
+      // piscando para sempre no fim de uma resposta que já terminou. Toda, e não
+      // só a última, porque um turno com tool no meio abre mais de uma.
+      setFalas((atuais) =>
+        atuais.some((f) => f.escrevendo)
+          ? atuais.map((f) => (f.escrevendo ? { ...f, escrevendo: false } : f))
+          : atuais,
+      );
     }
   }, []);
 

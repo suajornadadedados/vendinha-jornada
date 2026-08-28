@@ -64,6 +64,17 @@ class TokenEvent(BaseModel):
     """
 
     text: str
+    fala: int = Field(
+        default=0,
+        description=(
+            "Qual fala do atendente este pedaço continua, dentro deste turno. Um turno "
+            "produz VÁRIAS falas quando o agente chama tools no meio ('vou consultar os "
+            "preços' → tool → 'aqui está'), e sem este número o cliente não tem como "
+            "saber onde uma acaba e a outra começa: a tela emendava as duas no mesmo "
+            "balão, saindo 'consultar os preços:Perfeito! Aqui'. Índice e não booleano "
+            "porque um evento perdido no meio deixaria o booleano mentindo para sempre."
+        ),
+    )
 
 
 class DoneEvent(BaseModel):

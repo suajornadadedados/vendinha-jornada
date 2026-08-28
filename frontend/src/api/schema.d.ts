@@ -1350,6 +1350,12 @@ export interface components {
          *     change the message.
          */
         TokenEvent: {
+            /**
+             * Fala
+             * @description Qual fala do atendente este pedaço continua, dentro deste turno. Um turno produz VÁRIAS falas quando o agente chama tools no meio ('vou consultar os preços' → tool → 'aqui está'), e sem este número o cliente não tem como saber onde uma acaba e a outra começa: a tela emendava as duas no mesmo balão, saindo 'consultar os preços:Perfeito! Aqui'. Índice e não booleano porque um evento perdido no meio deixaria o booleano mentindo para sempre.
+             * @default 0
+             */
+            fala: number;
             /** Text */
             text: string;
         };
