@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--f-display);
+    --font-sans: var(--f-corpo);
+    --font-mono: var(--f-mono);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Os tokens semanticos do shadcn apontam para a paleta da Vendinha.
+ *
+ * Este e o passo que o plano da S-07 chama de "shadcn com os tokens decididos, nunca
+ * com o tema default": os componentes vieram do CLI, mas a cor deles e a do
+ * `docs/design/sistema-visual.md`. Sem esta ponte, o painel sairia cinza-neutro e a
+ * landing terrosa -- duas marcas no mesmo produto.
+ *
+ * Repare no `--destructive`: e o vermelho da paleta, e ele governa o botao de
+ * rejeitar a nota. */
+:root {
+    --background: var(--papel);
+    --foreground: var(--tinta);
+    --card: var(--cartao);
+    --card-foreground: var(--tinta);
+    --popover: var(--cartao);
+    --popover-foreground: var(--tinta);
+    --primary: var(--verde);
+    --primary-foreground: #ffffff;
+    --secondary: #f1ece5;
+    --secondary-foreground: var(--tinta);
+    --muted: #f1ece5;
+    --muted-foreground: var(--tinta-suave);
+    --accent: var(--verde-fundo);
+    --accent-foreground: var(--verde);
+    --destructive: var(--vermelho);
+    --destructive-foreground: #ffffff;
+    --border: var(--linha);
+    --input: var(--linha);
+    --ring: var(--verde);
+    /* Categorico dos graficos: verde, ocre, vermelho, tinta-suave e um azul-ardosia
+     * que nao existe na marca e por isso nunca sera confundido com um estado. */
+    --chart-1: var(--verde);
+    --chart-2: var(--ocre-cheio);
+    --chart-3: var(--vermelho);
+    --chart-4: var(--tinta-suave);
+    --chart-5: #4a6572;
+    --sidebar: var(--cartao);
+    --sidebar-foreground: var(--tinta);
+    --sidebar-primary: var(--verde);
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: var(--verde-fundo);
+    --sidebar-accent-foreground: var(--verde);
+    --sidebar-border: var(--linha);
+    --sidebar-ring: var(--verde);
+    /* O painel e denso: raio menor que o da landing (12px). */
+    --radius: 8px;
+}
+
+/* Sem tema escuro: nao foi pedido, e manter dois dobraria a superficie de
+ * contraste a conferir. A decisao esta em docs/design/sistema-visual.md. */
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}

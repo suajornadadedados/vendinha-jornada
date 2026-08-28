@@ -1,0 +1,755 @@
+/* O painel. Mesma marca da landing, outra densidade.
+ *
+ * A escala de espaço é reescrita aqui — os tokens vêm com o registro de respiro, e
+ * um painel operacional em que se passa a manhã inteira precisa do oposto
+ * (`docs/design/sistema-visual.md`, "Espaço"). */
+
+:root {
+  --e-1: 4px;
+  --e-2: 8px;
+  --e-3: 12px;
+  --e-4: 16px;
+  --e-5: 24px;
+  --e-6: 32px;
+  --raio: 8px;
+  --lado: 232px;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- conectar */
+
+.conectar {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--e-5);
+  background:
+    radial-gradient(50ch 34ch at 20% 0%, color-mix(in srgb, var(--verde) 7%, transparent), transparent),
+    var(--papel);
+}
+
+.conectar__caixa {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: var(--e-6);
+  box-shadow: var(--sombra);
+}
+
+.conectar__marca {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-2);
+  margin-bottom: var(--e-3);
+}
+
+.conectar__nome {
+  font-family: var(--f-display);
+  font-size: 26px;
+}
+
+.conectar__cauda {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+.conectar__campo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 0 var(--e-3);
+  color: var(--tinta-suave);
+  background: var(--papel);
+}
+
+.conectar__campo .campo {
+  border: none;
+  background: none;
+  padding: 10px 0;
+}
+
+.campo {
+  width: 100%;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--papel);
+  color: var(--tinta);
+  resize: vertical;
+}
+
+.campo[aria-invalid="true"] {
+  border-color: var(--vermelho);
+}
+
+.campo__erro {
+  color: var(--vermelho);
+  font-size: 12px;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------- estrutura */
+
+.painel {
+  display: grid;
+  grid-template-columns: var(--lado) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.painel__lado {
+  border-right: 1px solid var(--linha);
+  background: var(--cartao);
+  padding: var(--e-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.painel__marca {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.painel__marca-nome {
+  font-family: var(--f-display);
+  font-size: 21px;
+}
+
+.painel__marca-cauda {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+.painel__lado nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.painel__lado nav button {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  width: 100%;
+  /* 40px de altura: alvo confortável sem estourar a densidade. */
+  min-height: 40px;
+  padding: 0 var(--e-3);
+  border: none;
+  border-radius: var(--raio);
+  background: none;
+  color: var(--tinta-suave);
+  font-size: 14px;
+  text-align: left;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.painel__lado nav button:hover {
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+.painel__lado nav button[data-ativa] {
+  background: var(--verde-fundo);
+  color: var(--verde);
+  font-weight: 600;
+}
+
+.painel__nota {
+  margin-top: auto;
+  font-size: 11.5px;
+  color: var(--tinta-suave);
+  line-height: 1.45;
+  border-top: 1px solid var(--linha);
+  padding-top: var(--e-3);
+}
+
+.painel__conteudo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.painel__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  flex-wrap: wrap;
+  padding: var(--e-4) var(--e-5);
+  border-bottom: 1px solid var(--linha);
+  background: var(--cartao);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.painel__topo h1 {
+  font-size: 20px;
+  font-family: var(--f-display);
+}
+
+.painel__ferramentas {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+
+.painel__main {
+  padding: var(--e-5);
+  transition: opacity var(--transicao);
+}
+
+.painel__main--velho {
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .painel {
+    grid-template-columns: 1fr;
+  }
+
+  .painel__lado {
+    position: static;
+    height: auto;
+  }
+
+  .painel__lado nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .painel__nota {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------------- controles */
+
+.janelas {
+  display: inline-flex;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+
+.janelas button {
+  border: none;
+  background: var(--cartao);
+  color: var(--tinta-suave);
+  padding: 6px 12px;
+  min-height: 32px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+}
+
+.janelas button[data-ativa] {
+  background: var(--verde);
+  color: #fff;
+}
+
+.conexao {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-family: var(--f-mono);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.conexao--dentro {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.conexao--fora {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.sino {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--raio);
+  background: var(--ocre-fundo);
+  color: var(--ocre);
+  display: grid;
+  place-items: center;
+}
+
+.sino__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--vermelho);
+  color: #fff;
+  font-size: 10px;
+  font-family: var(--f-mono);
+  display: grid;
+  place-items: center;
+}
+
+.atraso {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+  margin: var(--e-4) var(--e-5) 0;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--ocre);
+  background: var(--ocre-fundo);
+  color: var(--ocre);
+  border-radius: var(--raio);
+  font-size: 13px;
+}
+
+.sublinhado {
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+}
+
+/* ------------------------------------------------------------------- KPIs */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--e-3);
+}
+
+.kpi {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: var(--e-4);
+}
+
+.kpi__valor {
+  font-family: var(--f-display);
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 4px 0 2px;
+}
+
+.kpi__nota {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tinta-suave);
+}
+
+.linhas {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.linhas > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  align-items: baseline;
+}
+
+.linhas dt {
+  color: var(--tinta-suave);
+  font-size: 12.5px;
+}
+
+.linhas dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------- gráficos */
+
+.grafico__topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin-bottom: 6px;
+}
+
+.grafico__valor {
+  font-family: var(--f-mono);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.grafico__valor--ok {
+  color: var(--verde);
+}
+
+.grafico__valor--fora {
+  color: var(--vermelho);
+}
+
+.grafico__bullet {
+  width: 100%;
+  height: 14px;
+  display: block;
+}
+
+.grafico__linha {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
+
+.grafico__nota,
+.grafico__vazio {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--tinta-suave);
+}
+
+.barras {
+  list-style: none;
+  margin: var(--e-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.barras li {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr 42px;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: 13px;
+}
+
+.barras__trilho {
+  background: var(--papel);
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.barras__preenchimento {
+  display: block;
+  height: 100%;
+  /* 4px arredondados na ponta do dado, ancorados na base — a spec de marca da
+   * `dataviz`. Uma cor só: a categoria já está no rótulo à esquerda. */
+  border-radius: 0 4px 4px 0;
+  background: var(--ocre-cheio);
+}
+
+/* -------------------------------------------------------------- tabelas */
+
+.tabela-rolante {
+  /* A página nunca rola na horizontal; a tabela sim, dentro dela. */
+  overflow-x: auto;
+}
+
+.tabela-rolante table {
+  font-size: 13px;
+}
+
+.tabela-rolante thead th {
+  position: sticky;
+  top: 0;
+  background: var(--cartao);
+  z-index: 1;
+}
+
+.tabela-rolante th.num,
+.tabela-rolante td.num {
+  text-align: right;
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-rolante tr[data-selecionada] {
+  background: var(--verde-fundo);
+}
+
+.link-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--verde);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.link-doc:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------- conversas curtas */
+
+.conversas-curtas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.conversas-curtas button {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--e-2);
+  border: none;
+  border-radius: var(--raio);
+  background: none;
+  font: inherit;
+  color: var(--tinta);
+  text-align: left;
+}
+
+.conversas-curtas button:hover {
+  background: var(--papel);
+}
+
+.conversas-curtas__meta {
+  color: var(--tinta-suave);
+  font-size: 12px;
+  margin-right: auto;
+}
+
+/* ------------------------------------------------------ rastreabilidade */
+
+.linha-do-tempo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e-2);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.linha-do-tempo li {
+  border-left: 2px solid var(--linha);
+  padding: 2px 0 2px var(--e-3);
+}
+
+.linha-do-tempo--cliente {
+  border-left-color: var(--tinta-suave);
+}
+
+.linha-do-tempo--atendente {
+  border-left-color: var(--verde);
+}
+
+.linha-do-tempo--ferramenta {
+  border-left-color: var(--ocre-cheio);
+}
+
+.linha-do-tempo__tag {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+  margin-bottom: 2px;
+}
+
+.linha-do-tempo p {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.linha-do-tempo__json {
+  margin: 0;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  background: var(--papel);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 110px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.vereditos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.vereditos li {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+  font-size: 13px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.vereditos__motivos {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- fila */
+
+.fila__total {
+  font-family: var(--f-display);
+  font-size: 26px;
+  margin: 0;
+}
+
+.confirmacao {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  padding: var(--e-3);
+  background: var(--papel);
+  border-radius: var(--raio);
+  border: 1px solid var(--linha);
+}
+
+.confirmacao > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.confirmacao dt {
+  color: var(--tinta-suave);
+  font-size: 12.5px;
+}
+
+.confirmacao dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------- configurações */
+
+.modelos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.modelos__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--e-3);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--cartao);
+  font-size: 13px;
+  color: var(--tinta);
+}
+
+.modelos__item[data-atual] {
+  border-color: var(--verde);
+  background: var(--verde-fundo);
+}
+
+.modelos__item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.provedores {
+  display: flex;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+}
+
+.provedores__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.prompt {
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--cartao);
+}
+
+.prompt summary {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  flex-wrap: wrap;
+  padding: var(--e-3);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.prompt__nome {
+  font-weight: 600;
+}
+
+.prompt__sha {
+  font-size: 11px;
+  color: var(--tinta-suave);
+  background: var(--papel);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.prompt__arquivo {
+  font-size: 11px;
+  color: var(--tinta-suave);
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.prompt__texto {
+  margin: 0;
+  padding: var(--e-3);
+  border-top: 1px solid var(--linha);
+  background: var(--papel);
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 380px;
+  overflow: auto;
+}

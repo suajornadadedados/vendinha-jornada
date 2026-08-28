@@ -30,7 +30,14 @@ from vendinha.schemas import (
     EventoDoPainel,
     MensagemRegistrada,
 )
-from vendinha.telemetria import TelemetriaEmMemoria, Turno, UsoDeModelo, VereditoRegistrado
+from vendinha.telemetria import (
+    _POR_MODELO,
+    _POR_SESSAO,
+    TelemetriaEmMemoria,
+    Turno,
+    UsoDeModelo,
+    VereditoRegistrado,
+)
 
 pytestmark = pytest.mark.requires_backend
 
@@ -298,3 +305,55 @@ async def test_um_turno_sem_consumo_deixa_a_conversa_incompleta() -> None:
     assert sessao is not None
     assert sessao.uso[0].turnos_sem_uso == 1
     assert TABELA.custo(sessao.uso).usd is None
+
+
+# ------------------------------------------------- as duas formas do agregado
+
+
+def test_o_agregado_por_sessao_traz_a_sessao_na_primeira_coluna() -> None:
+    """Quem monta o resumo filtra as linhas pela primeira coluna. Ela tem que ser a sessão.
+
+    **Este teste existe por causa de um bug que a suíte não pegou.** Havia UMA
+    constante de SQL reusada nas duas consultas: a da janela agrupa por modelo, a da
+    sessão agrupa por sessão e modelo — mas o SELECT era o mesmo, sem `session_id`. A
+    consulta por sessão devolvia `modelo` na posição 0, o filtro nunca casava, e a
+    lista de conversas mostrava custo `—` enquanto a tela de métricas mostrava
+    US$ 0,069 para o mesmo turno.
+
+    A implementação em memória não executa SQL, então nenhum teste dela veria isso —
+    e a ADR-011 não tem camada de integração de propósito. Este teste é o meio-termo
+    honesto: afirma a **forma** da consulta, que é onde o erro estava, sem precisar
+    de contêiner.
+    """
+    assert _POR_SESSAO.startswith("SELECT session_id, modelo,")
+    assert _POR_MODELO.startswith("SELECT modelo,")
+    # Mesmas colunas agregadas nas duas, e a da sessão com uma a mais na frente.
+    assert _POR_SESSAO.count(",") == _POR_MODELO.count(",") + 1
+
+
+async def test_registrar_turno_toca_a_atividade_da_sessao() -> None:
+    """Sem isto, `ultima_atividade` fica igual a `iniciada_em` e o atendimento dá 0 ms.
+
+    O sintoma apareceu numa conversa real de dezenove segundos exibida como
+    "atendimento médio: 0 ms". As duas implementações da porta precisam concordar
+    aqui, e é por isso que o teste é sobre a em memória — o Postgres ganhou o mesmo
+    `UPDATE`.
+    """
+    telemetria = TelemetriaEmMemoria()
+    await telemetria.abrir_sessao("s1", canal="widget")
+    antes = await telemetria.sessao("s1")
+    assert antes is not None
+
+    await telemetria.registrar_turno(
+        Turno(
+            session_id="s1",
+            modelo=HAIKU,
+            tokens_entrada=100,
+            tokens_saida=10,
+            duracao_ms=19_000,
+            iniciado_em=agora(),
+        )
+    )
+    depois = await telemetria.sessao("s1")
+    assert depois is not None
+    assert depois.ultima_atividade >= antes.ultima_atividade

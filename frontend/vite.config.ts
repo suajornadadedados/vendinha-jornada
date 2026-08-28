@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 
+import tailwind from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -13,7 +14,10 @@ import { defineConfig } from "vite";
 // E são duas entradas, e não duas rotas do mesmo bundle, porque a landing é uma
 // página pública: ela sai sem uma linha de JavaScript do painel dentro.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwind()],
+  resolve: {
+    alias: { "@": resolve(__dirname, "src") },
+  },
   build: {
     rollupOptions: {
       input: {

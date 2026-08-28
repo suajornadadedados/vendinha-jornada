@@ -160,6 +160,33 @@ layout.*
 | Custo por dia | **Linha** | Match do banco para *Trend Over Time*. Menos de 4 pontos vira cartão de número, não gráfico |
 | Conversão, ticket, custo por conversa | **Cartão de número** | Um valor não é um gráfico |
 
+### A paleta categórica que não precisou existir
+
+A skill `dataviz` manda **rodar o validador em vez de raciocinar sobre Delta E**, e o
+resultado foi útil justamente por reprovar:
+
+```
+#1F6F5C, #B4711F, #A03A3A, #5F5850, #4A6572  sobre #FAF8F5
+  [FAIL] Chroma floor        verde, cinza e ardósia "leem cinza"
+  [FAIL] CVD separation      cinza ↔ vermelho  ΔE 4.0 (protan)
+  [FAIL] Normal-vision floor ardósia ↔ cinza   ΔE 5.9
+```
+
+**Paleta de marca não é escala categórica**, e forçá-la a ser uma teria produzido um
+gráfico ilegível para daltonismo protan — no painel onde se decide emitir nota fiscal.
+
+A correção não foi re-escalonar os tons. Foi olhar de novo para os três gráficos e ver
+que **nenhum tem mais de uma série**: o bullet mede um valor contra um alvo; a linha de
+custo é uma série; e as recusas por motivo têm a categoria **no eixo**, não na cor.
+Pintar cada barra de uma cor codificaria com cor o que o rótulo já diz — que é a
+definição do anti-padrão. Então: **uma cor por gráfico, e nenhuma paleta categórica.**
+
+Para o dia em que houver duas séries (tokens de entrada e de saída, por exemplo), o par
+medido e aprovado é **`#1F6F5C` + `#B4711F`**: ΔE 10.7 em protan e 20.6 em visão normal.
+O validador ainda reclama do *chroma floor* do verde — ele é dessaturado por ser cor de
+marca —, e essa é uma ressalva aceita conscientemente, com legenda e rótulo direto
+obrigatórios, como a própria skill permite.
+
 Regras que valem para os três, do banco: **nunca distinguir por cor apenas**; o número e o
 alvo aparecem em texto ao lado da forma; foco de teclado revela o mesmo que o hover.
 

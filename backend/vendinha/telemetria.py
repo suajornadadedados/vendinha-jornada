@@ -231,10 +231,22 @@ def _uso(linhas: Sequence[tuple[Any, ...]]) -> tuple[UsoDeModelo, ...]:
 
 # `SUM` ignora NULL, então o total sai certo; o que se perderia é saber que ele está
 # incompleto. `COUNT(*) FILTER (WHERE tokens_entrada IS NULL)` é o que devolve isso.
-_AGREGADO = (
-    "SELECT modelo, SUM(tokens_entrada), SUM(tokens_saida), COUNT(*),"
+_COLUNAS = (
+    " SUM(tokens_entrada), SUM(tokens_saida), COUNT(*),"
     " COUNT(*) FILTER (WHERE tokens_entrada IS NULL) FROM turno"
 )
+
+# Duas formas do mesmo agregado, e elas **não** podem ser a mesma string.
+#
+# A da janela agrupa só por modelo; a da sessão agrupa por sessão E modelo, e por
+# isso precisa do `session_id` na lista de SELECT — quem monta o resumo filtra as
+# linhas pela primeira coluna. Uma constante só, reusada nos dois lugares, foi
+# exatamente o bug: a consulta por sessão devolvia `modelo` na posição 0, o filtro
+# nunca casava, e a lista de conversas mostrava custo `—` enquanto a tela de
+# métricas mostrava US$ 0,069 para o mesmo turno. Passou no teste em memória (que
+# não usa SQL) e só apareceu contra o Postgres de verdade.
+_POR_MODELO = f"SELECT modelo,{_COLUNAS}"
+_POR_SESSAO = f"SELECT session_id, modelo,{_COLUNAS}"
 
 
 class PostgresTelemetria:
@@ -263,6 +275,14 @@ class PostgresTelemetria:
             )
 
     async def registrar_turno(self, turno: Turno) -> None:
+        """Grava o turno **e** toca a sessão.
+
+        O `UPDATE` no fim não é redundante com `abrir_sessao`: aquele roda no
+        começo do turno, e sem este `ultima_atividade` ficaria igual a
+        `iniciada_em` para sempre. O sintoma foi "atendimento médio: 0 ms" numa
+        conversa que levou dezenove segundos — um número errado com cara de certo,
+        que é a classe de falha que esta spec inteira persegue.
+        """
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
             await conn.execute(
                 "INSERT INTO turno (session_id, modelo, tokens_entrada, tokens_saida,"
@@ -278,6 +298,10 @@ class PostgresTelemetria:
                     turno.iniciado_em,
                     turno.erro,
                 ),
+            )
+            await conn.execute(
+                "UPDATE sessao SET ultima_atividade = now() WHERE session_id = %s",
+                (turno.session_id,),
             )
 
     async def vincular_pedido(self, session_id: str, pedido_id: str) -> None:
@@ -325,7 +349,7 @@ class PostgresTelemetria:
             # lista do painel recarrega a cada evento, e N+1 aqui é N+1 por evento.
             agregados = await (
                 await conn.execute(
-                    f"{_AGREGADO} WHERE session_id = ANY(%s) GROUP BY session_id, modelo",
+                    f"{_POR_SESSAO} WHERE session_id = ANY(%s) GROUP BY session_id, modelo",
                     (ids,),
                 )
             ).fetchall()
@@ -359,7 +383,7 @@ class PostgresTelemetria:
             ids = [linha[0] for linha in cabecalhos]
             agregados = await (
                 await conn.execute(
-                    f"{_AGREGADO} WHERE session_id = ANY(%s) GROUP BY session_id, modelo",
+                    f"{_POR_SESSAO} WHERE session_id = ANY(%s) GROUP BY session_id, modelo",
                     (ids,),
                 )
             ).fetchall()
@@ -385,7 +409,7 @@ class PostgresTelemetria:
                 return None
             agregados = await (
                 await conn.execute(
-                    f"{_AGREGADO} WHERE session_id = %s GROUP BY session_id, modelo",
+                    f"{_POR_SESSAO} WHERE session_id = %s GROUP BY session_id, modelo",
                     (session_id,),
                 )
             ).fetchall()
@@ -426,7 +450,7 @@ class PostgresTelemetria:
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
             linhas = await (
                 await conn.execute(
-                    f"{_AGREGADO} WHERE iniciado_em >= %s GROUP BY modelo",
+                    f"{_POR_MODELO} WHERE iniciado_em >= %s GROUP BY modelo",
                     (desde,),
                 )
             ).fetchall()
@@ -570,6 +594,14 @@ class TelemetriaEmMemoria:
 
     async def registrar_turno(self, turno: Turno) -> None:
         self.registrados.append(turno)
+        # As duas implementações da porta têm que se comportar igual: o Postgres
+        # toca `ultima_atividade` aqui, e um teste que só rodasse contra a memória
+        # não veria a diferença — foi assim que o bug do atendimento médio passou.
+        existente = self.abertas.get(turno.session_id)
+        if existente is not None:
+            self.abertas[turno.session_id] = existente.model_copy(
+                update={"ultima_atividade": datetime.now(UTC)}
+            )
 
     async def registrar_veredito(self, veredito: VereditoRegistrado) -> None:
         self.avaliados.append(veredito)
