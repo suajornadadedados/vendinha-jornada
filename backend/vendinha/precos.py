@@ -106,6 +106,13 @@ class TabelaDePrecos(BaseModel):
 
         for linha in uso:
             sem_uso += linha.turnos_sem_uso
+            # Modelo com preço e **nenhum token conhecido** não custa zero: custa
+            # nada de conhecido. Sem esta linha, um turno cujo provedor não informou
+            # consumo passava por `0 × preço` e chegava à tela como US$ 0,000000 —
+            # o zero mentiroso entrando pela porta que este módulo achava fechada,
+            # porque a ausência estava no token e a checagem estava no preço.
+            if not linha.tokens_entrada and not linha.tokens_saida:
+                continue
             preco = self.preco_de(linha.modelo)
             if preco is None:
                 sem_preco.append(linha.modelo)

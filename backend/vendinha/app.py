@@ -49,7 +49,7 @@ from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConf
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
 from vendinha.documentos import formatar_cnpj
-from vendinha.eventos import Barramento, BarramentoEmMemoria
+from vendinha.eventos import Barramento, BarramentoEmMemoria, agora
 from vendinha.fiscal import (
     Aprovacao,
     Decisao,
@@ -63,6 +63,7 @@ from vendinha.fiscal import (
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
 from vendinha.observability import callback_handler, install_log_redaction
+from vendinha.observador import ObservadorDoTurno
 from vendinha.pagamento import (
     MOCK,
     GatewayIndisponivel,
@@ -86,6 +87,7 @@ from vendinha.providers import (
     split_model,
 )
 from vendinha.schemas import (
+    AprovacaoPendente,
     ChatRequest,
     ConfigResponse,
     ConfigUpdate,
@@ -97,7 +99,9 @@ from vendinha.schemas import (
     FilaDoOperador,
     HealthResponse,
     ModelsResponse,
+    NotaDecidida,
     NotificacaoDePagamento,
+    PedidoAtualizado,
     PedidoNaFila,
     ProviderStatus,
     SessionEvent,
@@ -118,6 +122,11 @@ class CatalogoIndisponivel(RuntimeError):
 # Long enough that a conversation never pays for the lookup twice, short enough that
 # a key added straight into the environment shows up without a restart.
 MODELS_CACHE_SECONDS = 300.0
+
+# O mesmo batimento do stream do painel: sem ele, um proxy que corta conexão
+# ociosa derruba o push de uma conversa que só estava esperando a aprovação da
+# nota — que é exatamente a espera mais longa do fluxo.
+EVENTOS_HEARTBEAT_SEGUNDOS = 15
 
 
 async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> AsyncIterator[Any]:
@@ -533,6 +542,7 @@ def create_app(
 
     @app.post("/chat")
     async def chat(payload: ChatRequest, request: Request) -> EventSourceResponse:
+        sessao_nova = payload.session_id is None
         session_id = payload.session_id or uuid.uuid4().hex
         model_name = payload.model or await _selected_model(request.app)
 
@@ -549,11 +559,23 @@ def create_app(
         if handler is not None:
             config = {**config, "callbacks": [handler]}
 
+        # O painel observa o mesmo stream com outra pergunta: a rota filtra o que o
+        # cliente pode ler, o observador mede o que o turno custou e conta ao
+        # operador o que aconteceu. Nenhum dos dois muda o grafo (S-07, D-2).
+        observador = ObservadorDoTurno(
+            barramento=request.app.state.barramento,
+            telemetria=request.app.state.telemetria,
+            session_id=session_id,
+            modelo=model_name,
+        )
+
         async def stream() -> AsyncIterator[dict[str, str]]:
             yield {
                 "event": "session",
                 "data": SessionEvent(session_id=session_id).model_dump_json(),
             }
+            await observador.abrir(primeira_mensagem=payload.message, sessao_nova=sessao_nova)
+            falhou = False
             try:
                 # `propagate_attributes` is what makes every observation under this
                 # turn carry the session id, so the trace is findable by the same
@@ -569,6 +591,10 @@ def create_app(
                         stream_mode="messages",
                     )
                     async for chunk, meta in _bounded_first_token(token_stream, timeout):
+                        # Antes de qualquer filtro: o observador precisa do que o
+                        # cliente NÃO vê — o veredito da composição, o id do pedido
+                        # e o consumo do roteador do supervisor.
+                        await observador.viu(chunk, meta)
                         # Só o que o ATENDENTE diz. `stream_mode="messages"` emite
                         # também os `ToolMessage`, e o retorno das tools desta spec
                         # é JSON — sem este filtro o cliente recebia o payload
@@ -599,12 +625,18 @@ def create_app(
                 # DSNs, model names and limits; `adversarial-006` fails a run that
                 # leaks internal configuration or tool names into an answer.
                 logger.exception("failed to generate an answer for session %s", session_id)
+                falhou = True
                 yield {
                     "event": "error",
                     "data": ErrorEvent(
                         detail="não consegui responder agora. pode tentar de novo?"
                     ).model_dump_json(),
                 }
+
+            # Fechar antes do `done` e fora do `try`: o painel precisa ter a fala
+            # inteira do atendente e o custo do turno no momento em que o cliente vê
+            # a resposta terminar, e não um evento depois.
+            await observador.fechar(erro=falhou)
 
             # Outside the try, and never inside a `finally`: yielding while an
             # exception propagates out of an async generator is how a stream ends
@@ -615,6 +647,34 @@ def create_app(
             }
 
         return EventSourceResponse(stream())
+
+    @app.get("/eventos/sessao/{session_id}")
+    async def eventos_da_sessao(session_id: str, request: Request) -> EventSourceResponse:
+        """O push para o chat do cliente — e o que fecha a ressalva R-2 da S-05.
+
+        O RF-3.6 diz que o cliente **recebe** a confirmação da nota. Até aqui ele
+        perguntava e o agente consultava (S-05, D-8), e a verificação independente
+        registrou o estreitamento com a observação de que *"a S-07 deveria fechar de
+        verdade"*. Com esta rota, aprovar no painel faz o cartão da NF aparecer no
+        widget sem que ninguém digite nada.
+
+        **Sem token, e protegida pelo mesmo segredo que protege `nota.xml`:** o id
+        opaco da sessão. Quem o tem é quem está na conversa. Exigir credencial aqui
+        seria exigir login de um visitante anônimo para receber a própria nota.
+
+        **O assinante é filtrado por sessão no barramento**, por inclusão explícita:
+        só chega o evento que carrega este `session_id`. Um evento sem sessão — a
+        fila de aprovação, por exemplo — não vaza para cá por construção, e não por
+        uma lista de proibidos que alguém esquece de atualizar.
+        """
+        barramento = request.app.state.barramento
+
+        async def stream() -> AsyncIterator[dict[str, str]]:
+            async with barramento.assinar(sessao=session_id) as fluxo:
+                async for evento in fluxo:
+                    yield {"event": evento.tipo, "data": evento.model_dump_json()}
+
+        return EventSourceResponse(stream(), ping=EVENTOS_HEARTBEAT_SEGUNDOS)
 
     @app.post("/webhooks/pagamento", response_model=WebhookProcessado)
     async def webhook_de_pagamento(
@@ -786,6 +846,25 @@ def create_app(
 
         vigente = await decidir(request.app.state.emissao, pedida, fiscal=request.app.state.fiscal)
         emitida = await request.app.state.fiscal.nota_de(pedido_id)
+
+        # Depois de decidir e emitir, nunca antes: o que vai para o chat do cliente
+        # é o desfecho, e um evento otimista chegaria com o número da nota em branco.
+        # `vigente` e não a decisão pedida — a primeira decisão vence, e um segundo
+        # operador clicando em aprovar num pedido rejeitado não pode anunciar uma
+        # aprovação que não aconteceu.
+        await _publicar(
+            request.app,
+            NotaDecidida(
+                em=agora(),
+                pedido_id=pedido_id,
+                session_id=await _sessao_do(request.app, pedido_id),
+                decisao=vigente.decisao.value,
+                numero_nota=emitida.nota.numero if emitida else None,
+                motivo=vigente.motivo,
+            ),
+        )
+        await _anunciar_o_pedido(request.app, pedido_id)
+
         return DecisaoRegistrada(
             pedido_id=pedido_id,
             decisao=vigente.decisao.value,
@@ -950,6 +1029,41 @@ def _rotas_do_mock(app: FastAPI) -> None:
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
 
 
+async def _publicar(app: FastAPI, evento: Any) -> None:
+    """Publica sem nunca levantar. O painel não pode custar uma venda."""
+    try:
+        await app.state.barramento.publicar(evento)
+    except Exception:
+        logger.exception("falha ao publicar %s no barramento do painel", type(evento).__name__)
+
+
+async def _sessao_do(app: FastAPI, pedido_id: str) -> str | None:
+    try:
+        encontrada: str | None = await app.state.telemetria.sessao_do_pedido(pedido_id)
+        return encontrada
+    except Exception:
+        logger.exception("falha ao achar a sessao do pedido %s", pedido_id)
+        return None
+
+
+async def _anunciar_o_pedido(app: FastAPI, pedido_id: str) -> None:
+    """Diz ao painel — e ao chat do cliente — que este pedido mudou de estado."""
+    pedido = await app.state.pedidos.por_id(pedido_id)
+    if pedido is None:
+        return
+    await _publicar(
+        app,
+        PedidoAtualizado(
+            em=agora(),
+            pedido_id=pedido.id,
+            session_id=await _sessao_do(app, pedido_id),
+            status=pedido.status.value,
+            total=pedido.total,
+            razao_social=pedido.empresa.razao_social,
+        ),
+    )
+
+
 async def _abrir_fila_da_nota(app: FastAPI, pedido_id: str) -> None:
     """Pagamento confirmado: o grafo fiscal entra e para no `interrupt` (REQ-1).
 
@@ -970,6 +1084,22 @@ async def _abrir_fila_da_nota(app: FastAPI, pedido_id: str) -> None:
             "não consegui abrir a pausa da nota para o pedido %s; ele continua na fila "
             "pelo status, e a aprovação conduz o grafo do começo",
             pedido_id,
+        )
+
+    # O sino do painel. Fora do `try` de propósito: a fila é derivada do status do
+    # pedido, então ela existe mesmo quando a pausa não abriu — e o operador precisa
+    # ser avisado justamente nesse caso, que é o mais difícil de perceber.
+    await _anunciar_o_pedido(app, pedido_id)
+    pedido = await app.state.pedidos.por_id(pedido_id)
+    if pedido is not None:
+        await _publicar(
+            app,
+            AprovacaoPendente(
+                em=agora(),
+                pedido_id=pedido.id,
+                total=pedido.total,
+                razao_social=pedido.empresa.razao_social,
+            ),
         )
 
 

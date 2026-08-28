@@ -140,6 +140,8 @@ class Telemetria(Protocol):
 
     async def vincular_pedido(self, session_id: str, pedido_id: str) -> None: ...
 
+    async def sessao_do_pedido(self, pedido_id: str) -> str | None: ...
+
     async def sessoes(self, *, limite: int = 50, offset: int = 0) -> tuple[ResumoDaSessao, ...]: ...
 
     async def sessoes_desde(self, desde: datetime) -> tuple[ResumoDaSessao, ...]: ...
@@ -289,6 +291,23 @@ class PostgresTelemetria:
                 "UPDATE sessao SET pedido_id = %s, ultima_atividade = now() WHERE session_id = %s",
                 (pedido_id, session_id),
             )
+
+    async def sessao_do_pedido(self, pedido_id: str) -> str | None:
+        """De volta do pedido para a conversa — é o endereço do push ao cliente.
+
+        A ligação é gravada quando `criar_pedido` retorna, então um pedido criado
+        fora de uma conversa (um eval, uma carga) simplesmente não tem sessão, e o
+        push não acontece. `None` aqui é ausência, não erro.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linha = await (
+                await conn.execute(
+                    "SELECT session_id FROM sessao WHERE pedido_id = %s"
+                    " ORDER BY ultima_atividade DESC LIMIT 1",
+                    (pedido_id,),
+                )
+            ).fetchone()
+        return None if linha is None else str(linha[0])
 
     async def sessoes(self, *, limite: int = 50, offset: int = 0) -> tuple[ResumoDaSessao, ...]:
         async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
@@ -580,6 +599,12 @@ class TelemetriaEmMemoria:
         if existente is None:
             return
         self.abertas[session_id] = existente.model_copy(update={"pedido_id": pedido_id})
+
+    async def sessao_do_pedido(self, pedido_id: str) -> str | None:
+        for sessao in self.abertas.values():
+            if sessao.pedido_id == pedido_id:
+                return sessao.session_id
+        return None
 
     async def sessoes(self, *, limite: int = 50, offset: int = 0) -> tuple[ResumoDaSessao, ...]:
         ordenadas = sorted(
