@@ -123,10 +123,17 @@ Suba a API de novo. As duas telas reconectam sozinhas, sem F5.
 
 ## 9. Onde o dinheiro aparece
 
-Em **Métricas** (`/admin/metricas`): custo de IA do período, quanto ele representa do que
-foi vendido, uso por modelo, e o tempo até a resposta começar a aparecer contra a meta de 3s.
-Na tela a meta se chama **meta** — o nome do requisito interno (RNF-4) fica na spec, que é
-onde ele significa alguma coisa.
+São duas telas, e a divisão entre elas é o roteiro: **Visão geral é a loja, Métricas é a
+máquina.**
+
+Em **Visão geral** (`/admin`): quanto foi vendido, quantos atendimentos viraram pedido, o
+valor médio do pedido, **quanto dura um atendimento completo**, e o que a conferência barrou.
+Nenhum token e nenhum dólar — quem abre esta tela quer saber como foi o dia.
+
+Em **Métricas** (`/admin/metricas`): custo de IA do período, quanto ele representa do que foi
+vendido, uso por modelo, e o tempo até a resposta começar a aparecer contra a meta de 3s. Na
+tela a meta se chama **meta** — o nome do requisito interno (RNF-4) fica na spec, que é onde
+ele significa alguma coisa.
 
 Repare no que **não** aparece: "custo de IA sobre o vendido" fica em traço, porque não há
 cotação do dólar configurada em `data/precos-modelos.json` — comparar dólar com real por uma

@@ -182,6 +182,26 @@ O corolário para os indicadores: **cada número diz o que mede, em uma linha, a
 "p50 do primeiro token" virou "Numa resposta comum — metade das respostas começou a aparecer
 antes disto". O nome curto é para o eixo do gráfico; a frase é para a pessoa.
 
+E o corolário do corolário, na tipografia: rótulo curto continua **mono maiúscula**; rótulo
+que virou frase usa a fonte do corpo (`.rotulo--frase`). "PEDIDOS" funciona no primeiro
+tratamento; "TEMPO ATÉ A RESPOSTA COMEÇAR A APARECER" vira sopa.
+
+### Uma tela, uma pergunta
+
+**Visão geral é a loja; Métricas é a máquina.** As duas nasceram lendo a mesma consulta e
+repetindo quatro KPIs, o bullet de latência e o gráfico de recusas inteiro — e a pergunta do PO
+("qual a diferença entre as duas?") é a prova de que a repetição não é gratuita: duas telas que
+dizem o mesmo treinam a pessoa a abrir só uma.
+
+| | Visão geral | Métricas |
+|---|---|---|
+| Pergunta | como foi o dia da loja | a máquina está saindo cara ou lenta |
+| Mostra | vendido, conversão, valor médio do pedido, duração do atendimento completo, o que a conferência barrou, últimos atendimentos, fila pendente | custo de IA, custo sobre o vendido, tokens lidos e escritos por modelo, tempo até o primeiro token, respostas que travaram |
+| Nunca mostra | token, dólar, latência de modelo | receita, conversão, ticket |
+
+A regra que sustenta isso: **nenhum bloco aparece nas duas.** Se um número serve às duas
+perguntas, ele fica na tela de quem decide com ele — e a outra tela linka.
+
 ## Gráficos
 
 | KPI | Forma | Por quê |

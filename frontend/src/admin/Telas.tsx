@@ -110,6 +110,16 @@ function Carregando({ linhas = 3 }: { linhas?: number }) {
 }
 
 // ------------------------------------------------------------- visão geral
+//
+// **Visão geral e Métricas mostravam quase a mesma coisa** — mesma consulta, quatro
+// KPIs repetidos, o mesmo bullet de latência e o mesmo gráfico de recusas nas duas.
+// Duas telas que dizem o mesmo treinam a pessoa a abrir só uma, e aí a outra some.
+//
+// O corte, decidido com o PO: **aqui é venda e atendimento; lá é máquina.** Quanto
+// se vendeu, quantos atendimentos viraram pedido, quanto dura um atendimento, o que
+// a conferência barrou. Token, custo de modelo e latência de primeiro token não
+// aparecem nesta tela, e é de propósito: quem abre a visão geral quer saber como foi
+// o dia da loja, não quanto o fornecedor de IA cobrou por ele.
 
 export function VisaoGeral() {
   const [janela] = useJanela();
@@ -144,7 +154,7 @@ export function VisaoGeral() {
         <Kpi
           titulo="Atendimentos"
           valor={inteiro(m.conversas)}
-          nota={`${inteiro(m.turnos)} respostas do agente`}
+          nota="conversas iniciadas no período"
         />
         <Kpi
           titulo="Viraram pedido"
@@ -152,56 +162,31 @@ export function VisaoGeral() {
           nota={`${inteiro(m.conversas_com_pedido)} de ${inteiro(m.conversas)} atendimentos`}
           porque="nenhum atendimento neste período"
         />
+        <Kpi titulo="Vendido" valor={reais(m.receita)} nota={`${inteiro(m.pedidos)} pedidos`} />
         <Kpi
           titulo="Valor médio do pedido"
           valor={m.ticket_medio === null ? null : reais(m.ticket_medio)}
-          nota={`${inteiro(m.pedidos)} pedidos · ${reais(m.receita)} no total`}
           porque="nenhum pedido neste período"
         />
         <Kpi
-          titulo="Custo de IA"
-          valorNo={<Custo custo={m.custo} />}
-          nota={
-            m.custo_sobre_ticket === null
-              ? "quanto os modelos consumiram no período"
-              : `${porcento(m.custo_sobre_ticket)} do que foi vendido`
-          }
+          titulo="Atendimento completo"
+          valor={m.atendimento_medio_ms === null ? null : milissegundos(m.atendimento_medio_ms)}
+          nota="em média, do primeiro oi à última mensagem"
+          porque="nenhum atendimento com começo e fim neste período"
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Velocidade do atendimento</CardTitle>
+            <CardTitle>Como foram os atendimentos</CardTitle>
             <CardDescription>
-              Quanto o cliente espera, do ponto de vista dele: primeiro o tempo até a resposta
-              começar a aparecer na tela, depois quanto dura o atendimento inteiro.
+              O que o agente precisou fazer para chegar no pedido, e o que ainda depende de
+              uma pessoa.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <Bullet
-              valor={m.primeiro_token_p95_ms}
-              alvo={m.primeiro_token_alvo_ms}
-              rotulo="Tempo até a resposta começar a aparecer"
-              explica="Nas respostas mais lentas — 95 de cada 100 começaram dentro deste tempo. O traço é a meta que o projeto se deu."
-              alvoRotulo="meta"
-            />
-            <Separator />
+          <CardContent>
             <dl className="linhas linhas--explicadas">
-              <div>
-                <dt>
-                  Numa resposta comum
-                  <span>metade das respostas começou a aparecer antes disto</span>
-                </dt>
-                <dd className="num">{milissegundos(m.primeiro_token_p50_ms)}</dd>
-              </div>
-              <div>
-                <dt>
-                  Duração de um atendimento
-                  <span>da primeira mensagem do cliente à última do agente</span>
-                </dt>
-                <dd className="num">{milissegundos(m.atendimento_medio_ms)}</dd>
-              </div>
               <div>
                 <dt>
                   Idas e vindas por atendimento
@@ -209,7 +194,7 @@ export function VisaoGeral() {
                 </dt>
                 <dd className="num">
                   {m.turnos_por_conversa === null ? (
-                    <Ausente porque="nenhuma conversa nesta janela" />
+                    <Ausente porque="nenhum atendimento neste período" />
                   ) : (
                     Number(m.turnos_por_conversa).toFixed(1).replace(".", ",")
                   )}
@@ -217,10 +202,25 @@ export function VisaoGeral() {
               </div>
               <div>
                 <dt>
-                  Respostas que travaram no meio
-                  <span>a conexão caiu antes de o agente terminar de escrever</span>
+                  Esperando aprovação agora
+                  <span>notas fiscais paradas na fila neste momento</span>
                 </dt>
-                <dd className="num">{inteiro(m.erros_de_stream)}</dd>
+                <dd className="num">{inteiro(m.fila_pendentes)}</dd>
+              </div>
+              <div>
+                <dt>
+                  Notas aprovadas
+                  <span>
+                    {inteiro(m.aprovadas)} de {inteiro(m.decisoes)} decisões do operador
+                  </span>
+                </dt>
+                <dd className="num">
+                  {m.taxa_de_aprovacao === null ? (
+                    <Ausente porque="ninguém decidiu nada neste período" />
+                  ) : (
+                    porcento(m.taxa_de_aprovacao)
+                  )}
+                </dd>
               </div>
             </dl>
           </CardContent>
@@ -913,6 +913,15 @@ export function Pedidos() {
 }
 
 // ---------------------------------------------------------------- métricas
+//
+// A metade técnica do corte descrito na visão geral: **aqui é máquina.** Quanto os
+// modelos consumiram, quanto isso custou, quanto texto entrou e saiu de cada um, e
+// quanto o cliente espera até a resposta começar a aparecer.
+//
+// Nenhum KPI de venda aparece aqui — receita, conversão e ticket vivem na visão
+// geral, e repeti-los era o que fazia as duas telas dizerem a mesma coisa. A única
+// ponte é "custo de IA sobre o vendido", que só existe porque a pergunta dela é
+// técnica: o modelo escolhido cabe no preço do produto?
 
 export function Metricas() {
   const [janela] = useJanela();
@@ -924,23 +933,10 @@ export function Metricas() {
   return (
     <div className="flex flex-col gap-4">
       <div className="kpis">
-        <Kpi titulo="Atendimentos" valor={inteiro(m.conversas)} nota="conversas no período" />
-        <Kpi
-          titulo="Viraram pedido"
-          valor={m.taxa_de_conversao === null ? null : porcento(m.taxa_de_conversao)}
-          nota="dos atendimentos fecharam compra"
-          porque="nenhum atendimento neste período"
-        />
-        <Kpi titulo="Vendido" valor={reais(m.receita)} nota={`${inteiro(m.pedidos)} pedidos`} />
-        <Kpi
-          titulo="Valor médio do pedido"
-          valor={m.ticket_medio === null ? null : reais(m.ticket_medio)}
-          porque="nenhum pedido neste período"
-        />
         <Kpi
           titulo="Custo de IA"
           valorNo={<Custo custo={m.custo} />}
-          nota="o que os modelos consumiram"
+          nota="o que os modelos consumiram no período"
         />
         <Kpi
           titulo="Custo de IA sobre o vendido"
@@ -949,15 +945,14 @@ export function Metricas() {
           porque="falta a cotação do dólar para converter o custo em reais"
         />
         <Kpi
-          titulo="Esperando aprovação"
-          valor={inteiro(m.fila_pendentes)}
-          nota="notas fiscais paradas na fila agora"
+          titulo="Respostas do agente"
+          valor={inteiro(m.turnos)}
+          nota={`em ${inteiro(m.conversas)} atendimentos`}
         />
         <Kpi
-          titulo="Notas aprovadas"
-          valor={m.taxa_de_aprovacao === null ? null : porcento(m.taxa_de_aprovacao)}
-          nota={`${inteiro(m.aprovadas)} de ${inteiro(m.decisoes)} decisões do operador`}
-          porque="ninguém decidiu nada neste período"
+          titulo="Respostas que travaram"
+          valor={inteiro(m.erros_de_stream)}
+          nota="a conexão caiu antes de o agente terminar de escrever"
         />
       </div>
 
@@ -966,10 +961,11 @@ export function Metricas() {
           <CardHeader>
             <CardTitle>Tempo até a resposta começar</CardTitle>
             <CardDescription>
-              Quanto o cliente olha para a tela em branco antes de ver a primeira palavra.
+              Quanto o cliente olha para a tela em branco antes de ver a primeira palavra. Não é
+              o atendimento inteiro — esse fica na visão geral.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
             <Bullet
               valor={m.primeiro_token_p95_ms}
               alvo={m.primeiro_token_alvo_ms}
@@ -977,6 +973,16 @@ export function Metricas() {
               explica="O traço é a meta que o projeto se deu para este número."
               alvoRotulo="meta"
             />
+            <Separator />
+            <dl className="linhas linhas--explicadas">
+              <div>
+                <dt>
+                  Numa resposta comum
+                  <span>metade das respostas começou a aparecer antes disto</span>
+                </dt>
+                <dd className="num">{milissegundos(m.primeiro_token_p50_ms)}</dd>
+              </div>
+            </dl>
           </CardContent>
         </Card>
 
@@ -1016,27 +1022,6 @@ export function Metricas() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Sugestões barradas na conferência</CardTitle>
-          <CardDescription>
-            Quantas vezes o sistema devolveu a sugestão do agente para refazer, e por qual
-            motivo. Este gráfico subindo não é falha do atendimento — é a trava funcionando
-            antes de o cliente ver um preço errado.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <BarrasOrdenadas
-            rotulo="Motivo da devolução"
-            vazio="nenhuma sugestão foi barrada neste período"
-            dados={m.recusas_do_validador.map((r) => ({
-              chave: NOME_DO_MOTIVO[r.motivo] ?? r.motivo,
-              valor: r.recusas,
-            }))}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }

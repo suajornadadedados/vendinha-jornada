@@ -207,6 +207,30 @@ Cenário: a conexão cai e a tela não mente
 
 ## Descobertas (preenchido durante a execução)
 
+- **DESC-7 — Visão geral e Métricas nasceram dizendo a mesma coisa, e o PO perguntou
+  qual era a diferença.** As duas liam a mesma consulta e repetiam quatro KPIs, o
+  bullet de latência e o gráfico de recusas inteiro. Duas telas que dizem o mesmo
+  treinam a pessoa a abrir só uma. O corte que entrou: **Visão geral é a loja**
+  (vendido, conversão, valor médio, duração do atendimento completo, o que a
+  conferência barrou, os últimos atendimentos) e **Métricas é a máquina** (custo de
+  IA, custo sobre o vendido, tokens por modelo, tempo até o primeiro token). Zero
+  bloco repetido entre as duas. A REQ-13 continua conforme: nenhum KPI que ela pede
+  saiu do painel — eles foram **distribuídos** em vez de empilhados numa tela só.
+
+- **DESC-8 — A navegação do painel virou rota, e a decisão de desenho anterior era
+  o oposto.** O comentário no topo do `Admin.tsx` argumentava que um roteador só
+  serviria para URLs compartilháveis que ninguém tinha pedido. O PO pediu. Cada seção
+  tem endereço (`/admin`, `/admin/conversas`, …) e uma conversa aberta é
+  `/admin/conversas/<id>`. O custo é a reescrita de `/admin/*` para `admin.html`, no
+  `vite.config.ts` hoje e no servidor de estáticos na S-08.
+
+  > E o custo cobrou: o middleware entrou instalado **depois** dos internos do Vite,
+  > então `/admin/conversas` respondia **200 servindo a landing**. O primeiro teste
+  > olhou só o status e passou. Só apareceu quando abri um navegador de verdade —
+  > registro aqui porque é a evidência mais barata de que status 200 não é resposta
+  > certa, e de que a verificação em navegador da própria spec não era formalidade.
+
+
 - **DESC-2 — A paleta de partida reprovou em contraste, e a régua era do próprio style.**
   O `ui-ux-pro-max` devolveu *Accessible & Ethical* com contraste 4.5:1 como requisito, e o
   ocre `#B4711F` dos diagramas do repositório mede **3.72** sobre papel — reprova em texto,
