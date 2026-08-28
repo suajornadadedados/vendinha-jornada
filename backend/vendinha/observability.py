@@ -83,18 +83,45 @@ def client() -> Langfuse | None:
         return None
 
 
-def callback_handler() -> CallbackHandler | None:
+def trace_id_da_sessao(session_id: str) -> str:
+    """O id de trace desta sessão — o MESMO em todo turno dela.
+
+    `create_trace_id` deriva um id de 32 hex determinístico a partir da semente, que
+    é como o Langfuse manda correlacionar um id externo com um trace dele. O id da
+    sessão já é o `thread_id` do checkpointer e o que o cliente guarda no
+    `localStorage`, então a conversa inteira tem uma chave só, de ponta a ponta.
+    """
+    return Langfuse.create_trace_id(seed=session_id)
+
+
+def callback_handler(session_id: str | None = None) -> CallbackHandler | None:
     """The LangChain callback that turns a graph run into a trace, or `None`.
 
     Order matters and is the reason this is a function rather than a constant: the
     handler talks to the global Langfuse client, so the client — the one carrying
     our masking hook — has to exist first. A handler built before it would export
     through a default client with no redaction at all.
+
+    **Com `session_id`, a conversa inteira vira UM trace.** Cada `POST /chat` é uma
+    requisição própria, e sem isto o handler abre um run raiz novo a cada turno —
+    logo, um trace por turno. Quem quisesse ler o atendimento tinha que abrir doze
+    traces e remontar a ordem na cabeça. Fixar o `trace_id` derivado da sessão faz
+    as observações de todos os turnos caírem no mesmo trace, que é o mesmo efeito que
+    o runner de evals já obtém de outro jeito: lá existe um `start_as_current_observation`
+    por caso, envolvendo todas as falas, e aqui não existe requisição que envolva o
+    atendimento inteiro.
+
+    O preço, dito em voz alta: a latência do trace passa a ser o relógio de parede da
+    conversa — minutos ou horas —, e não o tempo de um turno. A latência que importa
+    para o RNF-4 é a do primeiro token, e ela é medida no `observador` e vive no
+    painel, não aqui.
     """
     if client() is None:
         return None
     try:
-        return CallbackHandler()
+        if session_id is None:
+            return CallbackHandler()
+        return CallbackHandler(trace_context={"trace_id": trace_id_da_sessao(session_id)})
     except Exception:
         logger.warning("nao consegui instrumentar a conversa; seguindo sem trace", exc_info=True)
         return None

@@ -581,10 +581,16 @@ def create_app(
 
         graph_to_run = await _graph_for(request.app, model_name)
         timeout = settings.tool_timeout_seconds
+        # O handler da subida é a sonda: ele diz se há Langfuse configurado, e é o
+        # que já logou uma vez se não houver. O que vai no `config` é um handler
+        # POR SESSÃO, com o trace id derivado dela — é o que faz os turnos de um
+        # atendimento caírem num trace só em vez de um trace por turno. Se construí-lo
+        # falhar, cai no da subida: pior um trace por turno do que atendimento sem
+        # trace (ADR-010).
         handler = getattr(request.app.state, "langfuse", None)
         config = session_config(session_id)
         if handler is not None:
-            config = {**config, "callbacks": [handler]}
+            config = {**config, "callbacks": [callback_handler(session_id=session_id) or handler]}
 
         # O painel observa o mesmo stream com outra pergunta: a rota filtra o que o
         # cliente pode ler, o observador mede o que o turno custou e conta ao
