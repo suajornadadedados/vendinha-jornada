@@ -35,11 +35,12 @@ cenário, não o produto.
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -77,6 +78,16 @@ logger = logging.getLogger(__name__)
 
 EVALS = REPO_ROOT / "evals"
 SPEC_PADRAO = "S-03"
+
+# Quantos casos correm ao mesmo tempo. O tempo de parede de uma suite e quase todo
+# espera de rede — dentro de um caso as idas ao modelo sao serial por natureza (a
+# proxima depende da anterior), entao a unica paralelizacao possivel e ENTRE casos.
+#
+# Quatro, e nao "o maximo que der": o teto real e o rate limit do provedor, e
+# estourar ele troca tempo de parede por 429 e retry, que custa dinheiro sem
+# entregar velocidade. Cada caso ja tem grafo, checkpointer, pedidos e thread
+# proprios, entao subir este numero nao muda NADA do que se mede.
+CONCORRENCIA_PADRAO = 4
 
 # As specs cujos casos exercitam o checkout — supervisor, duas lanes, tools de
 # escrita. Fora delas o runner monta só a lane de recomendação, que é o agente que
@@ -231,6 +242,38 @@ class Resultado:
         if self.erro_do_cenario is not None:
             return False
         return not self.aprovado and self.caso.criterio.falha_dura is not None
+
+
+async def em_paralelo[T, R](
+    itens: Sequence[T], tarefa: Callable[[T], Awaitable[R]], limite: int
+) -> list[R]:
+    """Roda `tarefa` sobre `itens`, no máximo `limite` ao mesmo tempo, NA ORDEM.
+
+    O tempo de parede de uma suíte é quase todo espera de rede, e dentro de um caso
+    as idas ao modelo são seriais por natureza — a próxima depende da anterior. A
+    única paralelização possível é **entre** casos, e é esta.
+
+    **A ordem da saída é a da entrada, e isso não é detalhe.** Dois relatórios da
+    mesma suíte precisam se comparar a olho, e é exatamente o que se faz com eles;
+    ordenar por quem terminou primeiro tornaria cada execução um documento novo. A
+    ordem de conclusão varia — a lista, não.
+
+    **Erro inesperado ainda mata a execução**, como matava no laço serial: quem
+    reprova um caso é `CenarioNaoMontou`, tratado pelo chamador, e mais nada.
+    `return_exceptions=True` está aqui só para não deixar tarefa órfã correndo no
+    laço depois que a primeira levantou — o re-raise abaixo devolve o comportamento.
+    """
+    porta = asyncio.Semaphore(limite)
+
+    async def com_limite(item: T) -> R:
+        async with porta:
+            return await tarefa(item)
+
+    colhidos = await asyncio.gather(*(com_limite(item) for item in itens), return_exceptions=True)
+    for colhido in colhidos:
+        if isinstance(colhido, BaseException):
+            raise colhido
+    return [colhido for colhido in colhidos if not isinstance(colhido, BaseException)]
 
 
 async def _catalogo_da_verdade(catalogo: PostgresCatalogo) -> list[tuple[str, str, Decimal]]:
@@ -594,8 +637,12 @@ async def rodar_caso(
     )
 
 
-async def rodar(spec: str = SPEC_PADRAO, apenas: str | None = None) -> list[Resultado]:
-    """Roda todos os casos de uma spec contra o agente."""
+async def rodar(
+    spec: str = SPEC_PADRAO,
+    apenas: str | None = None,
+    concorrencia: int = CONCORRENCIA_PADRAO,
+) -> list[Resultado]:
+    """Roda todos os casos de uma spec contra o agente, alguns de cada vez."""
     settings = get_settings()
     dsn = with_connect_timeout(settings.database_url)
 
@@ -652,40 +699,36 @@ async def rodar(spec: str = SPEC_PADRAO, apenas: str | None = None) -> list[Resu
             file=sys.stderr,
         )
 
+    async def um(caso: Caso) -> Resultado:
+        print(f"rodando {caso.id}...", file=sys.stderr)
+        try:
+            return await rodar_caso(
+                caso,
+                resolve_model(modelo_do_agente, credenciais.get(provider_do_agente)),
+                busca,
+                catalogo,
+                settings.tool_timeout_seconds,
+                do_catalogo,
+                juiz_modelo,
+                settings.session_budget_tokens,
+            )
+        except CenarioNaoMontou as sem_cenario:
+            # Reprova este caso e segue. Abortar a execucao inteira faria uma
+            # pre-condicao que nao se materializou custar o relatorio dos outros
+            # seis — e o relatorio e o que custou dinheiro para produzir.
+            print(f"  cenario nao montou: {sem_cenario}", file=sys.stderr)
+            return Resultado(
+                caso=caso,
+                transcricao=Transcricao(respostas=(), chamadas=()),
+                portao=Veredito(achados=()),
+                juiz=None,
+                erro_do_cenario=str(sem_cenario),
+            )
+
     try:
-        resultados = []
-        for caso in casos:
-            print(f"rodando {caso.id}...", file=sys.stderr)
-            try:
-                resultados.append(
-                    await rodar_caso(
-                        caso,
-                        resolve_model(modelo_do_agente, credenciais.get(provider_do_agente)),
-                        busca,
-                        catalogo,
-                        settings.tool_timeout_seconds,
-                        do_catalogo,
-                        juiz_modelo,
-                        settings.session_budget_tokens,
-                    )
-                )
-            except CenarioNaoMontou as sem_cenario:
-                # Reprova este caso e segue. Abortar a execucao inteira faria uma
-                # pre-condicao que nao se materializou custar o relatorio dos outros
-                # seis — e o relatorio e o que custou dinheiro para produzir.
-                print(f"  cenario nao montou: {sem_cenario}", file=sys.stderr)
-                resultados.append(
-                    Resultado(
-                        caso=caso,
-                        transcricao=Transcricao(respostas=(), chamadas=()),
-                        portao=Veredito(achados=()),
-                        juiz=None,
-                        erro_do_cenario=str(sem_cenario),
-                    )
-                )
+        return await em_paralelo(casos, um, concorrencia)
     finally:
         await busca.aclose()
-    return resultados
 
 
 def relatorio(resultados: Sequence[Resultado]) -> str:
@@ -802,6 +845,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--spec", default=SPEC_PADRAO, help="ex.: S-03 (padrão), S-04, S-11")
     parser.add_argument("--caso", default=None, help="prefixo do id, para rodar um só")
     parser.add_argument("--saida", type=Path, default=None, help="grava o relatório num arquivo")
+    parser.add_argument(
+        "--concorrencia",
+        type=int,
+        default=CONCORRENCIA_PADRAO,
+        help=f"casos simultâneos (padrão {CONCORRENCIA_PADRAO}); 1 volta ao modo serial",
+    )
     args = parser.parse_args(argv)
 
     # O relatório é markdown com acento, seta e travessão, e no Windows o stdout
@@ -814,7 +863,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     try:
-        resultados = runtime.run(rodar(spec=args.spec, apenas=args.caso))
+        resultados = runtime.run(
+            rodar(spec=args.spec, apenas=args.caso, concorrencia=args.concorrencia)
+        )
     except InfraestruturaAusente as faltando:
         print(str(faltando), file=sys.stderr)
         return 2
@@ -838,4 +889,12 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["InfraestruturaAusente", "Resultado", "main", "relatorio", "rodar", "rodar_caso"]
+__all__ = [
+    "InfraestruturaAusente",
+    "Resultado",
+    "em_paralelo",
+    "main",
+    "relatorio",
+    "rodar",
+    "rodar_caso",
+]

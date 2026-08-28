@@ -16,6 +16,7 @@ Sem rede, sem agente e sem chave de API: os casos são lidos do repositório e o
 juiz é um duplo.
 """
 
+import asyncio
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -39,6 +40,7 @@ from vendinha.evals.runner import (
     Resultado,
     _abertura_da_composicao,
     _abertura_do_cenario,
+    em_paralelo,
     relatorio,
     rodar_caso,
 )
@@ -804,3 +806,75 @@ def test_a_case_whose_judge_never_ran_is_not_approved_by_the_gate_alone() -> Non
     assert caso.criterio.deve, "o caso precisa ter critério em prosa para o teste valer"
     assert not sem_juiz.aprovado
     assert "juiz não executado" in relatorio([sem_juiz])
+
+
+# --------------------------------------------------------------------------- #
+# R6 — a suíte roda alguns casos de cada vez
+#
+# O tempo de parede era o atrito que fez o PO parar a execução da spec: 23 casos
+# em série passam de uma hora, e uma régua que ninguém aguenta rodar não é régua.
+# Dentro de um caso as idas ao modelo são seriais por natureza; a paralelização
+# possível é entre casos, e é só isso que estes dois testes prendem.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.risco("R6")
+async def test_the_suite_never_runs_more_cases_at_once_than_the_limit() -> None:
+    """R6 — o teto de simultâneos é respeitado, porque o rate limit do provedor é real.
+
+    Estourar o limite não troca tempo por velocidade: troca por 429 e retry, que
+    custa dinheiro sem entregar nada. O semáforo é nosso, não da biblioteca — um
+    refactor que mova o `acquire` para o escopo errado passaria despercebido, e
+    este teste é o que o pega.
+    """
+    simultaneos = 0
+    pico = 0
+
+    async def tarefa(n: int) -> int:
+        nonlocal simultaneos, pico
+        simultaneos += 1
+        pico = max(pico, simultaneos)
+        await asyncio.sleep(0)  # cede o controle: sem isso nada se sobrepõe
+        await asyncio.sleep(0)
+        simultaneos -= 1
+        return n
+
+    await em_paralelo(list(range(12)), tarefa, limite=3)
+
+    assert pico == 3, f"o pico de simultâneos foi {pico}, e o limite era 3"
+
+
+@pytest.mark.risco("R6")
+async def test_results_come_back_in_the_order_of_the_cases_not_of_who_finished() -> None:
+    """R6 — dois relatórios da mesma suíte precisam se comparar a olho.
+
+    Ordenar por quem terminou primeiro tornaria cada execução um documento novo, e
+    comparar execuções é exatamente o que se faz com esses relatórios. O caso mais
+    lento aqui é o primeiro da lista, de propósito: é o arranjo que uma implementação
+    que devolvesse por conclusão erraria.
+    """
+
+    async def tarefa(n: int) -> int:
+        await asyncio.sleep((10 - n) / 1000)
+        return n
+
+    assert await em_paralelo(list(range(10)), tarefa, limite=10) == list(range(10))
+
+
+@pytest.mark.risco("R6")
+async def test_an_unexpected_error_still_kills_the_run_instead_of_reproving_a_case() -> None:
+    """R6 — só `CenarioNaoMontou` reprova um caso; o resto continua derrubando tudo.
+
+    `return_exceptions=True` está ali para não deixar tarefa órfã correndo no laço
+    depois que a primeira levantou — não para transformar bug em caso reprovado.
+    Engolir exceção aqui faria um defeito do runner virar "o agente errou", que é a
+    reprovação pelo motivo errado contra a qual o `erro_do_cenario` já existe.
+    """
+
+    async def tarefa(n: int) -> int:
+        if n == 2:
+            raise RuntimeError("o runner quebrou")
+        return n
+
+    with pytest.raises(RuntimeError, match="o runner quebrou"):
+        await em_paralelo([1, 2, 3], tarefa, limite=2)
