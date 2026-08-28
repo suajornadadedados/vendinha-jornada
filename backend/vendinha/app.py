@@ -733,7 +733,7 @@ def create_app(
         na_fila = await pendentes(request.app.state.pedidos)
         return FilaDoOperador(pendentes=tuple(_na_fila(pedido) for pedido in na_fila))
 
-    async def _registrar_decisao(
+    async def _decidir_pela_fila(
         request: Request, pedido_id: str, decisao: Decisao, corpo: DecisaoDoOperador
     ) -> DecisaoRegistrada:
         """Grava a decisao e conduz o grafo. O corpo comum de aprovar e rejeitar.
@@ -798,7 +798,7 @@ def create_app(
         registro, nunca a chamada.
         """
         _operador_autenticado(x_operador_token)
-        return await _registrar_decisao(request, pedido_id, Decisao.APROVADA, corpo)
+        return await _decidir_pela_fila(request, pedido_id, Decisao.APROVADA, corpo)
 
     @app.post("/operador/pedidos/{pedido_id}/rejeitar", response_model=DecisaoRegistrada)
     async def rejeitar_a_nota(
@@ -814,7 +814,7 @@ def create_app(
         quem pagou, e e o que o `golden-011` existe para nao deixar acontecer.
         """
         _operador_autenticado(x_operador_token)
-        return await _registrar_decisao(request, pedido_id, Decisao.REJEITADA, corpo)
+        return await _decidir_pela_fila(request, pedido_id, Decisao.REJEITADA, corpo)
 
     # ------------------------------------------------ o documento, para o cliente
 
