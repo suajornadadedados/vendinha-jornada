@@ -250,6 +250,14 @@ class Resultado:
     modelo: str = ""
     juiz_nome: str = ""
 
+    # E com que `temperature`. A S-06 introduziu a configuração inteira para parar
+    # a régua de andar entre execuções, e o relatório não a registrava (ACH-3 da
+    # verificação): as duas metades do A/B de variância saíam indistinguíveis uma
+    # da outra a menos do nome do arquivo — que foi exatamente o que produziu o
+    # erro de método admitido em `S-06-variancia-temperature.md`. `None` significa
+    # "não mandei o parâmetro", que é o default do provedor, e não zero.
+    temperatura: float | None = None
+
     # O trace deste caso no Langfuse, quando houve um. `None` significa que o visor
     # nao estava configurado ou nao respondeu — e nao que o caso nao rodou. O
     # veredito nao depende disto em nenhum caminho: Langfuse fora do ar nao reprova
@@ -753,6 +761,59 @@ def _monta_o_grafo(
     )
 
 
+async def percorrer_a_conversa(
+    caso: Caso,
+    aberturas: Sequence[str],
+    mensagens: Sequence[AnyMessage],
+    *,
+    tem_pedido: bool,
+    dizer_ao_agente: Callable[[str], Awaitable[Any]],
+    decidir_a_nota: Callable[[Decisao, str | None], Awaitable[None]],
+) -> tuple[list[str], list[AnyMessage]]:
+    """Percorre as falas **na ordem em que o caso as escreveu**, e devolve o estado.
+
+    **Na ordem da conversa, e nao os clientes primeiro.** Ate a S-06 o runner
+    filtrava `de == "cliente"` e rodava tudo em bloco, o que estava certo enquanto
+    so existiam falas de cliente. Com o turno do operador a ordem passa a ser
+    semantica: o `golden-011` tem a rejeicao ANTES da pergunta do cliente, e e
+    exatamente por isso que "e a nossa nota?" tem uma resposta especifica. Rodar
+    fora de ordem mediria uma conversa diferente da que o caso escreveu — e
+    passaria, pelo motivo errado.
+
+    **Por que isto e uma funcao e nao um laco dentro de `rodar_caso`.** A
+    verificacao independente da S-06 (ACH-5) mostrou que o unico teste com esse
+    nome afirmava a ordem do *YAML* do `golden-011`, nao a do percurso: restaurar
+    o filtro `de == "cliente"` em bloco deixava o teste verde. `rodar_caso` exige
+    Postgres, Qdrant e chave de API, entao ninguem conseguia percorre-la num teste
+    barato. Aqui os dois efeitos entram como callables, e um duplo os grava em
+    ordem sem rede nenhuma.
+    """
+    falas_do_cliente: list[str] = list(aberturas)
+    correntes: list[AnyMessage] = list(mensagens)
+
+    for fala in caso.conversa:
+        match fala.de:
+            case "sistema":
+                # Descricao legivel do cenario, para quem le o YAML. O `cenario`
+                # declarado e quem manda, desde a S-04 — nada e inferido daqui.
+                continue
+            case "operador":
+                decisao, motivo = _decisao_do_turno(fala.texto)
+                if not tem_pedido:
+                    raise CenarioNaoMontou(
+                        f"{caso.id} tem turno de operador mas nenhum pedido foi criado: "
+                        f"um caso com decisao de nota precisa declarar "
+                        f"`cenario: pedido_pago` ou `cenario: nota_emitida`"
+                    )
+                await decidir_a_nota(decisao, motivo)
+            case "cliente":
+                falas_do_cliente.append(fala.texto)
+                estado = await dizer_ao_agente(fala.texto)
+                correntes = list(estado["messages"])
+
+    return falas_do_cliente, correntes
+
+
 async def rodar_caso(
     caso: Caso,
     modelo_do_agente: BaseChatModel,
@@ -764,6 +825,7 @@ async def rodar_caso(
     budget_tokens: int = DEFAULT_BUDGET_TOKENS,
     nome_do_modelo: str = "",
     nome_do_juiz: str = "",
+    temperatura: float | None = None,
 ) -> Resultado:
     """Reproduz a conversa do caso contra o agente e aplica as duas metades da regua.
 
@@ -831,34 +893,19 @@ async def rodar_caso(
         emissao,
     )
 
-    # **Na ordem da conversa, e nao os clientes primeiro.** Ate a S-06 o runner
-    # filtrava `de == "cliente"` e rodava tudo em bloco, o que estava certo enquanto
-    # so existiam falas de cliente. Com o turno do operador a ordem passa a ser
-    # semantica: o `golden-011` tem a rejeicao ANTES da pergunta do cliente, e e
-    # exatamente por isso que "e a nossa nota?" tem uma resposta especifica. Rodar
-    # fora de ordem mediria uma conversa diferente da que o caso escreveu.
-    falas_do_cliente: list[str] = list(aberturas)
-    for fala in caso.conversa:
-        match fala.de:
-            case "sistema":
-                # Descricao legivel do cenario, para quem le o YAML. O `cenario`
-                # declarado e quem manda, desde a S-04 — nada e inferido daqui.
-                continue
-            case "operador":
-                decisao, motivo = _decisao_do_turno(fala.texto)
-                if pedido_do_cenario is None:
-                    raise CenarioNaoMontou(
-                        f"{caso.id} tem turno de operador mas nenhum pedido foi criado: "
-                        f"um caso com decisao de nota precisa declarar `cenario: pedido_pago`"
-                    )
-                await _decidir_a_nota(emissao, fiscal, pedido_do_cenario, decisao, motivo)
-            case "cliente":
-                falas_do_cliente.append(fala.texto)
-                estado = await graph.ainvoke(
-                    {"session_id": caso.id, "messages": [HumanMessage(content=fala.texto)]},
-                    config=_config_da_sessao(caso.id),
-                )
-                mensagens = list(estado["messages"])
+    falas_do_cliente, mensagens = await percorrer_a_conversa(
+        caso,
+        aberturas,
+        mensagens,
+        tem_pedido=pedido_do_cenario is not None,
+        dizer_ao_agente=lambda texto: graph.ainvoke(
+            {"session_id": caso.id, "messages": [HumanMessage(content=texto)]},
+            config=_config_da_sessao(caso.id),
+        ),
+        decidir_a_nota=lambda decisao, motivo: _decidir_a_nota(
+            emissao, fiscal, str(pedido_do_cenario), decisao, motivo
+        ),
+    )
 
     transcricao = transcrever(mensagens)
     portao = verificar(caso, transcricao, do_catalogo)
@@ -883,6 +930,7 @@ async def rodar_caso(
         gasto=gasto_da_conversa(mensagens),
         modelo=nome_do_modelo,
         juiz_nome=nome_do_juiz,
+        temperatura=temperatura,
     )
 
 
@@ -982,6 +1030,7 @@ async def rodar(
                 settings.session_budget_tokens,
                 modelo_do_agente,
                 nome_do_juiz if juiz_modelo is not None else "",
+                settings.llm_temperature,
             )
             return replace(medido, trace_id=trace_id)
         except CenarioNaoMontou as sem_cenario:
@@ -1025,7 +1074,12 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
     # diferentes saem com a mesma cara.
     if resultados and resultados[0].modelo:
         juiz = resultados[0].juiz_nome or "nenhum (sem credencial)"
-        linhas += [f"Agente: `{resultados[0].modelo}` · Juiz: `{juiz}`", ""]
+        temperatura = resultados[0].temperatura
+        pinada = "default do provedor" if temperatura is None else f"`{temperatura}`"
+        linhas += [
+            f"Agente: `{resultados[0].modelo}` · Juiz: `{juiz}` · `LLM_TEMPERATURE`: {pinada}",
+            "",
+        ]
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
