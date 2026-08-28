@@ -1,4 +1,4 @@
-# Mapa de decisões (D1-D16) → ADRs
+# Mapa de decisões (D1-D18) → ADRs
 
 | Decisão | Pergunta | Resposta adotada | ADR |
 |---|---|---|---|
@@ -19,3 +19,4 @@
 | D15 | De quem é a escolha do modelo, e onde mora a chave? | Provedor agnóstico (`init_chat_model`); modelo escolhido de allowlist do servidor; credencial cifrada no banco, editável em runtime | ADR-012 |
 | D16 | Para quem a loja vende, e quem monta a composição? | Empresas montando eventos; o modelo propõe a composição e o código valida orçamento, slots e restrições | ADR-013 |
 | D17 | Quando o portão de evals roda, e sobre o quê? | Em camadas: determinística sempre, sub-suítes afetadas pelo diff no PR, suíte inteira no pós-merge; Langfuse é visor, não portão | ADR-014 |
+| D18 | O cliente enxerga o agente por onde? | Painel de observação próprio, read-only, com custo em `Decimal` no backend; o Langfuse fica como visor interno | ADR-015 |
