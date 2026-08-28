@@ -307,8 +307,31 @@
 
 .composicao__itens {
   width: 100%;
+  /* `fixed` porque a janela tem 420px e o nome do produto é longo. Com a
+     distribuição automática, "Café moído tradicional para coador" tomava a largura
+     que quisesse e espremia quantidade, unitário e subtotal até os três se
+     encostarem — a coluna que manda passava a ser a mais comprida, não a que
+     precisa de espaço. Fixo, o nome quebra em duas linhas e os números não se
+     mexem. */
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 12.5px;
+}
+
+/* As três colunas de número têm largura própria; o nome fica com o que sobrar. */
+.composicao__itens th:nth-child(2),
+.composicao__itens td:nth-child(2) {
+  width: 42px;
+}
+
+.composicao__itens th:nth-child(3),
+.composicao__itens td:nth-child(3) {
+  width: 76px;
+}
+
+.composicao__itens th:nth-child(4),
+.composicao__itens td:nth-child(4) {
+  width: 84px;
 }
 
 .composicao__itens th {
@@ -325,18 +348,43 @@
 .composicao__itens th.num,
 .composicao__itens td.num {
   text-align: right;
+  /* O respiro entre as colunas de número. Sem ele, "4" e "R$ 44,00" e
+     "R$ 176,00" ficam encostados e a linha vira um borrão de dígitos. */
+  padding-left: 8px;
+  /* Preço nunca quebra no meio, e os dígitos alinham na vertical de uma linha
+     para a outra — é o que faz a coluna ler como coluna. */
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O `letter-spacing` do cabeçalho é bonito em "ITEM" e faz "SUBTOTAL" não caber
+   nos 84px da coluna. Nos títulos de número ele encolhe. */
+.composicao__itens th.num {
+  letter-spacing: 0.02em;
 }
 
 .composicao__itens td {
   padding: 5px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--linha) 55%, transparent);
+  vertical-align: top;
+}
+
+/* O nome quebra em duas linhas quando precisa, e não encosta na quantidade. */
+.composicao__itens td:first-child {
+  padding-right: 8px;
+  line-height: 1.3;
 }
 
 .composicao__totais {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px var(--e-2);
+  /* Coluna mais folgada que linha: os três pares (total, por pessoa, teto) ficam
+     lado a lado numa janela de 420px, e o que os separa é o espaço. Apertado, o
+     "R$ 536,00" de um encostava no "POR PESSOA" do seguinte. */
+  gap: 6px var(--e-3);
   margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--linha);
 }
 
 .composicao__totais div {
@@ -344,6 +392,7 @@
   gap: 6px;
   align-items: baseline;
 }
+
 
 .composicao__totais dt {
   color: var(--tinta-suave);
@@ -355,6 +404,8 @@
 .composicao__totais dd {
   margin: 0;
   font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .composicao__excedente dd {
