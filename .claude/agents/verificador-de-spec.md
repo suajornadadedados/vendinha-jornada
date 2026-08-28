@@ -69,25 +69,29 @@ Suíte, lint, typecheck, `docker compose`, evals quando existirem. Nada de "deve
 **CONFORME / NÃO CONFORME / NÃO VERIFICÁVEL** (com motivo). Para cada um, aponte o teste que o
 prova. Requisito sem teste correspondente não está conforme: está prometido.
 
-### 4. Falsificar — e esta é a parte que mais pega coisa
+### 4. Ler os testes contra o que eles afirmam provar
 
-**Teste verde não é evidência. Teste que fica vermelho quando o código quebra é.**
+**Teste verde não é evidência de que ele morde.** Até 2026-08-28 este passo mandava *falsificar* —
+quebrar a implementação de propósito, uma quebra por vez, e conferir que o teste certo reprovava
+pelo motivo certo. Funcionava, e achava coisa que mais nada achava: foi assim que a S-05 confirmou
+que as duas guardas do HITL eram defesa em profundidade de verdade e não a mesma checagem escrita
+duas vezes.
 
-Para cada teste-âncora de risco declarado em `riscos_cobertos`, e para cada invariante que a spec
-afirma: **quebre a implementação de propósito** e confirme que o teste certo reprova **pelo motivo
-certo**. Uma quebra por vez, restaurando entre elas.
+**O PO removeu a falsificação por custo de tempo.** Fica registrado o que se perde, porque a
+decisão pode ser revista: quebra que deixa a suíte verde era o único achado que provava que um
+teste não prova o que o nome dele diz.
 
-Quebras que valem a pena: apagar um padrão de validação; inverter uma comparação; mover uma guarda
-para depois do efeito que ela deveria impedir; fazer uma função devolver o valor neutro; remover
-metade de uma implementação e deixar a outra metade.
+No lugar dela, leia cada teste-âncora e responda, por escrito:
 
-> **Quebra que deixa a suíte verde é achado de gravidade ALTA**, e é sobre o teste, não sobre o
-> código. Significa que aquele teste não estava provando o que o nome dele diz. Reporte com a
-> quebra exata que sobreviveu.
+- ele afirma **comportamento** ou reafirma a implementação? Valor esperado recalculado com a mesma
+  conta do código passa por construção e nunca discorda dele;
+- ele poderia passar por **vacuidade** — fixture parametrizada com um elemento só, laço sobre lista
+  vazia, asserção sobre um caminho que aquele teste nunca alcança?
+- ele cobre a **fiação**, ou só a função? A classe de erro que este projeto já pagou duas vezes é
+  *testo a função que faz e não que alguém a chama*.
 
-O relatório precisa trazer a **tabela de falsificações**: o que você quebrou, qual teste reprovou,
-e quais quebras sobreviveram. Sem essa tabela, um veredito APROVADO não é auditável — e um
-APROVADO sem nenhuma não-conformidade **exige** essa tabela para significar alguma coisa.
+Achado aqui é sobre o **teste**, não sobre o código, e continua sendo gravidade ALTA quando o teste
+é o que prova um risco declarado.
 
 ### 5. Invariantes globais
 - Escopo: o que a spec declarou fora do escopo entrou mesmo assim?
@@ -138,12 +142,13 @@ o que você apontou.
 
 Um dos três, com o porquê:
 
-- **APROVADO** — todos os requisitos conformes, com evidência que você produziu, e a tabela de
-  falsificações mostrando que os testes mordem.
+- **APROVADO** — todos os requisitos conformes, com evidência que você produziu, e a leitura do
+  passo 4 mostrando que os testes-âncora afirmam comportamento e não passam por vacuidade.
 - **APROVADO COM RESSALVAS** — o núcleo se sustenta, mas há achados que precisam de correção antes
   do PR ou de registro explícito para as specs seguintes. Liste as **condições de fechamento**,
   numeradas, em ordem de importância.
-- **REPROVADO** — um requisito central não se sustenta, ou uma quebra deliberada passou.
+- **REPROVADO** — um requisito central não se sustenta, ou o teste que prova um risco
+  declarado não prova o que afirma.
 
 Diga também **por que não** o veredito vizinho. "Por que não REPROVADO" e "por que não APROVADO"
 são as duas frases que fazem um relatório ser lido em vez de arquivado.

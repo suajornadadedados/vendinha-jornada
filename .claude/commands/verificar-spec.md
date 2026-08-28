@@ -2,7 +2,7 @@
 
 > **Este comando é a via manual, para sessão nova.** O caminho padrão é o subagente
 > `verificador-de-spec`, cujas instruções vivem em `.claude/agents/verificador-de-spec.md` e são
-> mais completas que as daqui — falsificação obrigatória, tabela de quebras, e a regra de ignorar
+> mais completas que as daqui — a leitura dos testes-âncora e a regra de ignorar o
 > enquadramento vindo no prompt. Os dois precisam dizer a mesma coisa: ao mudar um, releia o outro.
 
 ## Papel
