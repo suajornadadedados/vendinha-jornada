@@ -23,6 +23,7 @@ número errado com cara de certo. O que os limita é a janela — e é por isso 
 
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from math import ceil
 from typing import Literal
 
 from vendinha.fiscal import Decisao, Fiscal, StatusDaNota, status_da_nota
@@ -58,15 +59,20 @@ def razao(numerador: int | Decimal, denominador: int | Decimal) -> Decimal | Non
 
 
 def percentil(amostra: tuple[int, ...], p: float) -> int | None:
-    """Percentil por posição sobre uma amostra **já ordenada**.
+    """Percentil pelo **rank mais próximo** sobre uma amostra já ordenada.
 
-    Método do vizinho mais próximo, e não interpolação: o valor devolvido é uma
-    latência que de fato aconteceu. Um p95 interpolado é um milissegundo que
-    ninguém esperou, e a régua do RNF-4 é sobre espera real.
+    Sem interpolação: o valor devolvido é uma latência que de fato aconteceu. Um
+    p95 interpolado é um milissegundo que ninguém esperou, e a régua do RNF-4 é
+    sobre espera real.
+
+    `ceil(p x n)` e não `round(p x (n-1))`. A segunda forma parece equivalente e
+    não é: em `[100, 200, 300, 400]` ela dá 300 para o p50, porque `round(1.5)`
+    arredonda para o par em Python. Duas armadilhas numa expressão de uma linha,
+    numa métrica que ninguém confere de cabeça.
     """
     if not amostra:
         return None
-    indice = min(len(amostra) - 1, max(0, round(p * (len(amostra) - 1))))
+    indice = min(len(amostra) - 1, max(0, ceil(p * len(amostra)) - 1))
     return amostra[indice]
 
 
