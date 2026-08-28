@@ -1,0 +1,335 @@
+/* A landing. CSS próprio, sem component library — é uma página de marca, e o painel
+ * é que ganha shadcn (a leitura da REQ-4 está na D-1 da spec).
+ *
+ * Escala de espaço larga: os tokens já vêm com o registro de respiro, e é o painel
+ * que os aperta. */
+
+.faixa {
+  width: min(1120px, 100% - 2 * var(--e-3));
+  margin-inline: auto;
+}
+
+/* Primeiro elemento focável da página, e invisível até receber foco. Sem ele, quem
+ * navega por teclado percorre a navegação inteira antes de chegar ao conteúdo. */
+.pular {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--tinta);
+  color: var(--papel);
+  padding: var(--e-1) var(--e-2);
+  z-index: 100;
+}
+
+.pular:focus {
+  left: var(--e-2);
+  top: var(--e-2);
+}
+
+/* ------------------------------------------------------------------- topo */
+
+.topo {
+  border-bottom: 1px solid var(--linha);
+  background: color-mix(in srgb, var(--papel) 88%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topo__faixa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  min-height: 68px;
+}
+
+.marca {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-1);
+  text-decoration: none;
+  color: var(--tinta);
+}
+
+.marca__nome {
+  font-family: var(--f-display);
+  font-size: 24px;
+}
+
+.marca__cauda {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-suave);
+}
+
+.topo nav {
+  display: flex;
+  gap: var(--e-3);
+}
+
+.topo nav a {
+  color: var(--tinta-suave);
+  text-decoration: none;
+  font-size: 15px;
+  padding: var(--e-1) 0;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transicao), border-color var(--transicao);
+}
+
+.topo nav a:hover {
+  color: var(--tinta);
+  border-bottom-color: var(--verde);
+}
+
+@media (max-width: 640px) {
+  .topo nav {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ herói */
+
+.heroi {
+  padding: var(--e-6) 0 var(--e-5);
+  /* Duas manchas terrosas muito suaves. Gradiente e não fotografia porque uma foto
+   * de banco de imagens diria menos sobre o produto do que o texto ao lado. */
+  background:
+    radial-gradient(60ch 40ch at 15% -10%, color-mix(in srgb, var(--verde) 8%, transparent), transparent),
+    radial-gradient(50ch 34ch at 95% 10%, color-mix(in srgb, var(--ocre-cheio) 10%, transparent), transparent);
+}
+
+.heroi h1 {
+  font-size: clamp(34px, 5.2vw, 56px);
+  max-width: 20ch;
+  margin: var(--e-2) 0 var(--e-3);
+}
+
+.heroi h1 em {
+  font-style: normal;
+  color: var(--verde);
+}
+
+.heroi__linha {
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.65;
+  max-width: 58ch;
+  margin: 0 0 var(--e-2);
+}
+
+.heroi__nota {
+  color: var(--tinta-suave);
+  max-width: 58ch;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ prova */
+
+.prova {
+  border-block: 1px solid var(--linha);
+  background: var(--cartao);
+  padding: var(--e-4) 0;
+}
+
+.prova__grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--e-3);
+}
+
+.prova__valor {
+  font-family: var(--f-display);
+  font-size: 40px;
+  line-height: 1;
+  margin: 0 0 6px;
+  color: var(--tinta);
+}
+
+.prova__texto {
+  margin: 0;
+  color: var(--tinta-suave);
+  font-size: 15px;
+  max-width: 24ch;
+}
+
+/* ----------------------------------------------------------------- seções */
+
+.secao {
+  padding: var(--e-6) 0;
+}
+
+.secao--papel {
+  background: var(--cartao);
+  border-block: 1px solid var(--linha);
+}
+
+.secao h2 {
+  font-size: clamp(26px, 3vw, 34px);
+  max-width: 22ch;
+  margin: var(--e-1) 0 var(--e-3);
+}
+
+.secao__linha {
+  max-width: 62ch;
+  color: var(--tinta-suave);
+  margin: 0 0 var(--e-4);
+}
+
+.cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--e-2);
+  margin-top: var(--e-4);
+}
+
+.cartao {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: var(--e-3);
+  transition: box-shadow var(--transicao), transform var(--transicao);
+}
+
+.cartao:hover {
+  box-shadow: var(--sombra);
+  transform: translateY(-2px);
+}
+
+.cartao h3 {
+  font-size: 21px;
+  margin-bottom: var(--e-1);
+}
+
+.cartao p {
+  margin: 0 0 var(--e-2);
+  color: var(--tinta-suave);
+  font-size: 15px;
+}
+
+.cartao__itens {
+  font-size: 12px;
+  color: var(--verde);
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ produtores */
+
+.produtores {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--e-3) var(--e-4);
+}
+
+.produtores li {
+  border-top: 2px solid var(--linha);
+  padding-top: var(--e-2);
+}
+
+.produtores__nome {
+  font-family: var(--f-display);
+  font-size: 19px;
+  margin: 0;
+}
+
+.produtores__regiao {
+  font-size: 12px;
+  color: var(--ocre);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 2px 0 6px;
+}
+
+.produtores__faz {
+  margin: 0;
+  color: var(--tinta-suave);
+  font-size: 15px;
+}
+
+/* ---------------------------------------------------------------- passos */
+
+.passos {
+  list-style: none;
+  counter-reset: passo;
+  padding: 0;
+  margin: var(--e-4) 0 0;
+  display: grid;
+  gap: var(--e-3);
+}
+
+.passos li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--e-3);
+  align-items: start;
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--linha);
+}
+
+.passos__numero {
+  font-size: 28px;
+  color: var(--linha);
+  line-height: 1;
+}
+
+.passos h3 {
+  font-size: 21px;
+  margin-bottom: 6px;
+}
+
+.passos p {
+  margin: 0;
+  color: var(--tinta-suave);
+  max-width: 66ch;
+}
+
+@media (max-width: 560px) {
+  .passos li {
+    grid-template-columns: 1fr;
+    gap: var(--e-1);
+  }
+}
+
+/* --------------------------------------------------------------- chamada */
+
+.chamada {
+  background: var(--tinta);
+  color: var(--papel);
+  padding: var(--e-5) 0;
+}
+
+.chamada h2 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  margin-bottom: var(--e-2);
+  max-width: 20ch;
+}
+
+.chamada p {
+  margin: 0;
+  color: color-mix(in srgb, var(--papel) 78%, transparent);
+  max-width: 56ch;
+}
+
+/* ---------------------------------------------------------------- rodapé */
+
+.rodape {
+  padding: var(--e-4) 0;
+  border-top: 1px solid var(--linha);
+}
+
+.rodape__faixa p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--tinta-suave);
+}
+
+.rodape__nota {
+  font-family: var(--f-mono);
+  font-size: 12px;
+}
