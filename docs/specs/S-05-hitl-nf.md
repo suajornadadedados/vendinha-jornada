@@ -206,8 +206,23 @@ parágrafo de nota fiscal que entrou nos prompts.
 
 Fica declarado e **não resolvido aqui**: investigar e reancorar a régua é da **S-06**, que é a spec
 dona do portão de evals (ADR-006, R7), e mexer em caso de `evals/` para destravar um PR é
-justamente o que aquele ADR proíbe. O PO decidiu parar a execução das suítes neste ponto.
-Registrado para a verificação independente saber que o número existe e de onde ele vem.
+justamente o que aquele ADR proíbe.
+
+**Decisão do PO, tomada no `/fechar-spec` e registrada aqui porque a verificação independente
+pediu que ela não ficasse dentro da spec (condição 6):** o PR sai com as três suítes vermelhas,
+e o **corpo do PR declara a suspensão do guardrail** do `CLAUDE.md` em voz alta, com o A/B como
+evidência de que a causa é anterior a esta spec. O raciocínio é que segurar a S-05 não conserta
+um corpus que já reprovava na `main`, e que a alternativa — afrouxar caso para destravar PR — é
+exatamente o que o ADR-006 proíbe.
+
+Duas coisas que ficam ditas junto, porque a decisão não as apaga:
+
+- os números `3 de 7`, `0 de 6` e `2 de 4` são **palavra do autor**. O revisor os marcou
+  `NÃO VERIFICÁVEL`: `.claude/settings.json` nega o `.env` ao agente, e ele não contornou a
+  regra. Quem tiver credencial e quiser fechar essa marca reproduz com
+  `EVALS_JUDGE_MODEL` de outro provedor;
+- `LLM_MODEL` é `anthropic:claude-haiku-4-5`, um alias que anda sozinho. Se a hipótese de deriva
+  estiver certa, pinar a versão é a mitigação barata — e é trabalho da S-06, não desta spec.
 
 **DESC-9 — a coerência do corpus precisou de um ajuste, e ele é território de CODEOWNERS.**
 O `golden-004` ancorava `numero_nota` em `tool:emitir_nf` e listava `emitir_nf` em
