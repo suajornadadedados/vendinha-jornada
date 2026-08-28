@@ -348,6 +348,104 @@ def test_duas_falas_do_atendente_no_mesmo_turno_sao_baloes_diferentes() -> None:
     assert "Sai por" not in por_fala[0], "a segunda fala emendou na primeira"
 
 
+def _grafo_do_turno(*respostas: AIMessage) -> Any:
+    """Um turno de N idas ao modelo, com a lane de recomendação de verdade."""
+    seed = carregar_seed(CATALOGO_DO_SEED)
+    return build_graph(
+        ModeloQuePedeTool(respostas=list(respostas)),
+        InMemorySaver(),
+        recomendacao(BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), 30.0),
+    )
+
+
+def _chamada_de_preco(identificador: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "consultar_preco",
+            "args": {"produto_ids": ["queijo-canastra-meia-cura"]},
+            "id": identificador,
+        }
+    ]
+
+
+def test_a_fala_que_so_narra_o_trabalho_e_desfeita_na_tela() -> None:
+    """Texto E chamada de tool na mesma mensagem: aquilo era preâmbulo, não resposta.
+
+    "Agora vou consultar os preços…" seguido de `consultar_preco` é o agente
+    narrando o próprio trabalho. Num atendimento real com três composições isso
+    encheu a tela de balões que não diziam nada e enterrou a resposta — foi visto
+    assim, numa conversa de verdade, antes deste teste.
+
+    O aviso chega DEPOIS dos tokens porque no streaming a chamada de tool só se
+    revela no fim da mensagem. Segurar o texto até saber custaria o primeiro token
+    de toda fala, inclusive das que são resposta — e a tela ficaria muda enquanto o
+    agente escreve.
+    """
+    grafo = _grafo_do_turno(
+        AIMessage(
+            id="fala-1",
+            content="Agora vou consultar os preços.",
+            tool_calls=_chamada_de_preco("chamada-1"),
+        ),
+        AIMessage(id="fala-2", content="Sai por R$ 89,90."),
+    )
+
+    with TestClient(
+        create_app(graph=grafo, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as cliente:
+        resposta = cliente.post("/chat", json={"message": "quanto custa o Canastra?"})
+
+    eventos = _events(resposta.text)
+    preambulos = [int(dados["fala"]) for nome, dados in eventos if nome == "preambulo"]
+
+    assert preambulos == [0], f"esperava desfazer só a fala 0, veio {preambulos}"
+
+    por_fala = {int(d["fala"]) for nome, d in eventos if nome == "token"}
+    assert por_fala == {0, 1}, "as duas falas continuam sendo transmitidas — quem some é o balão"
+
+
+def test_uma_tool_calada_no_meio_do_turno_nao_desfaz_o_balao_errado() -> None:
+    """A guarda: só se desfaz a fala que de fato escreveu alguma coisa.
+
+    O agente narra e chama a tool ("fala-1"), e na volta chama **outra** tool sem
+    dizer nada — `content` vazio, `tool_calls` preenchidas ("fala-2"). Essa segunda
+    mensagem não produziu balão nenhum. Se o aviso fosse "desfaça a fala corrente",
+    ele apagaria o balão de outra fala, e o cliente veria texto sumir da tela sem
+    motivo.
+
+    O aviso é amarrado ao id da mensagem que falou, e sai uma vez por fala. Por
+    isso aqui ele sai **uma** vez, para a fala 0, mesmo com duas idas à tool.
+    """
+    grafo = _grafo_do_turno(
+        AIMessage(
+            id="fala-1",
+            content="Deixa eu conferir.",
+            tool_calls=_chamada_de_preco("chamada-1"),
+        ),
+        AIMessage(id="fala-2", content="", tool_calls=_chamada_de_preco("chamada-2")),
+        AIMessage(id="fala-3", content="Sai por R$ 89,90."),
+    )
+
+    with TestClient(
+        create_app(graph=grafo, store=InMemoryConfigStore(), catalogo=_catalogo_de_teste())
+    ) as cliente:
+        resposta = cliente.post("/chat", json={"message": "quanto custa o Canastra?"})
+
+    eventos = _events(resposta.text)
+    preambulos = [int(dados["fala"]) for nome, dados in eventos if nome == "preambulo"]
+    assert preambulos == [0], f"esperava um aviso, para a fala 0; veio {preambulos}"
+
+    dito = "".join(dados["text"] for nome, dados in eventos if nome == "token")
+    assert "Sai por R$ 89,90." in dito, "a resposta de verdade tem que chegar inteira"
+
+
+def test_a_resposta_final_nao_e_tratada_como_preambulo(client: TestClient) -> None:
+    """Fala sem tool nenhuma é resposta, e resposta não se desfaz."""
+    resposta = client.post("/chat", json={"message": "oi"})
+
+    assert not [n for n, _ in _events(resposta.text) if n == "preambulo"]
+
+
 def test_uma_fala_so_continua_sendo_um_balao_so(client: TestClient) -> None:
     """O marcador nao pode picotar uma resposta simples.
 

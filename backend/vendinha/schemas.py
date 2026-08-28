@@ -77,6 +77,26 @@ class TokenEvent(BaseModel):
     )
 
 
+class PreambuloEvent(BaseModel):
+    """A fala que acabou de ser transmitida era preâmbulo — retire-a da tela.
+
+    Uma `AIMessage` pode trazer texto **e** chamada de tool: "Agora vou consultar
+    os preços…" seguido de `consultar_preco`. Um turno com quatro tools produzia
+    quatro balões desses, e a conversa virava a narração do próprio trabalho.
+
+    O aviso chega **depois** do texto porque no streaming a chamada de tool só se
+    revela no fim da mensagem. Segurar o texto até saber teria custado o primeiro
+    token de toda fala, inclusive das que são resposta de verdade — e o silêncio
+    enquanto o agente escreve é o defeito que o indicador de digitando existe para
+    não ter.
+
+    É `fala` e não "a última": um evento perdido no meio não pode apagar o balão
+    errado.
+    """
+
+    fala: int
+
+
 class DoneEvent(BaseModel):
     """End of stream. A client that never sees this one is still waiting."""
 

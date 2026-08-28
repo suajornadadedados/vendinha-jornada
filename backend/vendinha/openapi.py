@@ -37,6 +37,7 @@ from vendinha.schemas import (
     DoneEvent,
     ErrorEvent,
     EventoDoPainel,
+    PreambuloEvent,
     SessionEvent,
     TokenEvent,
 )
@@ -59,16 +60,17 @@ DA_SESSAO = (
 
 
 class EventosDoChat(BaseModel):
-    """Reúne os quatro eventos de `/chat` para que entrem no schema.
+    """Reúne os eventos de `/chat` para que entrem no schema.
 
-    Não é um corpo que alguma rota devolva: é o veículo que leva os quatro modelos
-    até `components.schemas`. Está declarado como classe, e não montado à mão em
+    Não é um corpo que alguma rota devolva: é o veículo que leva os modelos até
+    `components.schemas`. Está declarado como classe, e não montado à mão em
     dicionário, para que ele não possa divergir dos modelos que a rota realmente
     emite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.
     """
 
     session: SessionEvent
     token: TokenEvent
+    preambulo: PreambuloEvent
     error: ErrorEvent
     done: DoneEvent
 

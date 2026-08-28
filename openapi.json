@@ -803,13 +803,16 @@
         "type": "object"
       },
       "EventosDoChat": {
-        "description": "Reúne os quatro eventos de `/chat` para que entrem no schema.\n\nNão é um corpo que alguma rota devolva: é o veículo que leva os quatro modelos\naté `components.schemas`. Está declarado como classe, e não montado à mão em\ndicionário, para que ele não possa divergir dos modelos que a rota realmente\nemite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.",
+        "description": "Reúne os eventos de `/chat` para que entrem no schema.\n\nNão é um corpo que alguma rota devolva: é o veículo que leva os modelos até\n`components.schemas`. Está declarado como classe, e não montado à mão em\ndicionário, para que ele não possa divergir dos modelos que a rota realmente\nemite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.",
         "properties": {
           "done": {
             "$ref": "#/components/schemas/DoneEvent"
           },
           "error": {
             "$ref": "#/components/schemas/ErrorEvent"
+          },
+          "preambulo": {
+            "$ref": "#/components/schemas/PreambuloEvent"
           },
           "session": {
             "$ref": "#/components/schemas/SessionEvent"
@@ -821,6 +824,7 @@
         "required": [
           "session",
           "token",
+          "preambulo",
           "error",
           "done"
         ],
@@ -1641,6 +1645,20 @@
           "status_nf"
         ],
         "title": "PedidoNoPainel",
+        "type": "object"
+      },
+      "PreambuloEvent": {
+        "description": "A fala que acabou de ser transmitida era preâmbulo — retire-a da tela.\n\nUma `AIMessage` pode trazer texto **e** chamada de tool: \"Agora vou consultar\nos preços…\" seguido de `consultar_preco`. Um turno com quatro tools produzia\nquatro balões desses, e a conversa virava a narração do próprio trabalho.\n\nO aviso chega **depois** do texto porque no streaming a chamada de tool só se\nrevela no fim da mensagem. Segurar o texto até saber teria custado o primeiro\ntoken de toda fala, inclusive das que são resposta de verdade — e o silêncio\nenquanto o agente escreve é o defeito que o indicador de digitando existe para\nnão ter.\n\nÉ `fala` e não \"a última\": um evento perdido no meio não pode apagar o balão\nerrado.",
+        "properties": {
+          "fala": {
+            "title": "Fala",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fala"
+        ],
+        "title": "PreambuloEvent",
         "type": "object"
       },
       "ProblemaDaComposicao": {

@@ -104,6 +104,7 @@ from vendinha.schemas import (
     NotificacaoDePagamento,
     PedidoAtualizado,
     PedidoNaFila,
+    PreambuloEvent,
     ProviderStatus,
     SessionEvent,
     TokenEvent,
@@ -157,6 +158,18 @@ async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> As
     yield first
     async for chunk in iterator:
         yield chunk
+
+
+def _pede_tool(chunk: Any) -> bool:
+    """Se esta mensagem do atendente também chama uma tool.
+
+    Duas chaves porque o streaming e o não-streaming falam diferente: um
+    `AIMessageChunk` traz `tool_call_chunks` (o JSON dos argumentos chegando aos
+    pedaços) e uma `AIMessage` inteira traz `tool_calls`. Um `ainvoke` sem stream
+    — o caminho dos testes e de qualquer provedor que não emita chunk — só tem a
+    segunda.
+    """
+    return bool(getattr(chunk, "tool_call_chunks", None) or getattr(chunk, "tool_calls", None))
 
 
 def create_app(
@@ -610,6 +623,12 @@ def create_app(
                     # LangChain mantém o mesmo id por mensagem e troca na seguinte.
                     fala = 0
                     id_da_fala: str | None = None
+                    # Se a fala corrente já pôs texto na tela, e se já avisamos que
+                    # ela era preâmbulo. Os dois juntos são a guarda: sem o
+                    # primeiro, uma mensagem só de tool (nenhum texto, id novo)
+                    # mandaria apagar o balão da fala ANTERIOR, que era a resposta.
+                    falou = False
+                    avisado = False
                     async for chunk, meta in _bounded_first_token(token_stream, timeout):
                         # Antes de qualquer filtro: o observador precisa do que o
                         # cliente NÃO vê — o veredito da composição, o id do pedido
@@ -632,6 +651,7 @@ def create_app(
                         # roteador também produz `AIMessage`.
                         if not fala_com_o_cliente((meta or {}).get("langgraph_node")):
                             continue
+                        atual = getattr(chunk, "id", None)
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.
@@ -640,15 +660,33 @@ def create_app(
                             # mudou. Provedor que não manda id nenhum cai no caso de
                             # uma fala só, que é o comportamento anterior — pior
                             # partir a resposta em balões aleatórios do que emendar.
-                            atual = getattr(chunk, "id", None)
                             if atual is not None and atual != id_da_fala:
                                 if id_da_fala is not None:
                                     fala += 1
                                 id_da_fala = atual
+                                falou = False
+                                avisado = False
+                            falou = True
                             yield {
                                 "event": "token",
                                 "data": TokenEvent(text=chunk.text, fala=fala).model_dump_json(),
                             }
+
+                        # Texto E chamada de tool na mesma mensagem: o texto era
+                        # preâmbulo do trabalho ("Agora vou consultar os preços…"),
+                        # não resposta ao cliente. O balão sai e volta a ser o
+                        # indicador de digitando.
+                        #
+                        # `atual == id_da_fala` é o que amarra o aviso à fala que
+                        # de fato falou: sem essa igualdade, uma mensagem seguinte
+                        # que só chama tool apagaria a resposta anterior.
+                        if atual is not None and atual == id_da_fala and falou and not avisado:
+                            if _pede_tool(chunk):
+                                avisado = True
+                                yield {
+                                    "event": "preambulo",
+                                    "data": PreambuloEvent(fala=fala).model_dump_json(),
+                                }
             except Exception:
                 # Loud on our side, vague on the customer's. The exception carries
                 # DSNs, model names and limits; `adversarial-006` fails a run that
