@@ -33,6 +33,7 @@ from vendinha import composicao
 from vendinha.budget import run_with_timeout
 from vendinha.catalogo import Alergeno, Catalogo
 from vendinha.composicao import TipoDeEvento
+from vendinha.tools import ReaisNaEntrada
 from vendinha.tools.catalogo import ItemDeResultado, Resultado
 
 NOMES = ("validar_composicao",)
@@ -156,7 +157,7 @@ class ValidarComposicao(BaseModel):
         min_length=1,
         max_length=LIMITE_DE_ITENS,
     )
-    orcamento_por_pessoa: Decimal | None = Field(
+    orcamento_por_pessoa: ReaisNaEntrada | None = Field(
         default=None,
         description="O teto por pessoa, em reais. Deixe vazio se o cliente ainda não disse.",
     )

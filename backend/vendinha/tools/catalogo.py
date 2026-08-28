@@ -42,6 +42,7 @@ from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from vendinha.budget import run_with_timeout
 from vendinha.catalogo import Busca, Catalogo, Produto
+from vendinha.tools import ReaisNaEntrada
 
 # Quantos ids pedir ao ranqueador antes de filtrar preço no banco. A faixa de
 # preço é aplicada depois — porque dinheiro é `Decimal` e vive no Postgres —, e
@@ -160,8 +161,8 @@ class BuscarProdutos(BaseModel):
         default=None,
         description="queijo | cafe | doce | cachaca | licor. Deixe vazio se não souber.",
     )
-    preco_minimo: Decimal | None = Field(default=None, description="Em reais.")
-    preco_maximo: Decimal | None = Field(default=None, description="Em reais.")
+    preco_minimo: ReaisNaEntrada | None = Field(default=None, description="Em reais.")
+    preco_maximo: ReaisNaEntrada | None = Field(default=None, description="Em reais.")
     apenas_disponiveis: bool = Field(
         default=True,
         description="False só quando o cliente perguntou por um item específico que pode faltar.",
