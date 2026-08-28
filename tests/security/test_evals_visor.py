@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from vendinha import observability
 from vendinha.evals import visor
 from vendinha.evals.caso import carregar_casos
 from vendinha.evals.groundedness import Transcricao, Veredito
@@ -171,7 +172,7 @@ def test_the_visor_tags_every_eval_trace_as_the_evals_environment(
     assert visor.AMBIENTE == "evals"
 
     espiao = _ClienteEspiao()
-    monkeypatch.setattr(visor.observability, "client", lambda: espiao)
+    monkeypatch.setattr(observability, "client", lambda: espiao)
     visor.registrar([_resultado(aprovado=True)], "S-03", "uma-execucao", "um-dataset")
 
     assert espiao.scores[0]["environment"] == "evals"
@@ -191,7 +192,7 @@ def test_the_score_is_the_same_boolean_that_decides_the_exit_code(
     ser escrito, e o ADR-006 recusou a rubric de frente.
     """
     espiao = _ClienteEspiao()
-    monkeypatch.setattr(visor.observability, "client", lambda: espiao)
+    monkeypatch.setattr(observability, "client", lambda: espiao)
     reprovado = _resultado(aprovado=False)
     visor.registrar([reprovado], "S-03", "uma-execucao", "um-dataset")
 
@@ -226,7 +227,7 @@ def test_a_langfuse_that_is_down_does_not_reprove_the_suite(
         def __getattr__(self, _: str) -> Any:
             raise RuntimeError("Langfuse fora do ar")
 
-    monkeypatch.setattr(visor.observability, "client", lambda: _ClienteQuebrado())
+    monkeypatch.setattr(observability, "client", lambda: _ClienteQuebrado())
     with caplog.at_level(logging.WARNING):
         casos = carregar_casos(EVALS, spec="S-03")
         dataset = visor.sincronizar(casos, "S-03")
@@ -287,7 +288,7 @@ def test_a_visor_that_silently_registered_nothing_says_so_out_loud(
         def api(self) -> Any:
             raise RuntimeError("dataset run recusado")
 
-    monkeypatch.setattr(visor.observability, "client", lambda: _MetadeQuebrada())
+    monkeypatch.setattr(observability, "client", lambda: _MetadeQuebrada())
     visor.registrar(
         [_resultado(aprovado=True), _resultado(aprovado=False)],
         "S-03",
