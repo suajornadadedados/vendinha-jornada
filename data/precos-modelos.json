@@ -1,0 +1,22 @@
+{
+  "atualizado_em": "2026-08-28",
+  "moeda": "USD",
+  "fonte": "Tabela oficial de precos da Anthropic, consultada em 2026-08-28.",
+  "observacao": "Precos por 1 milhao de tokens. A chave e o prefixo do modelo em `provedor:modelo`, e o casamento e por prefixo mais longo: um snapshot datado (anthropic:claude-haiku-4-5-20251001) herda o preco da familia (anthropic:claude-haiku-4-5) sem precisar de linha propria. Modelo sem linha nenhuma nao custa zero -- custa `null`, e a tela diz que nao sabe.",
+  "usd_brl": null,
+  "usd_brl_atualizado_em": null,
+  "usd_brl_observacao": "Sem cotacao configurada, o painel mostra US$ e deixa R$ vazio. Uma taxa chutada seria um numero errado numa tela de custo, e o ADR-015 recusa isso pela mesma razao que recusa custo zero.",
+  "modelos": {
+    "anthropic:claude-fable-5": { "entrada": "10.00", "saida": "50.00" },
+    "anthropic:claude-opus-5": { "entrada": "5.00", "saida": "25.00" },
+    "anthropic:claude-opus-4-8": { "entrada": "5.00", "saida": "25.00" },
+    "anthropic:claude-opus-4-7": { "entrada": "5.00", "saida": "25.00" },
+    "anthropic:claude-opus-4-6": { "entrada": "5.00", "saida": "25.00" },
+    "anthropic:claude-sonnet-5": { "entrada": "2.00", "saida": "10.00" },
+    "anthropic:claude-sonnet-4-6": { "entrada": "3.00", "saida": "15.00" },
+    "anthropic:claude-haiku-4-5": { "entrada": "1.00", "saida": "5.00" }
+  },
+  "ausentes": {
+    "openai": "Nenhum modelo da OpenAI tem preco aqui: nao foi consultada fonte oficial ao escrever esta tabela, e inventar o numero e pior do que nao te-lo. O default de `EVALS_JUDGE_MODEL` e openai:gpt-4.1, mas o juiz roda no runner de evals e nao grava turno -- na pratica o custo do painel e o do modelo de conversa. Se uma instancia trocar o modelo de conversa para a OpenAI, a tela dira `modelo sem preco cadastrado` ate alguem preencher isto."
+  }
+}
