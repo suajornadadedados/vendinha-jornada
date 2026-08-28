@@ -202,6 +202,15 @@ class Resultado:
     # "o agente errou", e manda consertar outra coisa.
     erro_do_cenario: str | None = None
 
+    # Contra QUEM este caso rodou. Sem isto, dois relatórios da mesma suíte são
+    # indistinguíveis no papel e comparáveis só na fé — e comparar execuções é o
+    # que se faz com eles. Importa mais desde que o modelo foi pinado: o pin vive
+    # no `Settings`, mas `selected_model` do config store o sobrepõe em silêncio
+    # (`rodar`), então a régua pode ter andado sem que arquivo nenhum mudasse. Um
+    # relatório que se identifica é o que torna isso visível em vez de suspeito.
+    modelo: str = ""
+    juiz_nome: str = ""
+
     @property
     def aprovado(self) -> bool:
         """Juiz que não emitiu veredito não aprova — nem derruba os outros casos.
@@ -542,6 +551,8 @@ async def rodar_caso(
     do_catalogo: Sequence[tuple[str, str, Decimal]],
     juiz_modelo: BaseChatModel | None,
     budget_tokens: int = DEFAULT_BUDGET_TOKENS,
+    nome_do_modelo: str = "",
+    nome_do_juiz: str = "",
 ) -> Resultado:
     """Reproduz a conversa do caso contra o agente e aplica as duas metades da regua.
 
@@ -634,6 +645,8 @@ async def rodar_caso(
         erro_do_juiz=erro_do_juiz,
         tokens=tokens_spent(mensagens),
         gasto=gasto_da_conversa(mensagens),
+        modelo=nome_do_modelo,
+        juiz_nome=nome_do_juiz,
     )
 
 
@@ -711,6 +724,8 @@ async def rodar(
                 do_catalogo,
                 juiz_modelo,
                 settings.session_budget_tokens,
+                modelo_do_agente,
+                nome_do_juiz if juiz_modelo is not None else "",
             )
         except CenarioNaoMontou as sem_cenario:
             # Reprova este caso e segue. Abortar a execucao inteira faria uma
@@ -735,6 +750,13 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
     """O relatório: caso a caso, critério a critério, sem nota agregada."""
     spec = resultados[0].caso.spec if resultados else "?"
     linhas = [f"# Eval — {spec}", ""]
+
+    # Contra quem esta execução rodou. É a primeira coisa que quem compara dois
+    # relatórios precisa saber, e a que faltava: sem ela duas corridas de modelos
+    # diferentes saem com a mesma cara.
+    if resultados and resultados[0].modelo:
+        juiz = resultados[0].juiz_nome or "nenhum (sem credencial)"
+        linhas += [f"Agente: `{resultados[0].modelo}` · Juiz: `{juiz}`", ""]
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
