@@ -41,7 +41,7 @@ typecheck:  ## mypy strict no backend E na suite de testes
 	uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
-	python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
+	uv run --project backend python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
 
 evals-groundedness:  ## Roda os 6 casos da S-03 contra o agente (precisa de `make up`, `db-setup` e `seed`)
 	cd backend && uv run python -m vendinha.evals.runner --spec S-03

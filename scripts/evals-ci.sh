@@ -28,12 +28,20 @@ BASE="${EVALS_BASE_REF:-origin/main}"
 TUDO=0
 SAIDA=""
 
+USO="uso: $0 [--tudo] [--diff-de <ref>] [--saida-em <dir>]"
+
+# `exige_valor` existe porque `set -u` transforma `--diff-de` sem argumento em
+# "unbound variable" -- uma mensagem sobre a implementacao, no lugar da mensagem
+# de uso que esta duas linhas abaixo. Quem digitou a flag errada le a primeira e
+# vai procurar bug no script.
+exige_valor() { [ "$2" -ge 2 ] || { echo "$1 exige um valor. $USO" >&2; exit 1; }; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --tudo) TUDO=1 ;;
-    --diff-de) BASE="$2"; shift ;;
-    --saida-em) SAIDA="$2"; shift ;;
-    *) echo "uso: $0 [--tudo] [--diff-de <ref>] [--saida-em <dir>]" >&2; exit 1 ;;
+    --diff-de) exige_valor "$1" "$#"; BASE="$2"; shift ;;
+    --saida-em) exige_valor "$1" "$#"; SAIDA="$2"; shift ;;
+    *) echo "$USO" >&2; exit 1 ;;
   esac
   shift
 done
