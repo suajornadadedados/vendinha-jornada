@@ -208,6 +208,7 @@ class ObservadorDoTurno:
                     status=str(encontrado.get("status_pedido") or ""),
                     total=Decimal(str(encontrado.get("total_pedido") or "0")),
                     razao_social=str(encontrado.get("razao_social") or ""),
+                    url_pagamento=encontrado.get("url_pagamento") or None,
                 )
             ),
         )

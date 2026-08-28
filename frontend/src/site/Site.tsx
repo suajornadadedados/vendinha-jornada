@@ -11,6 +11,8 @@
 // que mudou foi a paleta: a skill sugeriu navy e azul de SaaS, e a decisão foi manter
 // a paleta terrosa do repositório (`docs/design/sistema-visual.md`).
 
+import { Widget } from "./Widget";
+
 const EVENTOS = [
   {
     nome: "Café da manhã",
@@ -204,6 +206,8 @@ export function Site() {
           </p>
         </div>
       </footer>
+
+      <Widget />
     </>
   );
 }

@@ -1074,6 +1074,7 @@ async def _anunciar_o_pedido(app: FastAPI, pedido_id: str) -> None:
             status=pedido.status.value,
             total=pedido.total,
             razao_social=pedido.empresa.razao_social,
+            url_pagamento=pedido.url_pagamento,
         ),
     )
 

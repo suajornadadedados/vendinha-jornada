@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import "../estilo/tokens.css";
 import "./site.css";
+import "./widget.css";
 import { Site } from "./Site";
 
 const raiz = document.getElementById("raiz");

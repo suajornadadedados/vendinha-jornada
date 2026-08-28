@@ -10,6 +10,7 @@
     "lint": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.62.7",
     "openapi-fetch": "^0.13.4",
     "react": "^19.0.0",

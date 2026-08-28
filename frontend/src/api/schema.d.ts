@@ -1159,6 +1159,12 @@ export interface components {
             tipo: "pedido_atualizado";
             /** Total */
             total: number | string;
+            /**
+             * Url Pagamento
+             * @description O link do gateway, quando já existe. Vai no evento porque a REQ-8 pede o link RENDERIZADO no widget, e um link que só existe no meio da frase do atendente obriga o cliente a caçá-lo no histórico.
+             * @default null
+             */
+            url_pagamento: string | null;
         };
         /**
          * PedidoNaFila
