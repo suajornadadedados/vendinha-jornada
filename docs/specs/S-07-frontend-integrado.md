@@ -207,6 +207,35 @@ Cenário: a conexão cai e a tela não mente
 
 ## Descobertas (preenchido durante a execução)
 
+- **DESC-9 — A primeira conversa longa de verdade mostrou dois defeitos da janela do
+  chat, e um terceiro que não é desta spec.** Um atendimento real — café da manhã, 30
+  pessoas, R$ 50 por cabeça, três variações por restrição alimentar — expôs:
+
+  1. **A tabela da composição ficava presa no rodapé, e as falas novas nasciam acima
+     dela.** O veredito era um estado à parte (`Veredito | null`) renderizado num slot
+     fixo depois do `falas.map`. O mesmo desenho fazia cada veredito **sobrescrever** o
+     anterior: com três variações, o cliente via só a última — a recusada. A REQ-9 diz
+     "atualizados a cada veredito", e a leitura literal dela era um cartão só; **o PO
+     decidiu por um cartão por veredito**, na posição cronológica em que aconteceu.
+     A conversa virou uma lista ordenada só, fala e composição no mesmo `map`.
+
+  2. **O agente narrava o próprio trabalho, e cada narração virava um balão.** *"Agora
+     vou detalhar os produtos"*, *"vou consultar os preços e validar"*, *"só um segundo,
+     estou finalizando"*. São `AIMessage` com texto **e** `tool_calls`, e o campo `fala`
+     que a S-07 introduziu (commit `a6608e7`) passou a dar um balão para cada uma —
+     fiel ao que o modelo produziu, e péssimo de ler. Corrigido em **duas camadas**, por
+     decisão do PO: o prompt proíbe o preâmbulo (reduz na origem) e o código garante
+     (novo evento `preambulo` no `/chat`, que desfaz o balão e devolve o indicador de
+     digitando). Só o prompt não teria rede embaixo; só o código pagaria os tokens de
+     saída de uma narração que ninguém lê.
+
+  3. **O atendimento terminou com a frase de teto de budget, e isso NÃO é desta spec.**
+     Não foi janela de contexto: foi `LIMIT_REACHED_MESSAGE` — o teto de 250k de
+     `tokens_spent`, que soma o histórico reenviado a cada ida ao modelo e portanto
+     cresce de forma quadrática. Vira a **S-12**, junto com prompt caching: hoje o
+     prefixo estático (6.655 tokens na recomendação, 8.864 no checkout) é reenviado e
+     recobrado inteiro em toda chamada, sem nenhum `cache_control` no repositório.
+
 - **DESC-7 — Visão geral e Métricas nasceram dizendo a mesma coisa, e o PO perguntou
   qual era a diferença.** As duas liam a mesma consulta e repetiam quatro KPIs, o
   bullet de latência e o gráfico de recusas inteiro. Duas telas que dizem o mesmo
