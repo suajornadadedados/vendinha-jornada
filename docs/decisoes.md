@@ -18,3 +18,4 @@
 | D14 | Quantas camadas de teste automatizado existem? | Duas, e só duas: `unit` (a conta está certa?) e `security` (a ação proibida é alcançável?) | ADR-011 |
 | D15 | De quem é a escolha do modelo, e onde mora a chave? | Provedor agnóstico (`init_chat_model`); modelo escolhido de allowlist do servidor; credencial cifrada no banco, editável em runtime | ADR-012 |
 | D16 | Para quem a loja vende, e quem monta a composição? | Empresas montando eventos; o modelo propõe a composição e o código valida orçamento, slots e restrições | ADR-013 |
+| D17 | Quando o portão de evals roda, e sobre o quê? | Em camadas: determinística sempre, sub-suítes afetadas pelo diff no PR, suíte inteira no pós-merge; Langfuse é visor, não portão | ADR-014 |

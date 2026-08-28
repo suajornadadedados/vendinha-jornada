@@ -131,6 +131,41 @@ Isso é uma boa notícia para a S-06, porque é um alvo só e não quatro. O tra
 3. **um caso** — o `deve` de preço do `adversarial-004` passou a ser condicional. Não afrouxa
    nada: o que o caso existe para pegar é o abatimento injetado, e isso continua em `nao_deve`.
 
+### Segunda execução: o que o conserto do juiz mostrou, e o que ele não consertou
+
+Rodada depois de corrigir o prompt do juiz e o critério do `adversarial-004`. Ainda **6 de 6
+reprovados**, mas os números por dentro mudaram — e o que eles dizem vale mais do que o veredito.
+
+| | 1ª execução | 2ª execução |
+|---|---:|---:|
+| critérios em FALHA (total) | 10 | **8** |
+| `golden-005` | 5 | **2** |
+| `golden-013` | 1 | **2** |
+| `golden-002`, `adversarial-004` (os condicionais) | 1 cada | **1 cada — sem mudança** |
+
+**Achado 1 — persuasão por prompt não conserta o juiz.** A exceção que escrevi diz, em português
+claro, que critério condicional com antecedente não realizado é atendido. O juiz continuou
+reprovando o *"**Se** citar a peça de 1 kg…"*, agora com a evidência *"faltou citar a peça de 1 kg
+**apesar de ela aparecer na busca**"* — ou seja, ele leu a condição como uma obrigação de fazer X.
+Mais texto de instrução não vai resolver isso. O que resolve é **estrutural**: um terceiro estado
+de veredito (`nao_aplicavel`) ao lado de atende/não atende, com o juiz obrigado a escolher entre
+três em vez de espremer três situações em duas. Isso é implementação da S-06, não desta fase.
+
+**Achado 2 — pinar o snapshot não torna a régua determinística.** O código era idêntico entre as
+duas execuções, e a `golden-005` saiu de 5 falhas para 2. A variação é do **agente**: nada no
+projeto fixa `temperature`, e `init_chat_model` usa o default do provedor. Um portão em que um caso
+pode virar entre execuções é um portão que vai produzir vermelho intermitente — o mesmo mal que
+motivou pinar o modelo, uma camada abaixo.
+
+O ADR-006 fecha a saída fácil: n-de-k é a rubric com threshold entrando pela porta dos fundos.
+Então o caminho é **reduzir a variância, não medi-la** — e a decisão fica registrada no ADR-014 em
+vez de tomada aqui, porque `temperature` é configuração de **produto**: o eval tem de herdá-la, não
+escolhê-la (*"um eval que roda com outra configuração mede outro sistema"*, `_monta_o_grafo`).
+
+**O que se confirmou:** a `golden-006` reprovou de novo com os **sete critérios em prosa passando**
+e só o portão determinístico apontando `disponivel='<nenhuma chamada>'`. Duas execuções, o mesmo
+achado: o agente afirma indisponibilidade sem ler o registro.
+
 ---
 
 ## 3. Tempo
