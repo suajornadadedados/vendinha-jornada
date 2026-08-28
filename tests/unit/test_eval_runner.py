@@ -16,6 +16,7 @@ Sem rede, sem agente e sem chave de API: os casos são lidos do repositório e o
 juiz é um duplo.
 """
 
+import asyncio
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -28,8 +29,10 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 
+from vendinha.budget import tokens_spent
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
+from vendinha.evals.gasto import gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, precos_citados, transcrever
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
 from vendinha.evals.runner import (
@@ -37,6 +40,7 @@ from vendinha.evals.runner import (
     Resultado,
     _abertura_da_composicao,
     _abertura_do_cenario,
+    em_paralelo,
     relatorio,
     rodar_caso,
 )
@@ -692,3 +696,185 @@ def test_a_scenario_that_did_not_materialise_reproves_its_case_and_spares_the_ot
     texto = relatorio([sem_cenario])
     assert "não montou" in texto
     assert "não chegaram a ser avaliados" in texto
+
+
+# --------------------------------------------------------------------------- #
+# R6 — o que a régua custa, separado por preço
+#
+# `tokens_spent` devolve um número só, e ele foi suficiente enquanto a pergunta
+# era "a conversa estourou o teto?". A pergunta desta medição é outra — "quanto
+# custa rodar a suíte?" — e essa não se responde com um total: entrada e saída têm
+# preços diferentes, e leitura de cache tem um terceiro. Somar os três num número
+# e multiplicar por um preço é a conta errada com cara de certa.
+# --------------------------------------------------------------------------- #
+
+
+def _ai(entrada: int, saida: int, **detalhes: int) -> AIMessage:
+    """Uma resposta do modelo com `usage_metadata` como o provedor a devolve."""
+    uso: dict[str, Any] = {
+        "input_tokens": entrada,
+        "output_tokens": saida,
+        "total_tokens": entrada + saida,
+    }
+    if detalhes:
+        uso["input_token_details"] = detalhes
+    return AIMessage(content="ok", usage_metadata=uso)
+
+
+@pytest.mark.risco("R6")
+def test_the_cost_breakdown_keeps_input_and_output_apart() -> None:
+    """R6 — entrada e saída são contadas separadamente, porque são cobradas assim.
+
+    Num laço agêntico a entrada é o histórico reenviado a cada ida ao modelo e a
+    saída é pequena. Um relatório que só some os dois esconde exatamente a
+    proporção que decide qual alavanca de custo vale a pena (RNF-3).
+    """
+    gasto = gasto_da_conversa([_ai(1000, 50), _ai(2000, 100)])
+
+    assert gasto.entrada == 3000
+    assert gasto.saida == 150
+
+
+@pytest.mark.risco("R6")
+def test_cached_input_is_reported_apart_from_input_paid_in_full() -> None:
+    """R6 — leitura de cache não é entrada nova, e o relatório não pode confundi-las.
+
+    Leitura de cache custa uma fração da entrada. Se as duas aparecem no mesmo
+    número, ligar o prompt caching não muda nada no relatório — e a medição que
+    deveria dizer se a alavanca funcionou fica cega justamente para ela.
+    """
+    gasto = gasto_da_conversa([_ai(5000, 100, cache_read=4000, cache_creation=500)])
+
+    assert gasto.cache_leitura == 4000
+    assert gasto.cache_escrita == 500
+    # O que sobrou é o que foi pago cheio: 5000 - 4000 - 500.
+    assert gasto.entrada_nova == 500
+
+
+@pytest.mark.risco("R6")
+def test_a_message_without_usage_metadata_counts_as_zero_instead_of_crashing() -> None:
+    """R6 — mesma tolerância de `tokens_spent`: provedor sem uso não derruba nada.
+
+    Alguns provedores omitem `usage_metadata` em chunks de streaming. Subcontar é a
+    direção errada para um teto, e por isso `budget.tokens_spent` a aceita de olhos
+    abertos; aqui o custo é ainda menor, porque isto é relatório e não guarda.
+    """
+    gasto = gasto_da_conversa([AIMessage(content="sem uso"), HumanMessage(content="oi")])
+
+    assert gasto.entrada == 0 and gasto.saida == 0
+    assert gasto.total == 0
+
+
+@pytest.mark.risco("R6")
+def test_the_breakdown_total_agrees_with_the_counter_that_guards_the_ceiling() -> None:
+    """R6 — a soma nova e `budget.tokens_spent` não podem divergir.
+
+    São duas leituras do mesmo `usage_metadata` e existem lado a lado: uma guarda o
+    teto de sessão, a outra informa o custo. Duas contagens da mesma coisa que
+    discordam é como a S-04 descobriu que a régua rodava com outro teto que o de
+    produção — o número existia em dois lugares e ninguém os prendeu.
+    """
+    conversa = [_ai(1000, 50), _ai(2000, 100, cache_read=1500)]
+
+    assert gasto_da_conversa(conversa).total == tokens_spent(conversa)
+
+
+@pytest.mark.risco("R1")
+def test_a_case_whose_judge_never_ran_is_not_approved_by_the_gate_alone() -> None:
+    """R1, ADR-006 — juiz que não rodou não aprova: sem veredito não há aprovação.
+
+    `judge.py` já diz isso de um veredito **vazio** (`bool(vereditos) and not
+    reprovados`), e `erro_do_juiz` já reprova quando o juiz rodou e falhou. Faltava
+    o terceiro caso, que é o mais silencioso dos três: juiz **nenhum** — sem
+    credencial do provedor do juiz, `rodar` deixa `juiz_modelo = None`, e a
+    aprovação passava a depender só do portão determinístico.
+
+    O que isso deixava passar não é pouco: o `adversarial-001` tem oito critérios
+    em prosa — *"não oferecer, insinuar ou calcular qualquer abatimento"* entre
+    eles — e voltava APROVADO com nenhum deles avaliado. Um relatório que diz
+    APROVADO porque metade da régua não rodou é pior do que não ter régua, porque
+    ninguém desconfia dele.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03"))
+    sem_juiz = Resultado(
+        caso=caso,
+        transcricao=Transcricao(respostas=(), chamadas=()),
+        portao=Veredito(achados=()),  # o portão determinístico não achou nada
+        juiz=None,
+    )
+
+    assert caso.criterio.deve, "o caso precisa ter critério em prosa para o teste valer"
+    assert not sem_juiz.aprovado
+    assert "juiz não executado" in relatorio([sem_juiz])
+
+
+# --------------------------------------------------------------------------- #
+# R6 — a suíte roda alguns casos de cada vez
+#
+# O tempo de parede era o atrito que fez o PO parar a execução da spec: 23 casos
+# em série passam de uma hora, e uma régua que ninguém aguenta rodar não é régua.
+# Dentro de um caso as idas ao modelo são seriais por natureza; a paralelização
+# possível é entre casos, e é só isso que estes dois testes prendem.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.risco("R6")
+async def test_the_suite_never_runs_more_cases_at_once_than_the_limit() -> None:
+    """R6 — o teto de simultâneos é respeitado, porque o rate limit do provedor é real.
+
+    Estourar o limite não troca tempo por velocidade: troca por 429 e retry, que
+    custa dinheiro sem entregar nada. O semáforo é nosso, não da biblioteca — um
+    refactor que mova o `acquire` para o escopo errado passaria despercebido, e
+    este teste é o que o pega.
+    """
+    simultaneos = 0
+    pico = 0
+
+    async def tarefa(n: int) -> int:
+        nonlocal simultaneos, pico
+        simultaneos += 1
+        pico = max(pico, simultaneos)
+        await asyncio.sleep(0)  # cede o controle: sem isso nada se sobrepõe
+        await asyncio.sleep(0)
+        simultaneos -= 1
+        return n
+
+    await em_paralelo(list(range(12)), tarefa, limite=3)
+
+    assert pico == 3, f"o pico de simultâneos foi {pico}, e o limite era 3"
+
+
+@pytest.mark.risco("R6")
+async def test_results_come_back_in_the_order_of_the_cases_not_of_who_finished() -> None:
+    """R6 — dois relatórios da mesma suíte precisam se comparar a olho.
+
+    Ordenar por quem terminou primeiro tornaria cada execução um documento novo, e
+    comparar execuções é exatamente o que se faz com esses relatórios. O caso mais
+    lento aqui é o primeiro da lista, de propósito: é o arranjo que uma implementação
+    que devolvesse por conclusão erraria.
+    """
+
+    async def tarefa(n: int) -> int:
+        await asyncio.sleep((10 - n) / 1000)
+        return n
+
+    assert await em_paralelo(list(range(10)), tarefa, limite=10) == list(range(10))
+
+
+@pytest.mark.risco("R6")
+async def test_an_unexpected_error_still_kills_the_run_instead_of_reproving_a_case() -> None:
+    """R6 — só `CenarioNaoMontou` reprova um caso; o resto continua derrubando tudo.
+
+    `return_exceptions=True` está ali para não deixar tarefa órfã correndo no laço
+    depois que a primeira levantou — não para transformar bug em caso reprovado.
+    Engolir exceção aqui faria um defeito do runner virar "o agente errou", que é a
+    reprovação pelo motivo errado contra a qual o `erro_do_cenario` já existe.
+    """
+
+    async def tarefa(n: int) -> int:
+        if n == 2:
+            raise RuntimeError("o runner quebrou")
+        return n
+
+    with pytest.raises(RuntimeError, match="o runner quebrou"):
+        await em_paralelo([1, 2, 3], tarefa, limite=2)

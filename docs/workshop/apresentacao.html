@@ -1,0 +1,731 @@
+<title>Antes de Codar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,300;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  /* ── Tokens ──────────────────────────────────────────────────────────
+     Cores da Jornada de Dados, amostradas do logotipo:
+       azul claro  #26D6FC  (chevron direito)
+       azul        #0083F9  (chevron esquerdo)
+       fundo       família #27576E (navy-petróleo)
+     O deck é dark-first porque a marca é: o navy é a folha, o cyan é o acento.
+     :root carrega a paleta escura completa; a clara é redefinida nos blocos
+     abaixo, para os três estados do tema. ------------------------------- */
+  :root {
+    --ground:  #071520;   /* fora da folha */
+    --sheet:   #0E2735;   /* a folha — navy do logotipo, aprofundado */
+    --ink:     #E9F5FA;
+    --muted:   #7EA5B7;
+    --rule:    #1C4054;
+    --accent:  #26D6FC;   /* azul claro da marca */
+    --deep:    #5CB0FF;   /* azul da marca, elevado para ler sobre o navy */
+    --stamp:   rgba(38, 214, 252, .13);
+
+    --f-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --f-thesis:  "Newsreader", Georgia, "Times New Roman", serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  /* Tema do sistema em claro, sem escolha explícita de escuro */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground: #D9E7EF;
+      --sheet:  #F5FAFD;
+      --ink:    #08202C;
+      --muted:  #4C6D7E;
+      --rule:   #B7CEDB;
+      --accent: #0072D8;
+      --deep:   #005089;
+      --stamp:  rgba(0, 114, 216, .13);
+    }
+  }
+
+  /* Escolha explícita de claro vence um sistema escuro */
+  :root[data-theme="light"] {
+    --ground: #D9E7EF;
+    --sheet:  #F5FAFD;
+    --ink:    #08202C;
+    --muted:  #4C6D7E;
+    --rule:   #B7CEDB;
+    --accent: #0072D8;
+    --deep:   #005089;
+    --stamp:  rgba(0, 114, 216, .13);
+  }
+
+  /* Escolha explícita de escuro vence um sistema claro */
+  :root[data-theme="dark"] {
+    --ground: #071520;
+    --sheet:  #0E2735;
+    --ink:    #E9F5FA;
+    --muted:  #7EA5B7;
+    --rule:   #1C4054;
+    --accent: #26D6FC;
+    --deep:   #5CB0FF;
+    --stamp:  rgba(38, 214, 252, .13);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-display);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.1rem;
+    padding: 1.4rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Palco: 16:9 fixo, tipografia em unidades de container ─────────── */
+  .deck {
+    position: relative;
+    width: min(100% , (100vh - 7rem) * 16 / 9);
+    aspect-ratio: 16 / 9;
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    container-type: inline-size;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6.5cqw 7cqw 6.5cqw 12cqw;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2.6cqw;
+  }
+  .slide.is-active { display: flex; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .slide.is-active > * { animation: rise .34s cubic-bezier(.2,.7,.3,1) backwards; }
+    .slide.is-active > *:nth-child(2) { animation-delay: .05s; }
+    .slide.is-active > *:nth-child(3) { animation-delay: .1s; }
+    .slide.is-active > *:nth-child(4) { animation-delay: .15s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(.8cqw); } }
+  }
+
+  /* A régua do livro-razão */
+  .deck::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 8cqw;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  /* Número da parte, carimbado na margem */
+  .marginalia {
+    position: absolute;
+    left: 3.4cqw;
+    top: 6.5cqw;
+    font-family: var(--f-mono);
+    font-size: 1.15cqw;
+    font-weight: 500;
+    letter-spacing: .18em;
+    color: var(--muted);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  /* ── Tipos ──────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 1.2cqw;
+    font-weight: 500;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-size: 9.4cqw;
+    font-weight: 800;
+    line-height: .92;
+    letter-spacing: -.03em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h2 {
+    font-family: var(--f-display);
+    font-size: 5.2cqw;
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -.025em;
+    margin: 0;
+    max-width: 20ch;
+    text-wrap: balance;
+  }
+
+  .sub {
+    font-size: 2.2cqw;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--muted);
+    margin: 0;
+    max-width: 34ch;
+  }
+
+  .thesis {
+    font-family: var(--f-thesis);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 3.4cqw;
+    line-height: 1.24;
+    margin: 0;
+    max-width: 26ch;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+
+  .punch {
+    font-family: var(--f-mono);
+    font-size: 1.55cqw;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--deep);
+    margin: 0;
+    padding-left: 1.6cqw;
+    border-left: 2px solid var(--deep);
+    max-width: 52ch;
+  }
+
+  /* ── Listas esparsas ────────────────────────────────────────────────── */
+  .beats { display: flex; flex-direction: column; gap: 1.1cqw; margin: 0; padding: 0; list-style: none; }
+  .beats li {
+    font-size: 2.5cqw;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.015em;
+  }
+  .beats li span { color: var(--muted); font-weight: 400; }
+
+  .files { display: grid; gap: .85cqw; margin: 0; padding: 0; list-style: none; }
+  .files li {
+    display: grid;
+    grid-template-columns: 22cqw 1fr;
+    gap: 2cqw;
+    align-items: baseline;
+    padding-bottom: .85cqw;
+    border-bottom: 1px solid var(--rule);
+  }
+  .files code {
+    font-family: var(--f-mono);
+    font-size: 1.5cqw;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .files em { font-style: normal; font-size: 1.65cqw; color: var(--muted); }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; }
+  .split > div { display: flex; flex-direction: column; gap: .9cqw; }
+  .split h3 {
+    font-family: var(--f-mono);
+    font-size: 1.7cqw;
+    font-weight: 700;
+    margin: 0;
+    color: var(--accent);
+  }
+  .split p { margin: 0; font-size: 2.1cqw; font-weight: 600; line-height: 1.2; }
+  .split .note { font-size: 1.5cqw; font-weight: 400; color: var(--muted); }
+
+  /* "o que ele disse" → "o que isso me obriga a decidir" */
+  .translate { display: grid; gap: 1.4cqw; max-width: 46cqw; }
+  .translate .said {
+    font-family: var(--f-thesis);
+    font-style: italic;
+    font-weight: 300;
+    font-size: 3cqw;
+    line-height: 1.2;
+    color: var(--muted);
+    margin: 0;
+  }
+  /* Realce dentro da citação: mantém o itálico e sobe o contraste.
+     Trocar para romano no meio da frase lê como falha de fonte, não como ênfase. */
+  .translate .said b { font-weight: 400; color: var(--ink); }
+  .translate .turn {
+    font-family: var(--f-mono);
+    font-size: 1.3cqw;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .translate .means {
+    font-size: 2.35cqw;
+    font-weight: 600;
+    line-height: 1.24;
+    letter-spacing: -.015em;
+    margin: 0;
+  }
+
+  /* fora de escopo — riscado, porque a recusa também é entrega */
+  /* Itens bem separados: encostados, os riscos se emendam e a lista lê como
+     uma única frase riscada. */
+  .cut { display: flex; flex-wrap: wrap; gap: .9cqw 2.6cqw; margin: 0; padding: 0; list-style: none; }
+  .cut li {
+    font-family: var(--f-mono);
+    font-size: 1.45cqw;
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--deep);
+    text-decoration-thickness: 1px;
+    text-underline-offset: .1em;
+  }
+
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .7cqw 1.1cqw;
+    font-family: var(--f-mono);
+    font-size: 1.75cqw;
+    font-weight: 500;
+  }
+  .chain b { font-weight: 500; color: var(--ink); }
+  .chain i { font-style: normal; color: var(--rule); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: .8cqw; margin: 0; padding: 0; list-style: none; }
+  .tags li {
+    font-family: var(--f-mono);
+    font-size: 1.5cqw;
+    font-weight: 500;
+    padding: .55cqw 1.1cqw;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+  }
+  .tags li.on { border-color: var(--accent); color: var(--accent); }
+  .tags li.off { color: var(--muted); border-style: dashed; }
+
+  /* ── Divisores de parte: o carimbo ──────────────────────────────────── */
+  .divider { justify-content: center; gap: 2cqw; }
+  .divider .stampmark {
+    position: absolute;
+    right: 6cqw;
+    top: 50%;
+    transform: translateY(-50%) rotate(-9deg);
+    border: .5cqw solid var(--stamp);
+    color: var(--stamp);
+    font-family: var(--f-mono);
+    font-weight: 700;
+    font-size: 3.2cqw;
+    letter-spacing: .1em;
+    padding: 1.4cqw 2.2cqw;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .divider .part {
+    font-family: var(--f-mono);
+    font-size: 1.6cqw;
+    letter-spacing: .28em;
+    color: var(--deep);
+    text-transform: uppercase;
+  }
+  .divider h2 { font-size: 7.6cqw; }
+
+  .cover .meta {
+    font-family: var(--f-mono);
+    font-size: 1.35cqw;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  /* ── Controles ──────────────────────────────────────────────────────── */
+  .bar {
+    width: min(100%, (100vh - 7rem) * 16 / 9);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-family: var(--f-mono);
+    font-size: .78rem;
+    color: var(--muted);
+  }
+  .bar nav { display: flex; gap: .4rem; }
+  .bar button {
+    font: inherit;
+    color: var(--ink);
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    padding: .38rem .8rem;
+    cursor: pointer;
+  }
+  .bar button:hover { border-color: var(--accent); color: var(--accent); }
+  .bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .count { font-variant-numeric: tabular-nums; letter-spacing: .1em; }
+
+  .progress { flex: 1; height: 1px; background: var(--rule); position: relative; }
+  .progress span { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+
+  @media (max-width: 720px) {
+    .bar { font-size: .7rem; }
+  }
+
+  @media print {
+    body { padding: 0; display: block; }
+    .bar { display: none; }
+    .deck { width: 100%; border: none; page-break-after: always; }
+    .slide { display: flex !important; position: relative; }
+  }
+</style>
+
+<div class="deck" id="deck">
+
+  <!-- 1 ─ Capa -->
+  <section class="slide cover is-active">
+    <p class="eyebrow">Jornada de Dados · Desafio Vendas</p>
+    <h1>Antes<br>de codar</h1>
+    <p class="thesis">O repositório, a discovery e o harness — construídos antes da primeira linha de código de produto.</p>
+    <p class="meta">Vendinha do Jornada</p>
+  </section>
+
+  <!-- 2 ─ Divisor I -->
+  <section class="slide divider">
+    <div class="stampmark">Repositório</div>
+    <p class="part">Parte I</p>
+    <h2>Repositório</h2>
+    <p class="thesis">O repositório precisa revisar por mim.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">O ponto de partida</p>
+    <h2>Os times estão encolhendo.</h2>
+    <ul class="beats">
+      <li>Aqui, o time <span>é uma pessoa.</span></li>
+      <li>Sem revisor. <span>Sem quem pegue o erro óbvio.</span></li>
+      <li>Sem segunda opinião. <span>Nenhuma.</span></li>
+    </ul>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">A decisão desconfortável</p>
+    <p class="thesis">Exigir aprovação humana num repositório de um dev só produz teatro: eu aprovo o meu próprio PR.</p>
+    <p class="punch">Então o portão não pode depender de gente.</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">Dois portões</p>
+    <div class="split">
+      <div>
+        <h3>pre-commit</h3>
+        <p>Local.</p>
+        <p class="note">Antes do commit. Ruff, formato, segredo, mensagem.</p>
+      </div>
+      <div>
+        <h3>ci.yml</h3>
+        <p>Remoto.</p>
+        <p class="note">Antes do merge. Bloqueia, não avisa.</p>
+      </div>
+    </div>
+    <p class="punch">O CLAUDE.md pede. O CI impõe.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">O que existe no repo para isso</p>
+    <ul class="files">
+      <li><code>.pre-commit-config.yaml</code><em>o portão local</em></li>
+      <li><code>ruff.toml</code><em>uma régua só, na raiz</em></li>
+      <li><code>.github/workflows/ci.yml</code><em>o que bloqueia o merge</em></li>
+      <li><code>PULL_REQUEST_TEMPLATE.md</code><em>PR com evidência anexada</em></li>
+      <li><code>CODEOWNERS</code><em>o gate não se edita sozinho</em></li>
+      <li><code>scripts/</code><em>o repositório se mantém</em></li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">main protegida</p>
+    <ul class="beats">
+      <li>PR obrigatório.</li>
+      <li>Checks <span>bloqueiam o merge.</span></li>
+      <li>Squash-only. <span>Branch deletada no merge.</span></li>
+    </ul>
+    <p class="punch">A main conta a história em nível de spec.<br>A branch, em nível de task.</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <span class="marginalia">I · REPOSITÓRIO</span>
+    <p class="eyebrow">Os checks — sem uma linha de código de produto</p>
+    <ul class="tags">
+      <li class="on">commitlint</li>
+      <li class="on">lint</li>
+      <li class="on">test</li>
+      <li class="on">secrets</li>
+      <li class="on">skills-drift</li>
+      <li class="off">typecheck</li>
+      <li class="off">evals</li>
+    </ul>
+    <p class="sub">Cinco já rodam verde. Dois ficam pulados até existir código — e ligam sozinhos.</p>
+    <p class="punch">Check vermelho permanente treina a ignorar CI vermelho.</p>
+  </section>
+
+  <!-- 9 ─ Divisor II -->
+  <section class="slide divider">
+    <div class="stampmark">Discovery</div>
+    <p class="part">Parte II</p>
+    <h2>Discovery</h2>
+    <p class="thesis">O enunciado pergunta; o repositório responde.</p>
+  </section>
+
+  <!-- 10 ─ O cliente -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">O caso — a Vendinha</p>
+    <h2>Venda que exige conversa.</h2>
+    <p class="thesis">“Café da manhã pra 40 pessoas, R$35 por cabeça, tem uma pessoa celíaca no time, e precisa chegar antes de quinta.”</p>
+    <p class="punch">Filtro e categoria não resolvem essa frase — e o modelo sozinho também não: tem uma conta e um corte dentro dela.</p>
+  </section>
+
+  <!-- 11 ─ O que o cliente pediu -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">O enunciado não tem stack — tem um cliente falando</p>
+    <div class="split">
+      <div>
+        <h3>8 desejos</h3>
+        <p>O que ele quer no produto.</p>
+        <p class="note">Recomendar por necessidade. Preço sempre igual ao banco. Fechar a venda. Aprovar o irreversível.</p>
+      </div>
+      <div>
+        <h3>6 medos</h3>
+        <p>O que ele teme.</p>
+        <p class="note">Alucinação. Manipulação. Documento sem revisão. Conta de IA. Vazamento. Mágica sem rastro.</p>
+      </div>
+    </div>
+    <p class="punch">Nenhum dos catorze é um requisito de engenharia.</p>
+  </section>
+
+  <!-- 12 ─ A tradução -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">requisitos.md — traduzir é o trabalho</p>
+    <div class="translate">
+      <p class="said">“estoque, preço e prazo <b>sempre sincronizados</b> com o banco de dados”</p>
+      <p class="turn">o que isso me obriga a decidir</p>
+      <p class="means">O modelo não tem permissão de dizer um preço. Ele chama uma tool que lê o Postgres no momento em que o pedido é criado.</p>
+    </div>
+    <p class="punch">São cinco palavras dele. A decisão é minha.</p>
+  </section>
+
+  <!-- 13 ─ A cadeia dos documentos -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">docs/ — cada um consome o anterior</p>
+    <div class="chain">
+      <b>requisitos</b><i>→</i><b>jornada</b><i>→</i><b>riscos</b><i>→</i><b>PRD</b><i>→</i><b>decisões</b><i>→</i><b>adr/</b><i>→</i><b>testes</b><i>→</i><b>specs</b>
+    </div>
+    <p class="sub">A ordem não é burocracia: é o argumento. A arquitetura aparece por último, e é isso que torna cada escolha defensável.</p>
+  </section>
+
+  <!-- 14 ─ PRD -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">PRD — toda métrica com número</p>
+    <ul class="beats">
+      <li>Zero fato inventado. <span>Uma ocorrência trava o release.</span></li>
+      <li>Zero nota emitida <span>sem aprovação registrada.</span></li>
+      <li>Trace completo <span>em 100% das sessões.</span></li>
+    </ul>
+    <p class="eyebrow">e o que fica de fora, com motivo</p>
+    <ul class="cut">
+      <li>nota com validade fiscal</li>
+      <li>dinheiro real</li>
+      <li>estoque e frete</li>
+      <li>login do cliente</li>
+      <li>multi-idioma</li>
+    </ul>
+    <p class="punch">Escopo é decisão de risco, não preguiça.</p>
+  </section>
+
+  <!-- 15 ─ riscos -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">riscos.md — a quarta coluna</p>
+    <h2>Risco e mitigação é o mínimo.</h2>
+    <p class="sub">Acrescento uma coluna: a verificação automatizada de cada um dos nove.</p>
+    <p class="punch">Risco sem verificação é desejo, não requisito.</p>
+  </section>
+
+  <!-- 16 ─ A decisão que não virou tela -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">O medo que não vira feature</p>
+    <div class="translate">
+      <p class="said">“proteger contra <b>manipulação conversacional</b>”</p>
+      <p class="turn">a solução óbvia é a errada</p>
+      <p class="means">Escrever “nunca dê desconto” no prompt some no diff, passa na revisão e não garante nada.</p>
+    </div>
+    <p class="punch">Desconto não existe como ação disponível a nenhum agente.<br>Não é negado — não está registrado.</p>
+  </section>
+
+  <!-- 17 ─ ADR -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">adr/ — dez decisões</p>
+    <h2>Decisão sem alternativa descartada não é decisão.</h2>
+    <ul class="beats">
+      <li>Imutáveis. <span>Mudou, nasce outro.</span></li>
+      <li>Duas alternativas <span>e a consequência negativa aceita.</span></li>
+    </ul>
+    <p class="punch">O ADR-010 substituiu o 007. O 007 continua lá, com o argumento antigo.</p>
+  </section>
+
+  <!-- 18 ─ Skills -->
+  <section class="slide">
+    <span class="marginalia">II · DISCOVERY</span>
+    <p class="eyebrow">As skills — por que escolher importa</p>
+    <div class="translate">
+      <p class="said">langchain-rag ensina: <b>gere a resposta a partir do contexto recuperado.</b></p>
+      <p class="turn">aplicado a preço</p>
+      <p class="means">Isso viola a regra de ouro — com código idiomático, revisão limpa e ninguém percebendo.</p>
+    </div>
+    <p class="punch">Por isso a última skill é minha: ela declara que o normativo do projeto vence a skill de terceiro.</p>
+  </section>
+
+  <!-- 19 ─ Divisor III -->
+  <section class="slide divider">
+    <div class="stampmark">Harness</div>
+    <p class="part">Parte III</p>
+    <h2>Harness</h2>
+    <p class="thesis">O LLM decide o que dizer. O código decide o que pode ser feito.</p>
+  </section>
+
+  <!-- 25 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">Três mecanismos, três gatilhos</p>
+    <ul class="files">
+      <li><code>CLAUDE.md</code><em>carrega sempre — o invariante</em></li>
+      <li><code>/commands</code><em>eu digito — o ritual</em></li>
+      <li><code>skill</code><em>o modelo julga relevante — a competência</em></li>
+    </ul>
+    <p class="punch">Se começa com "quando", é skill.<br>Se começa com "sempre" ou "nunca", é CLAUDE.md.</p>
+  </section>
+
+  <!-- 21 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">Os quatro rituais</p>
+    <ul class="tags">
+      <li>/escrever-spec</li>
+      <li>/entregar-spec</li>
+      <li class="on">/verificar-spec</li>
+      <li>/registrar-adr</li>
+    </ul>
+    <p class="sub">O terceiro roda em sessão nova, que nunca viu a implementação.</p>
+    <p class="punch">O revisor não conserta o código. Revisor que conserta virou autor — e aí ninguém revisou.</p>
+  </section>
+
+  <!-- 22 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">Testes — o pedido que eu não faço</p>
+    <h2>Eu não peço "escreva os testes".</h2>
+    <p class="sub">Declaro o seam e o risco que cada teste fecha. Toda feature nova nasce com teste; task sem teste não vira commit.</p>
+    <p class="punch">Risco sem teste correspondente não está fechado — está prometido.</p>
+  </section>
+
+  <!-- 23 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">Duas camadas, e só duas</p>
+    <div class="split">
+      <div>
+        <h3>tests/unit</h3>
+        <p>A conta está certa?</p>
+        <p class="note">Produz correção.</p>
+      </div>
+      <div>
+        <h3>tests/security</h3>
+        <p>A ação errada é alcançável?</p>
+        <p class="note">Produz garantia.</p>
+      </div>
+    </div>
+    <p class="punch">Só o segundo sobrevive a uma troca de modelo.</p>
+  </section>
+
+  <!-- 24 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">evals/ — golden e adversarial</p>
+    <h2>A régua foi escrita antes do agente existir.</h2>
+    <p class="sub">Cada caso carrega o próprio critério de aprovação. Não existe arquivo de rubric aqui — e isso é decisão registrada.</p>
+    <p class="punch">Sem média: fato inventado ou ação fora da allowlist reprovam a suíte inteira.</p>
+  </section>
+
+  <!-- 20 -->
+  <section class="slide">
+    <span class="marginalia">III · HARNESS</span>
+    <p class="eyebrow">O ciclo</p>
+    <div class="chain">
+      <b>uma spec</b><i>=</i><b>uma branch</b><i>=</i><b>uma sessão</b><i>·</i><b>uma task</b><i>=</i><b>um commit</b>
+    </div>
+    <p class="sub">PR com screenshot e link do trace. Merge por squash, depois do relatório da verificação independente.</p>
+    <p class="punch">A revisão real não é minha.</p>
+  </section>
+
+  <!-- 26 ─ Fecho -->
+  <section class="slide">
+    <span class="marginalia">FECHO</span>
+    <p class="eyebrow">O que sobra</p>
+    <p class="thesis">A arquitetura é a parte fácil. Ela é o que sobra depois que você decidiu o que o modelo <strong>não</strong> tem permissão de fazer.</p>
+  </section>
+
+</div>
+
+<div class="bar">
+  <span class="count" id="count">01 / 21</span>
+  <div class="progress"><span id="bar"></span></div>
+  <nav>
+    <button id="prev" type="button" aria-label="Slide anterior">←</button>
+    <button id="next" type="button" aria-label="Próximo slide">→</button>
+  </nav>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const count = document.getElementById('count');
+  const bar = document.getElementById('bar');
+  let i = 0;
+
+  const pad = n => String(n).padStart(2, '0');
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('is-active', k === i));
+    count.textContent = `${pad(i + 1)} / ${pad(slides.length)}`;
+    bar.style.width = `${((i + 1) / slides.length) * 100}%`;
+    if (location.hash !== `#${i + 1}`) history.replaceState(null, '', `#${i + 1}`);
+  }
+
+  document.getElementById('next').addEventListener('click', () => show(i + 1));
+  document.getElementById('prev').addEventListener('click', () => show(i - 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(i - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); show(0); }
+    else if (e.key === 'End') { e.preventDefault(); show(slides.length - 1); }
+  });
+
+  const start = parseInt(location.hash.slice(1), 10);
+  show(Number.isFinite(start) && start > 0 ? start - 1 : 0);
+</script>

@@ -59,7 +59,7 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 | **R4** Prompt injection | **`security`** + eval | payload injetado não alcança tool com side effect | `tests/security/test_injection.py` |
 | **R5** Vazamento de PII | **`security`** + `unit` | PII sai mascarada **antes** de deixar o processo | `tests/security/test_pii_redaction.py` |
 | **R6** Custo/latência descontrolados | `unit` | budget cap e timeout por tool são respeitados | `tests/unit/test_budget_guard.py` |
-| **R7** Regressão silenciosa de prompt | eval | a suíte inteira, no job `evals` do CI | `evals/` |
+| **R7** Regressão silenciosa de prompt | eval | as sub-suítes que o diff pode ter mudado, no job `evals` do PR; a suíte inteira no pós-merge (ADR-014) | `evals/` |
 | **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface; o webhook verifica origem e não duplica efeito; e o documento que o mock de NF produz é fiel | `tests/unit/test_ports.py` · `tests/unit/test_payment_webhook.py` · `tests/unit/test_nota_fiscal.py` |
 | **R9** Estado corrompido em conversa longa | `unit` + verificação manual | retomada a partir do checkpoint | `tests/unit/test_session_resume.py` |
 | **R10** Composição estoura orçamento ou viola restrição | `unit` (S-11) → **`security`** (S-04) | que o validador recusa; e depois, que não há caminho até pedido com composição inválida | `tests/unit/test_composicao.py` · `tests/security/test_composicao_invariants.py` |
@@ -182,7 +182,8 @@ check estiver vermelho.
 | `pre-commit` (local) | ruff, ruff-format, segredo, commitlint | a cada commit |
 | `pre-push` (local) | `pytest tests` | a cada push |
 | CI, job `test` | `pytest tests` — unit + security | a cada PR |
-| CI, job `evals` | golden + adversarial contra o agente | a partir da S-06 |
+| CI, job `evals` | golden + adversarial contra o agente, nas sub-suítes afetadas pelo diff | a partir da S-06 |
+| CI, job `evals` (pós-merge) | a suíte inteira | a partir da S-06 |
 
 O `pre-commit` é o portão local; o CI é o remoto. O `pytest` fica no `pre-push` e não no
 `pre-commit` de propósito: hook lento treina a usar `--no-verify`, e aí o portão local inteiro

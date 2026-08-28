@@ -17,6 +17,7 @@ implementation of the same protocol Postgres implements.
 """
 
 import json
+import re
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -31,7 +32,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
 from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
-from vendinha.config import get_settings
+from vendinha.config import Settings, get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
 from vendinha.graph import build_graph
@@ -288,10 +289,48 @@ def test_the_model_list_comes_from_the_provider(client: TestClient) -> None:
     the same standard ADR-001 imposes on the agent, applied to our own source.
     """
     client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+    # O modelo é FIXADO aqui, e não herdado do `Settings`. Sem isto o teste depende
+    # do ambiente: `_allowed_models` acrescenta o modelo configurado à lista, então
+    # a asserção exata abaixo passava na máquina com um `.env` e reprovava no CI sem
+    # ele. Foi o que aconteceu ao pinar `LLM_MODEL` num snapshot datado.
+    client.put("/config", json={"model": "anthropic:claude-haiku-4-5"})
 
     body = client.get("/models").json()
     assert body["models"] == ["anthropic:claude-haiku-4-5", "anthropic:claude-opus-5"]
     assert body["selected"] == "anthropic:claude-haiku-4-5"
+
+
+def test_the_configured_model_is_offered_even_when_the_provider_did_not_list_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-012 — o servidor não pode recusar em `POST /chat` o modelo que ele roda.
+
+    `_allowed_models` acrescenta o modelo configurado quando o endpoint do provedor
+    não o devolveu — porque a lista pode estar defasada, ou a chamada pode ter
+    falhado, e nos dois casos o modelo continua sendo o que o servidor usa.
+
+    Este caminho não tinha teste: ele era exercitado por acidente no CI, e só
+    apareceu quando `LLM_MODEL` foi pinado num snapshot que o dublê do provedor não
+    lista. Comportamento descoberto por acidente é comportamento sem rede.
+    """
+    # O dublê oferece SÓ o opus, e o modelo configurado é sempre um haiku — então o
+    # caminho do append dispara sempre, em qualquer ambiente. Este dublê é local ao
+    # teste, e não o `offered_models`, justamente para garantir isso.
+    monkeypatch.setitem(
+        PROVIDERS,
+        "anthropic",
+        Provider("anthropic", "ANTHROPIC_API_KEY", lambda _: ["claude-opus-5"]),
+    )
+    client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+
+    body = client.get("/models").json()
+
+    # A invariante, e não uma lista literal: o nome exato do modelo configurado vem
+    # do `Settings`, e afirmá-lo aqui traria de volta a dependência de ambiente que
+    # este teste nasceu para não repetir.
+    assert body["selected"] not in ["anthropic:claude-opus-5"]
+    assert body["selected"] in body["models"]
+    assert body["models"] == sorted(["anthropic:claude-opus-5", body["selected"]])
 
 
 @pytest.mark.usefixtures("offered_models")
@@ -423,3 +462,43 @@ def test_the_model_cache_expires(
     client.get("/models")
 
     assert contador_de_chamadas[0] > antes, "a lista nunca expira: so um restart a atualiza"
+
+
+@pytest.mark.risco("R7")
+def test_an_empty_judge_variable_means_absent_so_the_self_judge_warning_still_fires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7 — `EVALS_JUDGE_MODEL=` em branco é ausência, e o runner precisa vê-la assim.
+
+    `.env.example` sempre disse que vazio significa *"o juiz é o próprio
+    `LLM_MODEL`"*, e o runner grita quando isso acontece: um modelo avaliando a
+    própria saída é viés conhecido (ADR-006, S-04 DESC-7). Mas a linha em branco
+    chega como `""`, que cai no auto-juiz e **não** dispara o aviso, porque ele
+    testa `is None`.
+
+    Era latente enquanto o default era `None`. Deixou de ser quando o default passou
+    a nomear um juiz de outro provedor: agora quem copia o `.env.example` e apaga o
+    valor recebe em silêncio exatamente o viés contra o qual o aviso existe.
+    """
+    monkeypatch.setenv("EVALS_JUDGE_MODEL", "")
+
+    assert Settings().evals_judge_model is None
+
+
+@pytest.mark.risco("R7")
+def test_the_agent_model_is_a_dated_snapshot_and_not_a_floating_alias() -> None:
+    """R7 — a régua não pode trocar de modelo sem que uma linha do repositório mude.
+
+    `claude-haiku-4-5` é alias: o modelo por trás dele muda sozinho. Uma régua que
+    anda produz vermelho aleatório, e vermelho aleatório treina a ignorar o CI —
+    que é o custo que a DESC-8 da S-05 mediu.
+
+    Afirma sobre o **default declarado no repositório**, não sobre o valor que o
+    `.env` da máquina resolve: um teste que lê o ambiente passa ou reprova conforme
+    quem o roda, que é o oposto de uma régua. O sufixo de data é a asserção
+    inteira; o nome do modelo não é.
+    """
+    declarado = Settings.model_fields["llm_model"].default
+    _, modelo = str(declarado).split(":", 1)
+
+    assert re.search(r"-\d{8}$", modelo), f"{modelo!r} é alias, não snapshot datado"

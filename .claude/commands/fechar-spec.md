@@ -41,7 +41,7 @@ Chame o subagente **`verificador-de-spec`** com uma mensagem que contenha **exat
 > o viés fica visível, não some.
 
 Ele escreve `docs/specs/relatorios/$ARGUMENTS-verificacao.md`, com frontmatter
-(`spec`, `veredito`, `commit`, `data`), tabela de conformidade, tabela de falsificações e o
+(`spec`, `veredito`, `commit`, `data`), tabela de conformidade, a leitura dos testes-âncora e o
 porquê do veredito — inclusive por que **não** o veredito vizinho.
 
 > **Quando usar sessão nova em vez do subagente:** sempre que o veredito vier bom demais.
@@ -51,10 +51,14 @@ porquê do veredito — inclusive por que **não** o veredito vizinho.
 
 ## 3. Ler o relatório inteiro. Sim, inteiro
 
-Comece pela **tabela de falsificações**, não pelo veredito. É lá que se vê se os testes mordem:
-uma quebra deliberada que sobreviveu à suíte é achado ALTO sobre o *teste*, e um teste que não
-prova o que o nome diz é a coisa mais cara que sai de uma spec, porque ele custa confiança em
-tudo que vier depois.
+Comece pela **leitura dos testes-âncora**, não pelo veredito. É lá que se vê se os testes mordem:
+um teste que passa por vacuidade, ou que recalcula a mesma conta do código, é achado ALTO sobre o
+*teste* — e um teste que não prova o que o nome diz é a coisa mais cara que sai de uma spec, porque
+custa confiança em tudo que vier depois.
+
+> Até 2026-08-28 este passo lia uma **tabela de falsificações**: quebras deliberadas na
+> implementação, uma por vez, com o registro de quais sobreviveram à suíte. O PO a removeu por
+> custo de tempo. Era o único achado que provava, em vez de argumentar, que um teste não morde.
 
 ## 4. Corrigir — nesta mesma branch, antes do PR
 

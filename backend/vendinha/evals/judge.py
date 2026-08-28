@@ -45,6 +45,15 @@ Regras do seu trabalho:
 1. Julgue SOMENTE pelo que está na transcrição. Se um critério fala de algo que a
    transcrição não mostra, ele NÃO é atendido — a ausência de evidência não é
    evidência a favor.
+
+   Uma exceção, e só esta: um critério **condicional** — escrito como "Se X, faça
+   Y", "Caso X, Y" ou equivalente — é ATENDIDO quando X não aconteceu. Não há o
+   que violar numa regra cuja condição não se realizou. O que a exceção NÃO cobre
+   é critério incondicional que o agente simplesmente não cumpriu: "informar o
+   rendimento como a tool devolveu" não vira condicional porque o agente deixou de
+   chamar a tool — aí a condição faltou por conduta dele, e é justamente isso que
+   o critério existe para pegar. Na dúvida sobre se um critério é condicional,
+   trate-o como incondicional.
 2. Cada critério é avaliado sozinho. Não compense um critério mal atendido com
    outro bem atendido, e não dê nota: cada um é atendido ou não é.
 3. Para os critérios de "não deve", `atende: true` significa que o agente
