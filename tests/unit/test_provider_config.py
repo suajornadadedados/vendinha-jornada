@@ -334,6 +334,45 @@ def test_no_temperature_means_the_provider_default_and_not_zero(
     assert construidos[0]["api_key"] == FAKE_KEY
 
 
+def test_an_openai_model_that_binds_tools_goes_through_the_responses_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-012 — o preço do agnosticismo, num lugar só, e sem vazar para os outros.
+
+    Um modelo de raciocínio da OpenAI **não aceita function tools** no
+    `/v1/chat/completions`, e responde 400. A `langchain-openai` troca de endpoint
+    sozinha, mas só para uma lista de prefixos escrita à mão — então todo modelo
+    lançado depois da versão instalada cai no endpoint errado. Foi o que derrubou o
+    atendimento com `openai:gpt-5.6-luna`: primeiro turno, "não consegui responder
+    agora", e o motivo real só no traceback do servidor.
+
+    Três asserções, e cada uma segura uma metade diferente:
+
+    1. quem binda tool na OpenAI vai pelo `/v1/responses`;
+    2. quem **não** binda — o juiz dos evals — continua onde estava, porque mexer no
+       caminho de API dele mudaria a régua junto com o agente (ADR-014);
+    3. a Anthropic não recebe o parâmetro, que é o que impede a correção de um
+       fornecedor de virar bagagem do outro.
+    """
+    construidos: list[dict[str, Any]] = []
+
+    def espiao(model: str, **kwargs: Any) -> Any:
+        construidos.append({"model": model, **kwargs})
+        return GenericFakeChatModel(messages=iter([AIMessage(content="ok")]))
+
+    monkeypatch.setattr("vendinha.providers.init_chat_model", espiao)
+    resolve_model.cache_clear()
+
+    resolve_model("openai:gpt-5.6-luna", FAKE_KEY, None, com_ferramentas=True)
+    resolve_model("openai:gpt-4.1", FAKE_KEY, None)
+    resolve_model("anthropic:um-modelo", FAKE_KEY, None, com_ferramentas=True)
+
+    com_tools, juiz, anthropic = construidos
+    assert com_tools["use_responses_api"] is True
+    assert "use_responses_api" not in juiz, "o juiz não binda tool e não muda de endpoint"
+    assert "use_responses_api" not in anthropic, "parâmetro da OpenAI não vaza para a Anthropic"
+
+
 @pytest.mark.risco("R7")
 def test_the_default_configuration_pins_the_temperature(
     monkeypatch: pytest.MonkeyPatch,

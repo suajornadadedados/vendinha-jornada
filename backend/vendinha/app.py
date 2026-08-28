@@ -433,7 +433,9 @@ def create_app(
 
         provider, _ = split_model(model_name)
         api_key = (await _credentials(app)).get(provider)
-        model = resolve_model(model_name, api_key, settings.llm_temperature)
+        # `com_ferramentas=True`: as duas lanes bindam tool, e é isso que decide o
+        # endpoint na OpenAI. Ver `providers.resolve_model`.
+        model = resolve_model(model_name, api_key, settings.llm_temperature, com_ferramentas=True)
         busca = await _busca(app)
         timeout = settings.tool_timeout_seconds
         # O mesmo modelo atende as duas lanes e o roteador. Um modelo barato só
@@ -698,7 +700,17 @@ def create_app(
                 # Loud on our side, vague on the customer's. The exception carries
                 # DSNs, model names and limits; `adversarial-006` fails a run that
                 # leaks internal configuration or tool names into an answer.
-                logger.exception("failed to generate an answer for session %s", session_id)
+                # O nome do modelo vai no log porque ele é escolhido em runtime
+                # (ADR-012) e é a primeira coisa que se quer saber aqui. Sem ele,
+                # um modelo que o servidor oferece mas não sabe chamar tool produz
+                # o mesmo "não consegui responder agora" de uma queda de rede, e
+                # quem trocou o modelo no painel não tem como ligar uma coisa à
+                # outra. Aconteceu com `openai:gpt-5.6-luna`.
+                logger.exception(
+                    "failed to generate an answer for session %s with model %s",
+                    session_id,
+                    model_name,
+                )
                 falhou = True
                 yield {
                     "event": "error",

@@ -57,9 +57,11 @@ class Provider:
     list_models: Callable[[str], list[str]]
 
 
+OPENAI = "openai"
+
 PROVIDERS: dict[str, Provider] = {
     "anthropic": Provider("anthropic", "ANTHROPIC_API_KEY", _anthropic_models),
-    "openai": Provider("openai", "OPENAI_API_KEY", _openai_models),
+    OPENAI: Provider(OPENAI, "OPENAI_API_KEY", _openai_models),
 }
 
 
@@ -123,7 +125,10 @@ async def models_offered_by(provider: str, api_key: str) -> list[str]:
 
 @lru_cache(maxsize=8)
 def resolve_model(
-    name: str, api_key: str | None = None, temperature: float | None = None
+    name: str,
+    api_key: str | None = None,
+    temperature: float | None = None,
+    com_ferramentas: bool = False,
 ) -> BaseChatModel:
     """Build (and reuse) the chat model named `provedor:modelo`.
 
@@ -140,6 +145,33 @@ def resolve_model(
     reasoning model rejects the parameter outright, and this function branches on
     no vendor (ADR-012). See `config.Settings.llm_temperature` for why the value
     exists in the first place.
+
+    **`com_ferramentas` diz que este modelo vai receber `bind_tools`**, e é a única
+    coisa aqui que olha o nome de um fornecedor. Vale a pena explicar por quê.
+
+    Na OpenAI, um modelo de raciocínio **não aceita function tools** no
+    `/v1/chat/completions`, que é o caminho default da `langchain-openai`. A
+    resposta é 400, e a mensagem vem do próprio fornecedor dizendo o que fazer:
+    *"To use function tools, use /v1/responses or set reasoning_effort to 'none'"*.
+    A biblioteca até troca de endpoint sozinha, mas só para uma lista de prefixos
+    escrita à mão (`_RESPONSES_API_ONLY_PREFIXES`) — então todo modelo lançado
+    depois da versão instalada cai no endpoint errado. Foi o que aconteceu com
+    `gpt-5.6-luna`: o atendimento morria no primeiro turno com "não consegui
+    responder agora", e o traceback ficava no log do servidor.
+
+    Das duas saídas que a OpenAI oferece, esta pega a que **não** degrada o modelo:
+    desligar o raciocínio (`reasoning_effort='none'`) faria o agente pensar menos
+    para caber num endpoint mais velho.
+
+    Não é furo no ADR-012 — é o preço dele, e ele fica num lugar só. O ADR escolheu
+    `init_chat_model` para que somar um fornecedor fosse uma linha de dependência, e
+    não uma refatoração; ele nunca prometeu que todo modelo de todo fornecedor sabe
+    chamar tool pelo mesmo endpoint. Onde essa diferença existe, ela mora aqui,
+    porque este módulo já é o único que conhece a palavra "openai".
+
+    O juiz dos evals **não** passa esta flag, e isso é deliberado: ele não binda
+    tool nenhuma, e mexer no caminho de API dele mudaria a régua junto com o agente
+    (ADR-014, e a nota da S-06 sobre a estabilidade do `gpt-4.1`).
     """
     provider, model = split_model(name)
     # Montado como mapa, e não como cadeia de `if`/`return`: são dois parâmetros
@@ -151,5 +183,7 @@ def resolve_model(
         extras["api_key"] = api_key
     if temperature is not None:
         extras["temperature"] = temperature
+    if com_ferramentas and provider == OPENAI:
+        extras["use_responses_api"] = True
     resolvido: BaseChatModel = init_chat_model(model, model_provider=provider, **extras)
     return resolvido
