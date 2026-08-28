@@ -38,7 +38,7 @@ make hooks                 # instala os portões locais (pre-commit)
 Para **conversar com o agente**, é preciso mais três passos e duas chaves de API:
 
 ```bash
-make db-setup              # cria as tabelas (checkpointer, config, produto)
+make db-setup              # cria as tabelas (checkpointer, config, produto, pedido, nota)
 make seed                  # carrega os 50 produtos no Postgres e no Qdrant
 make api                   # sobe a API em http://127.0.0.1:8000
 ```
@@ -48,6 +48,12 @@ As chaves vão no `.env`: `ANTHROPIC_API_KEY` (ou `OPENAI_API_KEY`) para a conve
 embedding e a S-03 decidiu embedar pela OpenAI. Isso contraria a letra do RNF-1 ("sem contas
 externas além da API key do modelo") e está declarado assim de propósito — ver `.env.example`
 e a decisão D-1 em `docs/specs/S-03-recomendacao-ancorada.md`.
+
+Para **aprovar a nota fiscal** no fim do fluxo é preciso mais uma linha no `.env`:
+`OPERADOR_API_TOKEN`. Sem ela, `GET /operador/fila` e as rotas de aprovar/rejeitar respondem
+401 — é o lado seguro, porque essa fila lista dados de compradoras e autoriza uma emissão
+irreversível (S-05). O token vai no header `X-Operador-Token`; a nota que sai é um mock fiel,
+com tarja "SEM VALOR FISCAL", e nenhuma conta externa é necessária para chegar até ela.
 
 A API **recusa subir** se a tabela `produto` não existir ou estiver vazia, e a mensagem diz
 qual dos dois comandos falta. É deliberado: sem catálogo o atendente responde "não encontrei
