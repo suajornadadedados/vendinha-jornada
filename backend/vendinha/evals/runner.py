@@ -40,33 +40,45 @@ import json
 import logging
 import sys
 import unicodedata
-from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, HumanMessage
+from langfuse import propagate_attributes
 from langgraph.checkpoint.memory import InMemorySaver
 
-from vendinha import runtime
+from vendinha import observability, runtime
 from vendinha.budget import tokens_spent
 from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, Produto, QdrantBusca
 from vendinha.config import REPO_ROOT, get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
 from vendinha.db import with_connect_timeout
+from vendinha.evals import visor
 from vendinha.evals.caso import Caso, carregar_casos
 from vendinha.evals.gasto import Gasto, gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever, verificar
-from vendinha.evals.judge import VeredictoDoJuiz, julgar
+from vendinha.evals.judge import EstadoDoCriterio, VeredictoDoJuiz, julgar
+from vendinha.fiscal import (
+    Aprovacao,
+    Decisao,
+    Fiscal,
+    FiscalEmMemoria,
+    build_emissao_graph,
+    decidir,
+)
 from vendinha.graph import (
     DEFAULT_BUDGET_TOKENS,
     build_graph,
     build_supervised_graph,
     session_config,
 )
+from vendinha.nota import MockNFAdapter
 from vendinha.pagamento import MockPaymentAdapter, PaymentGateway
 from vendinha.pedidos import Pedidos, PedidosEmMemoria
 from vendinha.providers import effective_credentials, resolve_model, split_model
@@ -89,11 +101,38 @@ SPEC_PADRAO = "S-03"
 # proprios, entao subir este numero nao muda NADA do que se mede.
 CONCORRENCIA_PADRAO = 4
 
+# Como cada veredito do juiz aparece no relatório. Larguras iguais para as colunas
+# se alinharem quando alguém lê os critérios de um caso em sequência — que e o que
+# se faz com eles.
+SIMBOLO: dict[EstadoDoCriterio, str] = {
+    "atende": "ok   ",
+    "nao_atende": "FALHA",
+    "nao_aplicavel": "n/a  ",
+}
+
 # As specs cujos casos exercitam o checkout — supervisor, duas lanes, tools de
 # escrita. Fora delas o runner monta só a lane de recomendação, que é o agente que
 # a S-03 e a S-11 mediram: ligar o checkout ali mudaria o sistema sob medição sem
 # que nenhum caso pedisse.
-SPECS_COM_CHECKOUT = frozenset({"S-04"})
+#
+# A S-05 entrou na S-06, e vale dizer por que isso NÃO viola o parágrafo acima. Os
+# quatro casos dela nunca rodaram — a DESC-5 da S-05 registrou isso —, então não
+# existe número anterior de S-05 com que comparar, e não há medição para invalidar.
+# É o oposto do caso da S-03: lá o sistema sob medição já tinha história.
+SPECS_COM_CHECKOUT = frozenset({"S-04", "S-05"})
+
+# Quem aparece como operador nos casos que trazem turno `de: operador`. O
+# `Aprovacao.operador` é uma DECLARAÇÃO e não uma identidade provada — este projeto
+# não tem autenticação, e a rota da fila diz isso na cara. Aqui o nome é fabricado e
+# constante para o registro do eval ser reconhecível como tal em qualquer trace.
+OPERADOR_DO_CENARIO = "operador-da-regua"
+
+# Como o turno do operador declara a decisão. Prefixo, e não frase inteira: o
+# `golden-011` escreve `rejeitado - inscricao estadual ... nao confere`, e o motivo
+# é o resto da linha. Genérico, sem ramo por id de caso — um caso novo com um turno
+# de operador funciona sem uma linha a mais aqui.
+APROVA = "aprovado"
+REJEITA = "rejeitado"
 
 # O vocabulario do cliente para cada tipo de evento, usado so para derivar a fala
 # de abertura de um cenario `composicao_aprovada`. Nao e a fonte da verdade dos
@@ -210,6 +249,20 @@ class Resultado:
     # relatório que se identifica é o que torna isso visível em vez de suspeito.
     modelo: str = ""
     juiz_nome: str = ""
+
+    # E com que `temperature`. A S-06 introduziu a configuração inteira para parar
+    # a régua de andar entre execuções, e o relatório não a registrava (ACH-3 da
+    # verificação): as duas metades do A/B de variância saíam indistinguíveis uma
+    # da outra a menos do nome do arquivo — que foi exatamente o que produziu o
+    # erro de método admitido em `S-06-variancia-temperature.md`. `None` significa
+    # "não mandei o parâmetro", que é o default do provedor, e não zero.
+    temperatura: float | None = None
+
+    # O trace deste caso no Langfuse, quando houve um. `None` significa que o visor
+    # nao estava configurado ou nao respondeu — e nao que o caso nao rodou. O
+    # veredito nao depende disto em nenhum caminho: Langfuse fora do ar nao reprova
+    # a suite (ADR-010, ADR-014).
+    trace_id: str | None = None
 
     @property
     def aprovado(self) -> bool:
@@ -445,7 +498,9 @@ async def _montar_cenario(
     gateway: PaymentGateway,
     timeout_seconds: float,
     do_catalogo: Sequence[tuple[str, str, Decimal]],
-) -> tuple[list[str], list[AnyMessage]]:
+    fiscal: Fiscal,
+    emissao: Any,
+) -> tuple[list[str], list[AnyMessage], str | None]:
     """Materializa o `cenario` declarado, RODANDO o sistema, e confere que conseguiu.
 
     Um `match` sobre um enum fechado, e nenhum ramo por id de caso: um caso novo que
@@ -460,17 +515,24 @@ async def _montar_cenario(
     que nao tinha nada a ver com o que ele mede. Agora o cenario insiste uma vez e,
     se ainda assim nao conseguir, **falha alto**: reprovar dizendo "o cenario nao
     montou" e util; reprovar dizendo "o agente nao criou o pedido" e mentira.
+
+    **O terceiro item da tupla e o id do pedido que o cenario criou**, quando criou
+    algum. Ele existe porque o turno `de: operador` precisa saber sobre QUAL pedido
+    decidir, e a alternativa — o runner varrer `pedidos` procurando o unico que
+    existe — funcionaria hoje e quebraria no primeiro caso com dois pedidos, em
+    silencio e escolhendo o errado.
     """
     match caso.cenario:
         case "catalogo_envenenado":
             # O envenenamento ja foi aplicado ao catalogo em `rodar_caso`; aqui so
             # falta a busca que faz o texto injetado chegar ao modelo.
-            return await _falar(graph, caso, [_abertura_do_cenario(caso, do_catalogo)])
+            falas, mensagens = await _falar(graph, caso, [_abertura_do_cenario(caso, do_catalogo)])
+            return falas, mensagens, None
         case "composicao_aprovada":
             falas, mensagens = await _falar(graph, caso, [_abertura_da_composicao(caso)])
             for _ in range(TENTATIVAS_DO_CENARIO - 1):
                 if existe_composicao_aprovada(mensagens):
-                    return falas, mensagens
+                    return falas, mensagens, None
                 mais, mensagens = await _falar(graph, caso, [INSISTIR])
                 falas += mais
             if not existe_composicao_aprovada(mensagens):
@@ -478,12 +540,150 @@ async def _montar_cenario(
                     f"o agente nao chegou a uma composicao aprovada em "
                     f"{TENTATIVAS_DO_CENARIO} turnos de cenario"
                 )
-            return falas, mensagens
+            return falas, mensagens, None
         case "pedido_pago":
             pedido_id = await _pedido_pago(caso, catalogo, pedidos, gateway, timeout_seconds)
-            return await _falar(graph, caso, [f"Oi! E sobre o pedido {pedido_id}."])
+            falas, mensagens = await _falar(graph, caso, [f"Oi! E sobre o pedido {pedido_id}."])
+            return falas, mensagens, pedido_id
+        case "nota_emitida":
+            pedido_id = await _pedido_pago(caso, catalogo, pedidos, gateway, timeout_seconds)
+            await _decidir_a_nota(emissao, fiscal, pedido_id, Decisao.APROVADA, motivo=None)
+            if await fiscal.nota_de(pedido_id) is None:
+                # A aprovacao foi gravada e a nota nao saiu. Conferir e o que separa
+                # pre-condicao de torcida: sem esta linha o `golden-012` seguiria
+                # perguntando pelo XML de uma nota que nao existe, e reprovaria
+                # dizendo que o agente nao entregou o documento — o que e mentira.
+                raise CenarioNaoMontou(
+                    f"a nota do pedido {pedido_id} nao foi emitida apesar da aprovacao "
+                    f"registrada: o cenario `nota_emitida` nao se materializou"
+                )
+            falas, mensagens = await _falar(graph, caso, [f"Oi! E sobre o pedido {pedido_id}."])
+            return falas, mensagens, pedido_id
         case _:
-            return [], []
+            return [], [], None
+
+
+def _decisao_do_turno(texto: str) -> tuple[Decisao, str | None]:
+    """`"rejeitado - inscricao estadual nao confere"` -> `(REJEITADA, "inscricao ...")`.
+
+    Derivado do texto, e sem ramo por id de caso — mesma regra de `_montar_cenario`:
+    um caso novo com turno de operador funciona sem uma linha a mais aqui.
+
+    **Rejeicao sem motivo nao e representavel**, e este parser nao pode ser o lugar
+    onde isso afrouxa. O RF-4.2 exige o motivo, `Aprovacao` o valida e a tabela tem
+    `CHECK` — inventar um motivo generico aqui para "fazer o caso rodar" desligaria
+    as tres de uma vez, e o `golden-011` existe justamente para medir que a rejeicao
+    chega ao cliente COM o motivo. Entao falha alto.
+    """
+    limpo = _sem_acento(texto).strip()
+    if limpo.startswith(APROVA):
+        return Decisao.APROVADA, None
+    if limpo.startswith(REJEITA):
+        # O separador e o primeiro `-` depois da palavra, e o motivo e o resto da
+        # linha ORIGINAL — nao a normalizada, que perdeu os acentos e a caixa. O
+        # motivo vai para o cliente e para o registro de auditoria.
+        _, separador, motivo = texto.partition("-")
+        motivo = motivo.strip()
+        if not separador or not motivo:
+            raise CenarioNaoMontou(
+                f"turno de operador rejeita sem motivo: {texto!r}. O RF-4.2 exige o "
+                f"motivo, e escreve-lo assim e `rejeitado - <o que faltou>`."
+            )
+        return Decisao.REJEITADA, motivo
+    raise CenarioNaoMontou(
+        f"turno de operador nao diz o que foi decidido: {texto!r}. Comece a linha "
+        f"com {APROVA!r} ou {REJEITA!r}."
+    )
+
+
+async def _decidir_a_nota(
+    emissao: Any,
+    fiscal: Fiscal,
+    pedido_id: str,
+    decisao: Decisao,
+    motivo: str | None,
+) -> None:
+    """A decisao do operador, pela porta de verdade — `fiscal.decidir`.
+
+    **Nao existe atalho aqui, e e o ponto inteiro.** `decidir` grava a decisao e
+    SO ENTAO conduz o grafo, e `emitir` rele a decisao do banco antes de emitir
+    qualquer coisa. Um cenario que fabricasse `NotaEmitida` a mao, ou que retomasse
+    o grafo com um `Command(resume=...)` forjado, montaria o estado sem passar pelo
+    invariante que o `golden-004` e o `adversarial-002` existem para medir — e o
+    caso passaria a testar o cenario em vez do produto (ADR-003, R3).
+
+    O `operador` e uma DECLARACAO, nao uma identidade provada: este projeto nao tem
+    autenticacao, e a rota da fila ja diz isso na cara. O nome fabricado deixa o
+    registro do eval reconhecivel como tal em qualquer trace.
+    """
+    aprovacao = Aprovacao(
+        pedido_id=pedido_id,
+        decisao=decisao,
+        operador=OPERADOR_DO_CENARIO,
+        motivo=motivo,
+    )
+    vigente = await decidir(emissao, aprovacao, fiscal=fiscal)
+    if vigente.decisao is not decisao:
+        # A primeira decisao vence, e `decidir` devolve a VIGENTE. Divergir aqui
+        # significa que o cenario montou um estado diferente do que o caso declara,
+        # e seguir mediria outra coisa com o nome do caso.
+        raise CenarioNaoMontou(
+            f"a decisao registrada para {pedido_id} e {vigente.decisao.value!r}, "
+            f"e o caso pede {decisao.value!r}"
+        )
+
+
+@contextmanager
+def _trace_do_caso(caso: Caso) -> Iterator[str | None]:
+    """Um trace por caso, e o id dele — ou `None` quando nao ha visor.
+
+    **Nada aqui pode levantar.** Uma execucao que ja custou dinheiro nao pode
+    reprovar porque o Langfuse nao respondeu: a instrumentacao loga e segue
+    (ADR-010). O `yield None` do caminho de falha e o que faz o caso rodar igual —
+    ele so nao aparece na tela.
+
+    `environment=evals` separa estes traces das metricas de producao. Sem isso, 23
+    conversas sinteticas por execucao entrariam na mesma janela do atendimento de
+    verdade, e a latencia media do produto passaria a incluir a regua medindo o
+    produto (ADR-014).
+    """
+    cliente = observability.client()
+    if cliente is None:
+        yield None
+        return
+    try:
+        with (
+            propagate_attributes(
+                session_id=caso.id,
+                trace_name=f"eval:{caso.id}",
+                environment=visor.AMBIENTE,
+                tags=[caso.spec, caso.familia],
+            ),
+            cliente.start_as_current_observation(name=caso.id, as_type="span"),
+        ):
+            yield cliente.get_current_trace_id()
+    except Exception:
+        logger.warning("nao consegui instrumentar %s; seguindo sem trace", caso.id, exc_info=True)
+        yield None
+
+
+def _config_da_sessao(caso_id: str) -> dict[str, Any]:
+    """A config do grafo, com o callback do Langfuse quando ele existe.
+
+    **O handler vem de `observability.callback_handler()`**, que so o constroi
+    depois de o cliente do projeto existir — e e esse cliente que carrega
+    `mask_otel_spans`. Um `CallbackHandler()` montado aqui exportaria a conversa
+    inteira pelo cliente default, sem redacao nenhuma, e o CNPJ e o e-mail de
+    `EMPRESA_DO_CENARIO` sairiam legiveis para fora da infra (ADR-010).
+
+    Sem Langfuse configurado o handler e `None` e a config e a de sempre: a regua
+    roda igual, que e a clausula do ADR-010 aplicada ao eval.
+    """
+    config = dict(session_config(caso_id))
+    handler = observability.callback_handler()
+    if handler is not None:
+        config["callbacks"] = [handler]
+    return config
 
 
 async def _falar(
@@ -494,7 +694,7 @@ async def _falar(
     for fala in falas:
         estado = await graph.ainvoke(
             {"session_id": caso.id, "messages": [HumanMessage(content=fala)]},
-            config=session_config(caso.id),
+            config=_config_da_sessao(caso.id),
         )
         mensagens = list(estado["messages"])
     return list(falas), mensagens
@@ -509,6 +709,7 @@ def _monta_o_grafo(
     gateway: PaymentGateway,
     timeout_seconds: float,
     budget_tokens: int,
+    fiscal: Fiscal,
 ) -> Any:
     """O agente do caso: uma lane, ou o supervisor com as duas.
 
@@ -522,24 +723,95 @@ def _monta_o_grafo(
     a S-03 e a S-11 mediram. Ligar o checkout la mudaria o sistema sob medicao sem
     que nenhum caso tivesse pedido, e um numero medido em outro sistema nao compara
     com o anterior.
+
+    **A porta fiscal entra nas DUAS lanes, e so para leitura.** Ela alimenta
+    `consultar_pedido`, que e como o agente descobre `status_nf`, `numero_nota`,
+    `motivo_rejeicao` e os links dos documentos. Sem ela a tool responde
+    `status_nf="nao_aplicavel"` e sem numero nem links — que e a verdade quando nao
+    ha de onde ler, e era exatamente por isso que os casos da S-05 reprovariam por
+    campo ausente mesmo depois de o turno do operador passar a funcionar. Emitir
+    continua nao sendo tool de ninguem (ADR-003, R3).
     """
     if caso.spec not in SPECS_COM_CHECKOUT:
         return build_graph(
             modelo_do_agente,
             InMemorySaver(),
-            recomendacao(busca, catalogo, pedidos, timeout_seconds),
+            recomendacao(busca, catalogo, pedidos, timeout_seconds, fiscal, BASE_URL_DO_CENARIO),
             budget_tokens=budget_tokens,
         )
     return build_supervised_graph(
         modelo_do_agente,
         InMemorySaver(),
         Supervisor(
-            recomendacao=recomendacao(busca, catalogo, pedidos, timeout_seconds),
-            checkout=checkout(busca, catalogo, pedidos, gateway, timeout_seconds),
+            recomendacao=recomendacao(
+                busca, catalogo, pedidos, timeout_seconds, fiscal, BASE_URL_DO_CENARIO
+            ),
+            checkout=checkout(
+                busca,
+                catalogo,
+                pedidos,
+                gateway,
+                timeout_seconds,
+                fiscal,
+                BASE_URL_DO_CENARIO,
+            ),
             perguntar=roteador_do_modelo(modelo_do_agente),
         ),
         budget_tokens=budget_tokens,
     )
+
+
+async def percorrer_a_conversa(
+    caso: Caso,
+    aberturas: Sequence[str],
+    mensagens: Sequence[AnyMessage],
+    *,
+    tem_pedido: bool,
+    dizer_ao_agente: Callable[[str], Awaitable[Any]],
+    decidir_a_nota: Callable[[Decisao, str | None], Awaitable[None]],
+) -> tuple[list[str], list[AnyMessage]]:
+    """Percorre as falas **na ordem em que o caso as escreveu**, e devolve o estado.
+
+    **Na ordem da conversa, e nao os clientes primeiro.** Ate a S-06 o runner
+    filtrava `de == "cliente"` e rodava tudo em bloco, o que estava certo enquanto
+    so existiam falas de cliente. Com o turno do operador a ordem passa a ser
+    semantica: o `golden-011` tem a rejeicao ANTES da pergunta do cliente, e e
+    exatamente por isso que "e a nossa nota?" tem uma resposta especifica. Rodar
+    fora de ordem mediria uma conversa diferente da que o caso escreveu — e
+    passaria, pelo motivo errado.
+
+    **Por que isto e uma funcao e nao um laco dentro de `rodar_caso`.** A
+    verificacao independente da S-06 (ACH-5) mostrou que o unico teste com esse
+    nome afirmava a ordem do *YAML* do `golden-011`, nao a do percurso: restaurar
+    o filtro `de == "cliente"` em bloco deixava o teste verde. `rodar_caso` exige
+    Postgres, Qdrant e chave de API, entao ninguem conseguia percorre-la num teste
+    barato. Aqui os dois efeitos entram como callables, e um duplo os grava em
+    ordem sem rede nenhuma.
+    """
+    falas_do_cliente: list[str] = list(aberturas)
+    correntes: list[AnyMessage] = list(mensagens)
+
+    for fala in caso.conversa:
+        match fala.de:
+            case "sistema":
+                # Descricao legivel do cenario, para quem le o YAML. O `cenario`
+                # declarado e quem manda, desde a S-04 — nada e inferido daqui.
+                continue
+            case "operador":
+                decisao, motivo = _decisao_do_turno(fala.texto)
+                if not tem_pedido:
+                    raise CenarioNaoMontou(
+                        f"{caso.id} tem turno de operador mas nenhum pedido foi criado: "
+                        f"um caso com decisao de nota precisa declarar "
+                        f"`cenario: pedido_pago` ou `cenario: nota_emitida`"
+                    )
+                await decidir_a_nota(decisao, motivo)
+            case "cliente":
+                falas_do_cliente.append(fala.texto)
+                estado = await dizer_ao_agente(fala.texto)
+                correntes = list(estado["messages"])
+
+    return falas_do_cliente, correntes
 
 
 async def rodar_caso(
@@ -553,6 +825,7 @@ async def rodar_caso(
     budget_tokens: int = DEFAULT_BUDGET_TOKENS,
     nome_do_modelo: str = "",
     nome_do_juiz: str = "",
+    temperatura: float | None = None,
 ) -> Resultado:
     """Reproduz a conversa do caso contra o agente e aplica as duas metades da regua.
 
@@ -577,12 +850,6 @@ async def rodar_caso(
     invariante da R10. O gateway e o mock pela mesma razao: uma regua nao abre
     preferencia de pagamento no sandbox a cada execucao.
     """
-    if any(fala.de == "operador" for fala in caso.conversa):
-        raise InfraestruturaAusente(
-            f"{caso.id} tem fala de operador, e a fila do operador e entregavel da S-05. "
-            f"Este runner cobre as specs sem fila humana — hoje a S-03, a S-04 e a S-11."
-        )
-
     envenenamento = (
         next((fala.texto for fala in caso.conversa if fala.de == "sistema"), None)
         if caso.cenario == "catalogo_envenenado"
@@ -594,6 +861,8 @@ async def rodar_caso(
 
     pedidos = PedidosEmMemoria()
     gateway = MockPaymentAdapter(BASE_URL_DO_CENARIO)
+    fiscal = FiscalEmMemoria()
+    emissao = build_emissao_graph(pedidos, fiscal, MockNFAdapter(), InMemorySaver())
 
     graph = _monta_o_grafo(
         caso,
@@ -604,25 +873,39 @@ async def rodar_caso(
         gateway,
         timeout_seconds,
         budget_tokens,
+        fiscal,
     )
 
-    do_caso = [fala.texto for fala in caso.conversa if fala.de == "cliente"]
-    if not do_caso:
+    if not any(fala.de == "cliente" for fala in caso.conversa):
         raise InfraestruturaAusente(
             f"{caso.id} nao tem nenhuma fala de cliente: nao ha atendimento para avaliar."
         )
 
-    aberturas, mensagens = await _montar_cenario(
-        caso, graph, catalogo_do_caso, pedidos, gateway, timeout_seconds, do_catalogo
+    aberturas, mensagens, pedido_do_cenario = await _montar_cenario(
+        caso,
+        graph,
+        catalogo_do_caso,
+        pedidos,
+        gateway,
+        timeout_seconds,
+        do_catalogo,
+        fiscal,
+        emissao,
     )
-    falas_do_cliente = [*aberturas, *do_caso]
 
-    for fala in do_caso:
-        estado = await graph.ainvoke(
-            {"session_id": caso.id, "messages": [HumanMessage(content=fala)]},
-            config=session_config(caso.id),
-        )
-        mensagens = list(estado["messages"])
+    falas_do_cliente, mensagens = await percorrer_a_conversa(
+        caso,
+        aberturas,
+        mensagens,
+        tem_pedido=pedido_do_cenario is not None,
+        dizer_ao_agente=lambda texto: graph.ainvoke(
+            {"session_id": caso.id, "messages": [HumanMessage(content=texto)]},
+            config=_config_da_sessao(caso.id),
+        ),
+        decidir_a_nota=lambda decisao, motivo: _decidir_a_nota(
+            emissao, fiscal, str(pedido_do_cenario), decisao, motivo
+        ),
+    )
 
     transcricao = transcrever(mensagens)
     portao = verificar(caso, transcricao, do_catalogo)
@@ -647,6 +930,7 @@ async def rodar_caso(
         gasto=gasto_da_conversa(mensagens),
         modelo=nome_do_modelo,
         juiz_nome=nome_do_juiz,
+        temperatura=temperatura,
     )
 
 
@@ -702,7 +986,14 @@ async def rodar(
     nome_do_juiz = settings.evals_judge_model or modelo_do_agente
     provider_do_juiz, _ = split_model(nome_do_juiz)
     if provider_do_juiz in credenciais:
-        juiz_modelo = resolve_model(nome_do_juiz, credenciais[provider_do_juiz])
+        # O juiz herda a mesma `temperature` do agente, e nao uma propria. Ele e
+        # metade da regua: um juiz que varia entre execucoes produz o mesmo
+        # vermelho intermitente que a variancia do agente produzia, uma camada
+        # acima — e foi exatamente essa instabilidade que a DESC-7 da S-04 mediu
+        # com o auto-juiz.
+        juiz_modelo = resolve_model(
+            nome_do_juiz, credenciais[provider_do_juiz], settings.llm_temperature
+        )
     if settings.evals_judge_model is None:
         print(
             f"AVISO: EVALS_JUDGE_MODEL não está definida, então o juiz é o próprio "
@@ -714,10 +1005,23 @@ async def rodar(
 
     async def um(caso: Caso) -> Resultado:
         print(f"rodando {caso.id}...", file=sys.stderr)
+        with _trace_do_caso(caso) as trace_id:
+            resultado = await _um_caso(caso, trace_id)
+        return resultado
+
+    async def _um_caso(caso: Caso, trace_id: str | None) -> Resultado:
         try:
-            return await rodar_caso(
+            medido = await rodar_caso(
                 caso,
-                resolve_model(modelo_do_agente, credenciais.get(provider_do_agente)),
+                # A `temperature` vem do `Settings`, que e a configuracao do
+                # produto — o eval a HERDA, nao a escolhe (ADR-014). Um flag de
+                # linha de comando aqui faria a regua medir um sistema que nao e
+                # o que atende o cliente.
+                resolve_model(
+                    modelo_do_agente,
+                    credenciais.get(provider_do_agente),
+                    settings.llm_temperature,
+                ),
                 busca,
                 catalogo,
                 settings.tool_timeout_seconds,
@@ -726,7 +1030,9 @@ async def rodar(
                 settings.session_budget_tokens,
                 modelo_do_agente,
                 nome_do_juiz if juiz_modelo is not None else "",
+                settings.llm_temperature,
             )
+            return replace(medido, trace_id=trace_id)
         except CenarioNaoMontou as sem_cenario:
             # Reprova este caso e segue. Abortar a execucao inteira faria uma
             # pre-condicao que nao se materializou custar o relatorio dos outros
@@ -738,12 +1044,24 @@ async def rodar(
                 portao=Veredito(achados=()),
                 juiz=None,
                 erro_do_cenario=str(sem_cenario),
+                trace_id=trace_id,
             )
 
+    # Mao unica, e ANTES de rodar: o dataset e uma projecao do corpus que o
+    # repositorio acabou de ler, e sincroniza-lo depois faria a run apontar para
+    # itens que talvez ainda nao existam.
+    dataset = visor.sincronizar(casos, spec)
+    execucao = visor.nome_da_execucao(spec, modelo_do_agente)
+
     try:
-        return await em_paralelo(casos, um, concorrencia)
+        resultados = await em_paralelo(casos, um, concorrencia)
     finally:
         await busca.aclose()
+
+    # O visor recebe o veredito ja decidido — ele nao participa dele. Se esta
+    # chamada nao fizer nada, o exit code e o markdown continuam os mesmos.
+    visor.registrar(resultados, spec, execucao, dataset)
+    return resultados
 
 
 def relatorio(resultados: Sequence[Resultado]) -> str:
@@ -756,7 +1074,12 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
     # diferentes saem com a mesma cara.
     if resultados and resultados[0].modelo:
         juiz = resultados[0].juiz_nome or "nenhum (sem credencial)"
-        linhas += [f"Agente: `{resultados[0].modelo}` · Juiz: `{juiz}`", ""]
+        temperatura = resultados[0].temperatura
+        pinada = "default do provedor" if temperatura is None else f"`{temperatura}`"
+        linhas += [
+            f"Agente: `{resultados[0].modelo}` · Juiz: `{juiz}` · `LLM_TEMPERATURE`: {pinada}",
+            "",
+        ]
 
     for resultado in resultados:
         marca = "APROVADO" if resultado.aprovado else "REPROVADO"
@@ -818,8 +1141,10 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
 
         linhas += ["### Critérios", ""]
         for veredito in (*resultado.juiz.deve, *resultado.juiz.nao_deve):
-            simbolo = "ok  " if veredito.atende else "FALHA"
-            linhas.append(f"- `{simbolo}` {veredito.criterio}")
+            linhas.append(f"- `{SIMBOLO[veredito.veredito]}` {veredito.criterio}")
+            # A evidência sai também no `n/a`, e é justamente ali que ela mais
+            # importa: é ela que diz QUAL condição não ocorreu, e portanto o que
+            # ler para discordar do juiz sem reler a conversa inteira.
             linhas.append(f"  - evidência: {veredito.evidencia}")
         linhas.append("")
 
@@ -902,7 +1227,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     texto = relatorio(resultados)
     print(texto)
     if args.saida is not None:
-        args.saida.write_text(texto + "\n", encoding="utf-8")
+        # `mkdir` antes de escrever, e o `except` largo em volta: este arquivo e o
+        # produto de uma execucao que ja custou dinheiro e minutos, e perde-lo por
+        # um diretorio inexistente ou um caminho sem permissao seria pagar duas
+        # vezes pelo mesmo resultado. Aconteceu na S-06 — um caminho relativo
+        # resolvido a partir de `backend/` derrubou o relatorio das cinco
+        # sub-suites depois de todas terem rodado.
+        #
+        # O veredito nao muda: ele ja esta no `return` abaixo e o texto ja foi
+        # impresso. O que se perde e a copia em arquivo, e e sobre isso que o aviso
+        # fala.
+        try:
+            args.saida.parent.mkdir(parents=True, exist_ok=True)
+            args.saida.write_text(texto + "\n", encoding="utf-8")
+        except OSError as nao_deu:
+            print(
+                f"AVISO: nao consegui gravar o relatorio em {args.saida}: {nao_deu}. "
+                f"Ele esta acima, no stdout — o veredito abaixo nao muda.",
+                file=sys.stderr,
+            )
 
     return 0 if all(resultado.aprovado for resultado in resultados) else 1
 

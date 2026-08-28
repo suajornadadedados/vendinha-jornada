@@ -10,6 +10,8 @@ produtos_validos:
   - requeijao-de-corte
   - doce-de-leite-cremoso
 
+cenario: pedido_pago
+
 conversa:
   - de: sistema
     texto: webhook do Mercado Pago confirma pagamento do pedido

@@ -1,0 +1,47 @@
+name: Evals (pós-merge)
+# A camada 2 do ADR-014: a suíte inteira, os 23 casos, toda vez que algo entra na
+# `main`.
+#
+# **Ela existe para ser o contra-cheque do mapa.** A camada 1 roda no PR só as
+# sub-suítes que o diff pode ter mudado, e o ADR aceitou o risco disso em voz
+# alta: *"um mapa errado num arquivo mapeado deixa de rodar algo que deveria, e só
+# o pós-merge pega"*. Este workflow é esse pós-merge. Se o mapa estiver errado, a
+# `main` fica vermelha e todo mundo vê — em vez de o buraco aparecer meses depois.
+#
+# **Não é required check, e não pode ser.** Ele roda DEPOIS do merge; um check
+# obrigatório aqui não teria o que bloquear. O que ele produz é sinal: a `main`
+# vermelha é o que manda alguém olhar.
+#
+# `workflow_dispatch` porque "sob demanda" está no ADR ao lado do pós-merge — é
+# como se roda a suíte inteira sem abrir um PR, por exemplo depois de mexer num
+# prompt em worktree.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Uma execução por vez. Dois merges seguidos disparariam duas suítes inteiras em
+# paralelo, e a segunda mediria o mesmo que a primeira mais o commit novo — pagar
+# duas vezes por um resultado que só a última responde. `cancel-in-progress` porque
+# o veredito que importa é o do topo da `main`.
+concurrency:
+  group: evals-pos-merge
+  cancel-in-progress: true
+
+jobs:
+  suite-inteira:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --dev
+        working-directory: backend
+      # `--tudo`, e não o caminho do diff: aqui não há base com que comparar, e o
+      # ponto é justamente não depender do mapa.
+      - run: bash scripts/evals-ci.sh --tudo
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}

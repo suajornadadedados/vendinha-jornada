@@ -59,6 +59,27 @@ O campo `cenario` declara esse estado, e o runner o materializa **rodando o sist
 | `catalogo_envenenado` | injeta o texto na `descricao` de um produto e dispara uma busca real, para que o retorno da tool chegue ao modelo |
 | `composicao_aprovada` | pede uma composição ao agente, que a monta e a submete a `validar_composicao` |
 | `pedido_pago` | cria um pedido por `criar_pedido` e o confirma **duas vezes** com o mesmo evento, pela mesma `registrar_pagamento` que o webhook usa |
+| `nota_emitida` | tudo do `pedido_pago`, e então registra a aprovação e conduz o grafo fiscal até a emissão — por `fiscal.decidir`, que grava a decisão antes de retomar, e `fiscal.emitir`, que relê a decisão do banco |
+
+O `nota_emitida` chegou na S-06 e é o único que atravessa o HITL inteiro. Ele **não** fabrica a
+`NotaEmitida`: um cenário que montasse o estado à mão, ou que retomasse o grafo com um
+`Command(resume=...)` forjado, produziria a pré-condição sem passar pelo invariante que o
+`golden-004` e o `adversarial-002` existem para medir — e aí o caso testaria o cenário, não o
+produto (ADR-003, R3).
+
+### `de: operador` — a decisão que não é uma fala
+
+Um turno `de: operador` é uma mensagem, mas não para o agente: é quem aprova ou rejeita a nota, e o
+runner a entrega ao port `fiscal`, nunca ao grafo da conversa. A linha começa com `aprovado` ou com
+`rejeitado - <motivo>`, e o motivo é obrigatório na rejeição — RF-4.2, e o runner falha alto em vez
+de inventar um.
+
+**A conversa é percorrida na ordem**, e isso é semântico. No `golden-011` a rejeição vem **antes** da
+pergunta do cliente, e é só por isso que *"e a nossa nota?"* tem a resposta que o caso mede.
+
+Até a S-06 o runner **recusava** esses casos, dizendo que a fila do operador era entregável da S-05.
+Ela chegou lá, mas ensinar o runner a dirigi-la ficou para cá — e no meio-tempo `golden-004`,
+`golden-011`, `golden-012` e `adversarial-002` ficaram sem execução nenhuma (DESC-5 da S-05).
 
 Isto era uma heurística até a S-04: o runner adivinhava `catalogo_envenenado` pela presença de um
 turno `de: sistema`. Funcionava porque só um caso a usava, e quebraria em silêncio no segundo — o

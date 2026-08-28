@@ -195,11 +195,23 @@ grafo, checkpointer, pedidos e thread próprios.
 
 ## 5. O que esta medição **não** respondeu
 
-- **S-04, S-11 e S-02 não foram reexecutadas com a régua pinada.** Os números de custo delas são
-  de execuções anteriores, e o veredito delas continua sendo o da DESC-8. O diagnóstico acima vale
-  para a S-03; que as mesmas quatro causas expliquem as outras é **hipótese**, não medição.
-- **Os 4 casos `spec: S-05` seguem sem execução** (DESC-5 da S-05): o runner recusa turno
-  `de: operador`.
-- **O ganho real do prompt caching não foi medido**, só a viabilidade. `cache_read_input_tokens`
-  já é lido pelo relatório e virá zerado até alguém ligar o caching.
-- **O tempo de parede não foi cronometrado com precisão** nesta execução.
+> **Atualizado em 2026-08-28, com a entrega da S-06.** Três das quatro lacunas abaixo fecharam. Os
+> números novos estão em `docs/specs/relatorios/S-06-suite-completa.md`; o que se lê aqui é só o que
+> aconteceu com cada pergunta que ficou aberta.
+
+- ~~**S-04, S-11 e S-02 não foram reexecutadas com a régua pinada.**~~ **Fechada.** A suíte inteira
+  rodou de uma vez, com o modelo pinado, juiz cross-provider e `LLM_TEMPERATURE=0`: **14 de 23**. A
+  hipótese de que as mesmas quatro causas explicassem as outras sub-suítes **não se sustentou** — a
+  S-04 melhorou de 3 para 5 de 7 e a S-11 ficou em 2 de 4 sem que ninguém tocasse nelas, e as
+  reprovações que restam têm causas próprias, uma por caso.
+- ~~**Os 4 casos `spec: S-05` seguem sem execução.**~~ **Fechada.** O runner passou a dirigir a fila
+  do operador: o turno `de: operador` vira decisão no port `fiscal`, e o cenário `nota_emitida`
+  atravessa o HITL até a emissão. Os quatro rodam, um aprova, e as três reprovações estão na DESC-3
+  da S-06 — nenhuma delas era conhecida antes, porque os casos nunca tinham rodado.
+- **O ganho real do prompt caching não foi medido**, só a viabilidade. Continua aberta e continua
+  fora de escopo: a S-06 a listou em "Fora de escopo" porque ligar caching mexe em produção. A
+  proporção que a torna atraente **se confirmou** na suíte inteira: 98,7% de entrada, contra os
+  98,8% medidos aqui.
+- ~~**O tempo de parede não foi cronometrado com precisão.**~~ **Fechada.** A suíte inteira, 23
+  casos, concorrência 4: **3,3 minutos**, e US$ 1,21 — contra a extrapolação de ~US$ 1,35 feita
+  acima, que estava certa dentro de 10%.

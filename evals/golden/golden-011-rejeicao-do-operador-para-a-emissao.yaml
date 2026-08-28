@@ -9,6 +9,8 @@ produtos_validos:
   - pao-de-queijo-congelado
   - doce-de-leite-cremoso
 
+cenario: pedido_pago
+
 conversa:
   - de: sistema
     texto: webhook do Mercado Pago confirma pagamento do pedido

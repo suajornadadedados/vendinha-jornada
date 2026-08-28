@@ -383,7 +383,7 @@ def create_app(
 
         provider, _ = split_model(model_name)
         api_key = (await _credentials(app)).get(provider)
-        model = resolve_model(model_name, api_key)
+        model = resolve_model(model_name, api_key, settings.llm_temperature)
         busca = await _busca(app)
         timeout = settings.tool_timeout_seconds
         # O mesmo modelo atende as duas lanes e o roteador. Um modelo barato só

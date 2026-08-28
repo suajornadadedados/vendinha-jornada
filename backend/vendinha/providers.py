@@ -22,6 +22,7 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
@@ -121,15 +122,34 @@ async def models_offered_by(provider: str, api_key: str) -> list[str]:
 
 
 @lru_cache(maxsize=8)
-def resolve_model(name: str, api_key: str | None = None) -> BaseChatModel:
+def resolve_model(
+    name: str, api_key: str | None = None, temperature: float | None = None
+) -> BaseChatModel:
     """Build (and reuse) the chat model named `provedor:modelo`.
 
     Cached because the client carries a connection pool: rebuilding it per request
     would open a pool per request, which looks fine right until concurrency
     arrives. `api_key` is part of the cache key, so rotating a credential produces
-    a new client instead of silently reusing the old one.
+    a new client instead of silently reusing the old one — and **`temperature` is
+    part of it too**, for the same reason: without it, the first caller's value
+    would be handed to every later one, and the measurement in S-06 would have been
+    comparing a configuration against itself.
+
+    `temperature=None` means *do not pass it at all*, which is the provider's
+    default. That is not the same as `0.0`, and the difference is not cosmetic: a
+    reasoning model rejects the parameter outright, and this function branches on
+    no vendor (ADR-012). See `config.Settings.llm_temperature` for why the value
+    exists in the first place.
     """
     provider, model = split_model(name)
+    # Montado como mapa, e não como cadeia de `if`/`return`: são dois parâmetros
+    # opcionais e independentes, e escrever os quatro ramos à mão é onde uma
+    # combinação some sem ninguém notar — foi assim que `temperature` deixaria de
+    # ser passada justo no caminho sem `api_key`, que é o do quickstart.
+    extras: dict[str, Any] = {}
     if api_key:
-        return init_chat_model(model, model_provider=provider, api_key=api_key)
-    return init_chat_model(model, model_provider=provider)
+        extras["api_key"] = api_key
+    if temperature is not None:
+        extras["temperature"] = temperature
+    resolvido: BaseChatModel = init_chat_model(model, model_provider=provider, **extras)
+    return resolvido
