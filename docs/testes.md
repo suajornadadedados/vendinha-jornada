@@ -55,23 +55,38 @@ precisa fechar. `/verificar-spec` cruza as duas coisas.
 |---|---|---|---|
 | **R1** Alucina atributo, preço ou estoque | `unit` + eval | preço e total saem de código/banco, nunca de texto | S-03: `test_recommendation_tools.py`, `test_catalog_ingestion.py`, `test_groundedness.py` · S-04: `test_order_total.py` |
 | **R2** Executa ação indevida | **`security`** | o registro `subagent → tools` não tem escrita na recomendação | `tests/security/test_permission_boundary.py` |
-| **R3** Side effect irreversível sem supervisão | **`security`** | não há caminho até `emitir_nf` sem aprovação registrada | `tests/security/test_hitl_invariant.py` |
+| **R3** Side effect irreversível sem supervisão | **`security`** + `unit` | não há caminho até `emitir_nf` sem aprovação registrada; e a fila do operador registra quem, quando e o motivo | `tests/security/test_hitl_invariant.py` · `tests/unit/test_operator_queue.py` |
 | **R4** Prompt injection | **`security`** + eval | payload injetado não alcança tool com side effect | `tests/security/test_injection.py` |
 | **R5** Vazamento de PII | **`security`** + `unit` | PII sai mascarada **antes** de deixar o processo | `tests/security/test_pii_redaction.py` |
 | **R6** Custo/latência descontrolados | `unit` | budget cap e timeout por tool são respeitados | `tests/unit/test_budget_guard.py` |
 | **R7** Regressão silenciosa de prompt | eval | a suíte inteira, no job `evals` do CI | `evals/` |
-| **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface; e o webhook verifica origem e não duplica efeito | `tests/unit/test_ports.py` · `tests/unit/test_payment_webhook.py` |
+| **R8** Falha de integração externa | `unit` | mock e adapter real satisfazem a mesma interface; o webhook verifica origem e não duplica efeito; e o documento que o mock de NF produz é fiel | `tests/unit/test_ports.py` · `tests/unit/test_payment_webhook.py` · `tests/unit/test_nota_fiscal.py` |
 | **R9** Estado corrompido em conversa longa | `unit` + verificação manual | retomada a partir do checkpoint | `tests/unit/test_session_resume.py` |
 | **R10** Composição estoura orçamento ou viola restrição | `unit` (S-11) → **`security`** (S-04) | que o validador recusa; e depois, que não há caminho até pedido com composição inválida | `tests/unit/test_composicao.py` · `tests/security/test_composicao_invariants.py` |
 
 **Um risco pode ter mais de um arquivo, e a linha diz de qual spec é cada um.** A R8 é o
-segundo caso, e as duas metades são da S-04: o contrato compartilhado pelos dois adapters
+segundo caso, e duas das três metades são da S-04: o contrato compartilhado pelos dois adapters
 (`test_ports.py`) e a rota que recebe a confirmação (`test_payment_webhook.py`). Um port
 correto atrás de um webhook que aceita qualquer POST não fecha o risco. A R1 é o
 primeiro caso: a S-03 prova que nenhum fato chega ao cliente sem ter vindo de tool, e a S-04
 prova que o total de um pedido sai do banco. As duas metades são o mesmo risco, e nenhuma
 sozinha o fecha. A verificação independente da S-03 pegou esta linha apontando para um arquivo
 que ainda não existia — cruzamento que falha em silêncio é pior do que lacuna declarada.
+
+**A R8 ganhou uma terceira metade na S-05, e uma lacuna declarada junto.** `test_nota_fiscal.py`
+prova que o documento do `MockNFAdapter` é fiel — destinatário PJ campo a campo, chave de acesso
+com dígito verificador que fecha, tarja nos dois artefatos. O que ele **não** prova é a metade
+que o ADR-004 chama de contrato: *dois* adapters satisfazendo a mesma interface. Só existe um
+emissor até a S-09, e uma fixture parametrizada com um elemento passaria por vacuidade (§3.3).
+A lacuna está escrita aqui e no topo de `test_ports.py`, em vez de coberta por um teste que não
+prova nada.
+
+**A R3 também tem duas metades, e elas respondem a perguntas diferentes.**
+`test_hitl_invariant.py` responde *"existe caminho até a emissão sem aprovação registrada?"* —
+é a garantia, e é `security`. `test_operator_queue.py` responde *"a fila registra quem, quando e
+o motivo, e recusa quem não tem token?"* — é correção, e é `unit`. Uma invariante correta
+guardando uma fila que perde pedido não fecha o risco; uma fila impecável na frente de uma
+emissão alcançável, muito menos.
 
 **R10 nasce em `unit` e migra para `security`, de propósito.** Na S-11 ainda não existe
 `criar_pedido`: um teste de `security` afirmando *"nenhum pedido viola restrição declarada"*
