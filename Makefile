@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals-composicao evals-checkout evals-observabilidade evals-hitl evals evals-afetadas hooks
+.PHONY: help up down logs db-setup seed limpar-demo api test lint format typecheck evals-check evals-groundedness evals-composicao evals-checkout evals-observabilidade evals-hitl evals evals-afetadas hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -22,6 +22,9 @@ db-setup:  ## Cria as tabelas do checkpointer do LangGraph (rode uma vez após `
 
 seed:  ## Carrega o catálogo no Postgres e no Qdrant (rode após `make db-setup`)
 	cd backend && uv run python -m vendinha.ingest
+
+limpar-demo:  ## Zera conversas, pedidos e notas. PRESERVA o catálogo e a config
+	bash scripts/limpar-demo.sh
 
 api:  ## Sobe a API (precisa de `make up`, `make db-setup` e `make seed` antes)
 	cd backend && uv run python -m vendinha

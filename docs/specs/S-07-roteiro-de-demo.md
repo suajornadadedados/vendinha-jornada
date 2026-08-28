@@ -27,6 +27,11 @@ Duas abas, lado a lado:
 
 ## 1. O painel vazio é honesto
 
+Se a base já tem conversa de teste, rode **`make limpar-demo`** antes: ele zera conversas,
+pedidos e notas e **preserva o catálogo** (que custaria um `make seed` e uma rodada de
+embedding para voltar) e a configuração de modelo. Esta cena depende de a tela estar vazia
+de verdade.
+
 Conecte com o `OPERADOR_API_TOKEN`. A visão geral abre **sem nenhum número inventado**:
 "viraram pedido", "valor médio do pedido" e o tempo de resposta aparecem como **traço**, não
 como zero — passe o mouse e o `title` diz por quê ("nenhum atendimento neste período").
