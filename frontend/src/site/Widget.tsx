@@ -32,7 +32,7 @@ export function Widget() {
 
   useEffect(() => {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [conversa.falas, conversa.veredito, conversa.etapa]);
+  }, [conversa.itens, conversa.etapa]);
 
   useEffect(() => {
     if (aberto) campo.current?.focus();
@@ -90,7 +90,7 @@ export function Widget() {
           </header>
 
           <div className="janela__corpo" aria-busy={conversa.esperando}>
-            {conversa.falas.length === 0 && (
+            {conversa.itens.length === 0 && (
               <div className="convite">
                 <p>Oi! Conte o evento e eu monto a composição.</p>
                 <p className="convite__exemplo">
@@ -99,14 +99,21 @@ export function Widget() {
               </div>
             )}
 
-            {conversa.falas.map((fala, indice) => (
-              <p
-                key={indice}
-                className={`balao balao--${fala.de}${fala.escrevendo ? " balao--escrevendo" : ""}`}
-              >
-                {fala.texto}
-              </p>
-            ))}
+            {/* Um `map` só, porque a conversa é uma linha do tempo só. Composição
+                em slot separado no fim do corpo era o que fazia a tabela ficar
+                presa no rodapé enquanto as falas novas nasciam acima dela. */}
+            {conversa.itens.map((item, indice) =>
+              item.tipo === "composicao" ? (
+                <Composicao key={indice} veredito={item.veredito} />
+              ) : (
+                <p
+                  key={indice}
+                  className={`balao balao--${item.de}${item.escrevendo ? " balao--escrevendo" : ""}`}
+                >
+                  {item.texto}
+                </p>
+              ),
+            )}
 
             {conversa.esperando && (
               <p className="balao balao--atendente digitando" aria-label="Escrevendo a resposta">
@@ -115,8 +122,6 @@ export function Widget() {
                 <span />
               </p>
             )}
-
-            {conversa.veredito && <Composicao veredito={conversa.veredito} />}
 
             {conversa.etapa === "aguardando-pagamento" && conversa.pedido && (
               <section className="cartao-estado cartao-estado--acao">
@@ -219,7 +224,7 @@ export function Widget() {
         </div>
       )}
 
-      {!aberto && conversa.falas.length > 0 && (
+      {!aberto && conversa.itens.length > 0 && (
         <button className="retomar" onClick={() => setAberto(true)}>
           <ChatCircleDots size={16} weight="regular" aria-hidden="true" /> retomar conversa
         </button>

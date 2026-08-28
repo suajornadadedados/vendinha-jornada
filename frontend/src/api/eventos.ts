@@ -29,6 +29,7 @@ export type EventoDoPainel =
 
 export type SessionEvent = S["SessionEvent"];
 export type TokenEvent = S["TokenEvent"];
+export type PreambuloEvent = S["PreambuloEvent"];
 export type ErrorEvent = S["ErrorEvent"];
 export type DoneEvent = S["DoneEvent"];
 
@@ -50,7 +51,7 @@ export function lerEventoDoPainel(bruto: EventoBruto): EventoDoPainel | null {
   }
 }
 
-/** O mesmo, para os quatro eventos de `/chat`, que não têm campo `tipo`. */
+/** O mesmo, para os eventos de `/chat`, que não têm campo `tipo`. */
 export function lerEventoDoChat(
   bruto: EventoBruto,
 ): { evento: string; corpo: Record<string, unknown> } | null {

@@ -855,16 +855,17 @@ export interface components {
         };
         /**
          * EventosDoChat
-         * @description Reúne os quatro eventos de `/chat` para que entrem no schema.
+         * @description Reúne os eventos de `/chat` para que entrem no schema.
          *
-         *     Não é um corpo que alguma rota devolva: é o veículo que leva os quatro modelos
-         *     até `components.schemas`. Está declarado como classe, e não montado à mão em
+         *     Não é um corpo que alguma rota devolva: é o veículo que leva os modelos até
+         *     `components.schemas`. Está declarado como classe, e não montado à mão em
          *     dicionário, para que ele não possa divergir dos modelos que a rota realmente
          *     emite — se alguém acrescentar um campo em `TokenEvent`, este schema acompanha.
          */
         EventosDoChat: {
             done: components["schemas"]["DoneEvent"];
             error: components["schemas"]["ErrorEvent"];
+            preambulo: components["schemas"]["PreambuloEvent"];
             session: components["schemas"]["SessionEvent"];
             token: components["schemas"]["TokenEvent"];
         };
@@ -1224,6 +1225,27 @@ export interface components {
             url_pagamento?: string | null;
             /** Url Xml */
             url_xml?: string | null;
+        };
+        /**
+         * PreambuloEvent
+         * @description A fala que acabou de ser transmitida era preâmbulo — retire-a da tela.
+         *
+         *     Uma `AIMessage` pode trazer texto **e** chamada de tool: "Agora vou consultar
+         *     os preços…" seguido de `consultar_preco`. Um turno com quatro tools produzia
+         *     quatro balões desses, e a conversa virava a narração do próprio trabalho.
+         *
+         *     O aviso chega **depois** do texto porque no streaming a chamada de tool só se
+         *     revela no fim da mensagem. Segurar o texto até saber teria custado o primeiro
+         *     token de toda fala, inclusive das que são resposta de verdade — e o silêncio
+         *     enquanto o agente escreve é o defeito que o indicador de digitando existe para
+         *     não ter.
+         *
+         *     É `fala` e não "a última": um evento perdido no meio não pode apagar o balão
+         *     errado.
+         */
+        PreambuloEvent: {
+            /** Fala */
+            fala: number;
         };
         /**
          * ProblemaDaComposicao
