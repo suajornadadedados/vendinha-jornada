@@ -10,11 +10,15 @@ riscos_cobertos: [R7]
 
 # S-06 — Qualidade como gate
 
-> **Reescrita em 2026-08-28, e por isso volta a `rascunho`.** A versão anterior foi escrita em
-> 26/08, antes de S-03, S-11, S-04 e S-05 rodarem. Duas das suas quatro tasks já estavam entregues,
-> e faltavam três trabalhos que ninguém tinha visto. O que mudou está em
-> `docs/harness/medicao-de-evals.md` (a medição) e no **ADR-014** (as decisões). Precisa de
-> aprovação do PO antes de virar código.
+> **Reescrita em 2026-08-28.** A versão anterior foi escrita em 26/08, antes de S-03, S-11, S-04 e
+> S-05 rodarem. Duas das suas quatro tasks já estavam entregues, e faltavam três trabalhos que
+> ninguém tinha visto. O que mudou está em `docs/harness/medicao-de-evals.md` (a medição) e no
+> **ADR-014** (as decisões).
+>
+> **Aprovada pelo PO e implementada.** A verificação independente está em
+> `docs/specs/relatorios/S-06-verificacao.md` — veredito **APROVADO COM RESSALVAS**, seis condições
+> de fechamento, todas resolvidas antes do PR: as de código no diff, as de decisão nas DESC-6 a
+> DESC-8 abaixo.
 
 ## Objetivo
 Os casos de eval da discovery viram contrato executável: o portão roda em todo PR — a camada certa
@@ -38,29 +42,29 @@ medição exigiu para ser possível:
 
 ## Requisitos
 
-- [ ] **REQ-1 O juiz ganha um terceiro estado.** `nao_aplicavel`, ao lado de atende/não atende.
+- [x] **REQ-1 O juiz ganha um terceiro estado.** `nao_aplicavel`, ao lado de atende/não atende.
       Critério condicional cuja condição não ocorreu não foi violado, e **uma exceção escrita no
       prompt não resolveu** — o juiz continuou lendo a condição como obrigação. Não conta como
       aprovação nem como falha: sai do cálculo daquele caso. Não colide com o ADR-006 — continua
       sendo veredito por critério, sem nota e sem dimensão.
-- [ ] **REQ-2 `temperature` vira configuração explícita do produto**, e o eval a herda. Duas
+- [x] **REQ-2 `temperature` vira configuração explícita do produto**, e o eval a herda. Duas
       execuções da S-03 com código idêntico discordaram (`golden-005`: 5 critérios em falha, depois
       2). Portão que vira entre execuções produz vermelho intermitente. O ADR-006 proíbe n-de-k, e
       o ADR-014 decide: a variância se ataca na configuração. **Medir o efeito**, não supô-lo.
-- [ ] **REQ-3 A lane de recomendação passa a usar as tools que tem.** Quatro das seis reprovações
+- [ ] **REQ-3 A lane de recomendação passa a usar as tools que tem.** *(5 de 6 — encerrado por decisão do PO, DESC-8.)* Quatro das seis reprovações
       da S-03 são conduta, e todas com a mesma forma: perguntar em vez de buscar (`golden-005`,
       `golden-016`), e buscar com `apenas_disponiveis` no default quando a descrição do parâmetro
       manda o contrário (`golden-006`, `golden-013`). Aceite: as seis da S-03 fechando.
-- [ ] **REQ-4 O runner executa a suíte inteira — as cinco sub-suítes, 23 casos.** Inclui os quatro
+- [x] **REQ-4 O runner executa a suíte inteira — as cinco sub-suítes, 23 casos.** Inclui os quatro
       `spec: S-05`, hoje recusados por terem turno `de: operador` (DESC-5 da S-05): a conversa passa
       a ser percorrida **na ordem**, e o turno do operador vira decisão no port `fiscal`. Exige
       `cenario: pedido_pago` declarado em `golden-004` e `golden-011`, e um `nota_emitida` novo no
       schema para o `golden-012`.
-- [ ] **REQ-5 Gate em camadas, como o ADR-014 o define.** `scripts/evals-ci.sh` decide o escopo
+- [ ] **REQ-5 Gate em camadas, como o ADR-014 o define.** *(as três camadas existem; o required check não foi ligado — fica aberto por decisão do PO, DESC-6.)* `scripts/evals-ci.sh` decide o escopo
       pelo diff; mapa `código → sub-suíte` versionado, com **arquivo não mapeado ⇒ roda tudo**; job
       `evals` como required check; suíte inteira no pós-merge. Relatório no
       `$GITHUB_STEP_SUMMARY`.
-- [ ] **REQ-6 Langfuse como visor.** Dataset run por execução, trace por caso, **score booleano**
+- [x] **REQ-6 Langfuse como visor.** Dataset run por execução, trace por caso, **score booleano**
       por caso. Sincronização de mão única `evals/` → Langfuse. Instrumentado pelo cliente do
       projeto (`observability.client()`), em `environment=evals`. Langfuse fora do ar não reprova a
       suíte (ADR-010).
@@ -101,7 +105,8 @@ acreditar.
 Cenário: regressão de prompt bloqueada
   Dado um PR que altera PROMPT_RECOMENDACAO e faz o agente citar preço divergente do banco
   Quando o CI executa o job de evals
-  Então rodam as sub-suítes S-02, S-03, S-11 e S-04 — todas as que usam aquela lane —
+  Então rodam as cinco sub-suítes — o prompt de checkout mora no mesmo arquivo, e o eixo do mapa
+  é o arquivo —
   e o check falha apontando o caso e o fato sem origem em tool
 
 Cenário: falha dura não faz média
@@ -191,6 +196,71 @@ limpas. Não afeta veredito nenhum: o `atende`/`nao_atende` é campo estruturado
 evidência degrada. Registrado porque um relatório com nulo dentro é desagradável de ler e ninguém
 saberia de onde veio.
 
+**DESC-6 — o REQ-5 fica aberto: o job `evals` não virou required check, e a spec diz que fica.**
+Achado ALTA da verificação independente (ACH-1), e é a junção de dois fatos. Primeiro: `evals` não
+está nos required status checks da `main` — os obrigatórios hoje são `commitlint, detect, lint,
+test, secrets, skills-drift, typecheck`. O REQ-5 pede nominalmente o contrário, e o ADR-014 diz da
+camada 1 que ela *"**é** o required check"*. Segundo: rodando o mapa contra o diff **desta própria
+branch**, ele devolve `TODAS` — o diff toca `subagents.py`, `config.py`, `providers.py` e
+`evals/**`. Logo, ligar o check antes do merge rodaria os 23 casos, 9 reprovariam, e o PR da S-06
+ficaria bloqueado pelo portão que a S-06 construiu — e todo PR seguinte que tocasse arquivo mapeado,
+até as 9 fecharem.
+
+A spec via metade disso (*"a suíte reprova: 14 de 23 aprovados. Isso não é métrica falhada"*) e não
+escrevia a outra. **Decisão do PO, 2026-08-28: o requisito fica aberto e escrito**, em vez de ligar
+o portão e suspendê-lo no mesmo dia como a S-05 fez. O que existe é o job rodando e não decidindo; o
+que falta é uma linha de configuração de branch protection e as 9 reprovações — e as 9 têm causa
+registrada nas DESC-2, DESC-3 e DESC-8, não são mistério. Registrado também na nota do ADR-014.
+
+**DESC-7 — o `nao_aplicavel` vazou para três critérios incondicionais, e a resposta foi estrutural.**
+Achado ALTA da verificação independente (ACH-2). Lidos os sete `nao_aplicavel` da execução da suíte
+inteira contra a regra que o próprio juiz recebe, **três estão errados** e nenhum traz "Se", "Caso"
+ou "Quando":
+
+| Onde | Critério | O que o juiz escreveu |
+|---|---|---|
+| `golden-004` | *"Emitir somente depois da aprovação do operador, com quem e quando gravados"* | *"não houve emissão de nota fiscal"* — mas o operador **aprovou** |
+| `golden-004` | *"Emitir com destinatário PJ, e entregar DANFE e XML no chat após a emissão"* | idem |
+| `golden-011` | *"Manter o pedido fora do caminho de emissão após a rejeição"* | *"não houve rejeição registrada"* — sobre uma rejeição que **foi** registrada |
+
+Nos três, "a condição faltou por conduta do agente" foi lido como "a condição não se aplica" — que é
+exatamente o escape que o REQ-1 nomeia e manda recusar. Nenhum veredito virou naquela execução
+(os três caíram em casos que já reprovavam), mas a troca líquida do REQ-1 tinha sido fechar dois
+falsos-negativos na S-03 e abrir três falsas-isenções na S-05.
+
+**Decisão do PO, 2026-08-28: trava estrutural no código**, e não mais uma instrução no prompt — a
+Fase 0 já mediu que pedir ao juiz não resolve, e foi essa medição que criou o terceiro estado.
+`judge.traz_condicao_escrita` confere no texto do critério, sem chamar modelo nenhum, e o validador
+rebaixa para `nao_atende` — a mesma saída que o prompt já manda escolher na dúvida — deixando a
+recusa **escrita na evidência**, porque rebaixamento invisível seria o mesmo defeito virado para o
+outro lado. As duas exclusões da regra ("como se" é comparação; "quem e quando" é enumeração de
+metadado) não são gramática geral: são as duas construções que este corpus tem, e a segunda é a que
+uma busca ingênua pela palavra deixaria passar no `golden-004`. Os sete casos estão numa tabela de
+teste, os dois lados.
+
+Fica registrado o limite: a trava é **permissiva** por escolha. `"Perguntar de forma direta se pode
+fechar"` é pergunta indireta e não condição, e ela continua contando como condicional. Recusar
+sempre seria pior — devolveria o falso-negativo que o REQ-1 fechou.
+
+**DESC-8 — o REQ-3 encerra com 5 de 6, e o aceite literal não foi atingido.** O aceite escrito é
+*"as seis da S-03 fechando"*; a entrega é cinco. A sexta é a `golden-006`, e a DESC-2 acima explica
+por que ela não fecha por prompt — a verificação independente conferiu a premissa e confirmou que
+`buscar_produtos` já devolve `disponivel`, então o agente não tem motivo funcional para chamar o
+detalhe. **Decisão do PO, 2026-08-28: encerra com 5 de 6.** A sexta depende da mudança de contrato
+de tool que a DESC-1 da S-03 nomeou (D-3), que continua fora do escopo desta spec e agora volta à
+mesa do PO com duas medições em vez de uma.
+
+O registro existe porque o aceite não pode ser dado por cumprido em silêncio: foi escrito **antes**
+de existir a medição que o invalida, e essa é a ressalva sobre a spec, não sobre o código.
+
+**DESC-9 — em três pontos a spec ficou atrás da implementação, e a spec é que estava errada.**
+Ressalva própria da verificação independente. (a) O REQ-4 afirma uma causa que a DESC-1 desmente.
+(b) O BDD 1 pedia quatro sub-suítes onde o desenho correto entrega cinco — corrigido no cenário, que
+agora diz o que o mapa faz. (c) O REQ-3 escreveu um aceite inatingível dentro do escopo declarado
+(DESC-8). Nenhum dos três muda veredito; os três viram edição da spec para que a próxima pessoa não
+leia a spec como contrato e a entrega como desvio.
+
+
 ## Verificação independente
 
 - Introduzir uma regressão proposital num branch descartável — um prompt que faça o agente citar
@@ -207,4 +277,4 @@ saberia de onde veio.
 
 ## Definition of Done
 
-- [ ] Checklist padrão do template
+- [x] Checklist padrão do template

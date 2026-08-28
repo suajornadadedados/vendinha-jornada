@@ -4,8 +4,22 @@
 > `S-06-suite-completa/`, um arquivo por spec, como o `scripts/evals-ci.sh --tudo` os gravou.
 
 Data: 2026-08-28 · Branch: `spec/s-06-evals-gate`
-Agente: `anthropic:claude-haiku-4-5-20251001` · Juiz: `openai:gpt-4.1` · `LLM_TEMPERATURE=0` ·
+Agente: `anthropic:claude-haiku-4-5` · Juiz: `openai:gpt-4.1` · `LLM_TEMPERATURE=0` ·
 Concorrência 4
+
+> **O agente é o alias, e não o snapshot datado que o ADR-014 exige.** Esta linha dizia
+> `claude-haiku-4-5-20251001` e contradizia os cinco arquivos gerados que ela linka logo abaixo —
+> todos trazem `anthropic:claude-haiku-4-5`, porque é isso que o runner registrou. O mecanismo já
+> estava no ADR-014: `stored.selected_model` do config store sobrepõe o pin do `Settings` em
+> runtime (`runner.py`), então a régua pode andar sem que arquivo nenhum mude. Corrigido para o que
+> os artefatos dizem, na verificação independente da S-06 (ACH-9).
+>
+> **O que isto muda, e o que não muda.** Não muda o A/B de variância: os dois lados rodaram contra
+> o mesmo alias e o que variou foi só a `temperature`, então a conclusão do REQ-2 continua de pé —
+> a verificação independente reproduziu o item a item e confirmou 0 de 52 virando contra 5 de 52.
+> Muda a leitura de "a régua está pinada": **o modelo não estava**, e portanto "0 de 52 itens
+> virando" é uma afirmação sobre reprodutibilidade medida com o modelo solto. Fechar o pin de
+> verdade é trabalho declarado, não entregue aqui.
 
 ---
 

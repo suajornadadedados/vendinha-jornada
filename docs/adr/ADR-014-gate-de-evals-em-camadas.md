@@ -2,6 +2,9 @@
 
 - Status: **aceito** · Data: 2026-08-28
 - Decisão relacionada: D17 (docs/decisoes.md) · Riscos: R7, R1, R6
+- Complementa o **ADR-006**, que continua valendo em tudo que não está aqui. Não o substitui: a
+  régua continua sendo o caso, continua sendo aprovado-ou-reprovado, e continua não existindo
+  arquivo de rubric.
 
 > **Nota de cabeçalho, 2026-08-28 — aceito com a entrega da S-06.** O corpo abaixo não mudou; o que
 > mudou é que ele deixou de descrever um plano e passa a descrever o que existe. As três camadas, o
@@ -18,9 +21,17 @@
 > suíte inteira para o Langfuse com a chamada de dataset run errada e "deu certo", com zero runs do
 > outro lado. A resposta não foi deixar a exceção subir — isso poria o portão atrás do SaaS —, e sim
 > o runner dizer em voz alta quantos casos chegaram ao visor.
-- Complementa o **ADR-006**, que continua valendo em tudo que não está aqui. Não o substitui: a
-  régua continua sendo o caso, continua sendo aprovado-ou-reprovado, e continua não existindo
-  arquivo de rubric.
+>
+> **E a verificação independente da S-06 mostrou que aquela resposta ainda deixava passar o mesmo
+> sintoma** (ACH-4): `create_score` aceita `trace_id=None`, então um caso sem trace incrementava o
+> contador enquanto o run item era pulado, e o runner imprimia a frase tranquilizadora com zero
+> runs do outro lado. O aviso passou a contar as duas coisas — scores e run items — e tem teste.
+>
+> Fica registrado o que **não** ficou fechado: o job `evals` não foi promovido a required check da
+> `main`. O REQ-5 pede isso nominalmente, e ligá-lo com 9 dos 23 casos reprovando bloquearia todo
+> PR que tocasse arquivo mapeado, este inclusive. A decisão do PO foi deixar o requisito aberto e
+> escrito, em vez de ligar o portão e suspendê-lo no mesmo dia (S-06, DESC-6). O que existe hoje é
+> o job rodando e não decidindo; o que falta é uma linha de configuração e as 9 reprovações.
 
 ## Contexto
 
