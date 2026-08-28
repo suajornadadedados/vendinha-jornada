@@ -1,7 +1,7 @@
 ---
 id: S-07
 titulo: Frontend integrado e API de observação
-status: aprovada
+status: em-revisao
 branch: spec/s-07-frontend
 issue: #8
 adrs: [ADR-004, ADR-013, ADR-015]
@@ -36,58 +36,58 @@ de dinheiro no navegador.
 
 ### A fronteira
 
-- [ ] REQ-1 Cliente TypeScript **gerado** do OpenAPI, sem subir servidor (`python -m vendinha.openapi`),
+- [x] REQ-1 Cliente TypeScript **gerado** do OpenAPI, sem subir servidor (`python -m vendinha.openapi`),
       com o `openapi.json` commitado. O CI regenera e compara: drift de contrato quebra o build.
       Tipos de fronteira escritos à mão: zero.
 
 ### O que o backend precisa passar a oferecer
 
-- [ ] REQ-2 **Read model** de sessões e turnos: quem conversou, quando, quantos turnos, que modelo,
+- [x] REQ-2 **Read model** de sessões e turnos: quem conversou, quando, quantos turnos, que modelo,
       quantos tokens, que latência. As mensagens **não são copiadas** — são lidas do checkpointer
       (RNF-6, pointer-not-payload).
-- [ ] REQ-3 **Barramento de eventos** in-process, com fila limitada por assinante: fila cheia
+- [x] REQ-3 **Barramento de eventos** in-process, com fila limitada por assinante: fila cheia
       descarta o mais antigo e emite um evento de atraso, e nunca bloqueia quem produz. Eventos
       tipados no OpenAPI, para virarem tipos TS como todo o resto.
-- [ ] REQ-4 Rotas `/admin/*` **read-only** e fail-closed no `X-Operador-Token`: conversas (lista e
+- [x] REQ-4 Rotas `/admin/*` **read-only** e fail-closed no `X-Operador-Token`: conversas (lista e
       detalhe), pedidos, métricas, prompts, e o stream SSE do barramento.
-- [ ] REQ-5 **Custo em `Decimal` no backend**, de `data/precos-modelos.json` versionado. Modelo sem
+- [x] REQ-5 **Custo em `Decimal` no backend**, de `data/precos-modelos.json` versionado. Modelo sem
       preço devolve `None`, jamais zero, e a tela diz por quê. O `atualizado_em` da tabela é visível.
-- [ ] REQ-6 **Push por sessão** (`GET /eventos/sessao/{session_id}`): o cliente **recebe** a
+- [x] REQ-6 **Push por sessão** (`GET /eventos/sessao/{session_id}`): o cliente **recebe** a
       confirmação da NF sem perguntar. Fecha a ressalva R-2 da verificação da S-05, que registrou o
       RF-3.6 estreitado de "recebe" para "pergunta e o agente consulta".
 
 ### As telas
 
-- [ ] REQ-7 **Landing pública** da Vendinha: institucional, com identidade própria de empório
+- [x] REQ-7 **Landing pública** da Vendinha: institucional, com identidade própria de empório
       mineiro, os quatro tipos de evento que o agente sabe montar, e um FAB no canto inferior direito
       que abre o atendimento. É o simulador do canal do cliente — não um produto, e sai do bundle sem
       uma linha de JS do painel.
-- [ ] REQ-8 **Widget de atendimento**: streaming SSE token a token, indicador de digitando, e
+- [x] REQ-8 **Widget de atendimento**: streaming SSE token a token, indicador de digitando, e
       estados honestos com cara própria — montando composição, aguardando pagamento (com o link),
       aguardando aprovação da NF (sem prometer prazo), NF emitida (com DANFE e XML, que **chega
       sozinho**). Erro de stream oferece reenviar e não mostra stack trace. `session_id` em
       `localStorage`: F5 não perde a conversa.
-- [ ] REQ-9 **A composição é visível enquanto é montada**: itens, quantidades, total e valor por
+- [x] REQ-9 **A composição é visível enquanto é montada**: itens, quantidades, total e valor por
       pessoa, atualizados a cada veredito, **exatamente como o validador devolveu**. Reprovação
       aparece com o motivo real — orçamento, slot, restrição ou disponibilidade —, nunca genérica.
       É a tela onde a regra de ouro fica visível para quem nunca vai abrir um trace.
-- [ ] REQ-10 **Painel: conversas ao vivo.** O que acontece no backend aparece na tela em ≤1s, por
+- [x] REQ-10 **Painel: conversas ao vivo.** O que acontece no backend aparece na tela em ≤1s, por
       evento e não por polling. Lista, e detalhe com a timeline da conversa ao lado dos vereditos de
       composição, dos turnos com tokens/latência/custo e do pedido vinculado.
-- [ ] REQ-11 **Painel: fila HITL com notificação.** O `aprovacao_pendente` toca um sino com badge; o
+- [x] REQ-11 **Painel: fila HITL com notificação.** O `aprovacao_pendente` toca um sino com badge; o
       detalhe traz destinatário PJ completo (razão social, CNPJ, IE, endereço) e composição item a
       item; aprovar e rejeitar com motivo obrigatório; a lista se atualiza pelo evento.
-- [ ] REQ-12 **Painel: rastreabilidade.** Por conversa, lado a lado, **o que o modelo propôs × o que
+- [x] REQ-12 **Painel: rastreabilidade.** Por conversa, lado a lado, **o que o modelo propôs × o que
       o código validou ou recusou**, com as tools chamadas, a latência e o custo por turno. Deep-link
       do Langfuse só aparece quando há chaves.
-- [ ] REQ-13 **Painel: pedidos e métricas.** Pedidos com composições, itens de preço congelado,
+- [x] REQ-13 **Painel: pedidos e métricas.** Pedidos com composições, itens de preço congelado,
       status de pagamento e de NF, DANFE e XML. KPIs: conversão, ticket médio, custo por conversa e
       como % do ticket, tokens por modelo, p50/p95 do primeiro token contra o alvo RNF-4, tempo médio
       de atendimento, tempo até a decisão do operador, e **recusas do validador por motivo**.
-- [ ] REQ-14 **Painel: configurações.** Modelo e credencial via `PUT /config`, com o aviso honesto de
+- [x] REQ-14 **Painel: configurações.** Modelo e credencial via `PUT /config`, com o aviso honesto de
       que `editable:false` fora de `APP_ENV=local` (S-02, D-8). **Prompts em modo leitura**, com
       caminho e sha, e a nota de que prompt muda por PR com evals — nunca pela tela (ADR-015).
-- [ ] REQ-15 **Sistema visual decidido antes de implementado.** `docs/design/sistema-visual.md`
+- [x] REQ-15 **Sistema visual decidido antes de implementado.** `docs/design/sistema-visual.md`
       commitado antes do primeiro componente: paleta, par tipográfico, escalas de densidade para os
       dois registros, ícones de um set só, e os tipos de gráfico dos KPIs.
 
@@ -207,6 +207,38 @@ Cenário: a conexão cai e a tela não mente
 
 ## Descobertas (preenchido durante a execução)
 
+- **DESC-2 — A paleta de partida reprovou em contraste, e a régua era do próprio style.**
+  O `ui-ux-pro-max` devolveu *Accessible & Ethical* com contraste 4.5:1 como requisito, e o
+  ocre `#B4711F` dos diagramas do repositório mede **3.72** sobre papel — reprova em texto,
+  e "pendente" é um badge com palavra dentro, na tela onde se emite documento fiscal. Virou
+  dois tokens: `#8A5714` para texto (5.74) e o original só para preenchimento.
+
+- **DESC-3 — A paleta de marca não é escala categórica, e a resposta não foi consertá-la.**
+  O validador da `dataviz` reprovou os cinco tons: ΔE 4.0 entre cinza e vermelho em protan.
+  Re-escaloná-los teria sido a correção óbvia e errada — olhando de novo, **nenhum dos três
+  gráficos tem mais de uma série**: a categoria das recusas está no eixo, não na cor. Uma
+  cor por gráfico, nenhuma paleta categórica.
+
+- **DESC-4 — Dois bugs que só a execução contra o Postgres mostrou.** Uma constante de SQL
+  reusada nas duas formas do agregado (a por sessão não trazia `session_id` no SELECT, e a
+  lista de conversas mostrava custo `—` enquanto as métricas mostravam US$ 0,069 para o
+  mesmo turno); e `ultima_atividade` tocada só na abertura da sessão, exibindo uma conversa
+  de 19 segundos como *"atendimento médio: 0 ms"*. **Nenhum dos dois seria pego pela
+  suíte**: a implementação em memória não executa SQL, e a ADR-011 não tem camada de
+  integração de propósito. O guarda que entrou afirma a **forma** da consulta, que é onde o
+  erro estava. Fica registrado que este é o custo declarado da ADR-011, e que a verificação
+  manual roteirizada foi o que o cobriu — exatamente como a spec previa.
+
+- **DESC-5 — O gerador do cliente TypeScript encontrou um erro de contrato.**
+  `EventoDoPainel` é um alias com discriminador, não um `BaseModel`: o Pydantic não cria um
+  `$def` para ele, e o `$ref` por nome apontava para nada. O `openapi-typescript` parou o
+  build. É o portão de contrato funcionando antes de existir tela.
+
+- **DESC-6 — `python -m vendinha.openapi > openapi.json` corrompia o arquivo no Windows.**
+  O stdout do console é cp1252, e a redireção quebrava no primeiro `ç` de uma descrição de
+  campo. O comando passou a escrever o arquivo com encoding explícito. Um portão de contrato
+  que só funciona em metade das máquinas do time é pior do que nenhum.
+
 - **DESC-1 — `ui-ux-pro-max` foi vendorizado, e o ADR-009 diz que ele fica como plugin.** A skill
   apareceu em `.claude/skills/ui-ux-pro-max/` (3,6 MB, 70 arquivos) junto com um `skills-lock.json`
   **na raiz**, que duplica o `.claude/skills.lock.json` que o ADR-009 estabeleceu como fonte única
@@ -215,6 +247,48 @@ Cenário: a conexão cai e a tela não mente
   16 MB que ele cita, então a premissa mudou e o ADR pode ser revisitado; (b) o lockfile duplicado,
   que é uma segunda fonte de verdade sobre a mesma coisa e precisa sumir de um dos dois lugares.
   **Parado para decisão do PO** — não commitado nesta branch.
+
+### O que foi entregue, por requisito
+
+| REQ | Onde | Prova |
+|---|---|---|
+| 1 | `backend/vendinha/openapi.py`, `frontend/src/api/schema.d.ts` | job `contrato` no CI compara e reprova o drift |
+| 2 | `backend/vendinha/telemetria.py` | tabelas `sessao` e `turno`; mensagens vêm do checkpointer |
+| 3 | `backend/vendinha/eventos.py` | fila limitada, descarte do mais antigo, `AtrasoNoStream` |
+| 4 | `backend/vendinha/admin.py` | 7 rotas GET, `tests/security/test_admin_boundary.py` |
+| 5 | `backend/vendinha/precos.py`, `data/precos-modelos.json` | `None` e nunca zero; `tests/unit/test_painel.py` |
+| 6 | `GET /eventos/sessao/{id}` | cartão da NF aparece no widget sem o cliente perguntar |
+| 7 | `frontend/src/site/Site.tsx` | conteúdo do catálogo real; bundle sem JS do painel |
+| 8 | `frontend/src/site/Widget.tsx`, `useConversa.ts` | estados honestos, sem prazo prometido |
+| 9 | `frontend/src/site/Composicao.tsx` | veredito como o validador devolveu, motivo tipado |
+| 10 | `frontend/src/admin/dados.ts` | um assinante, invalidação por evento, zero polling |
+| 11 | `frontend/src/admin/Telas.tsx` (`Fila`) | confirmação repete razão social, CNPJ e total |
+| 12 | `Telas.tsx` (`Rastreabilidade`) | args da tool ao lado do retorno, por turno |
+| 13 | `Telas.tsx` (`Pedidos`, `Metricas`), `metricas.py` | KPIs somados em `Decimal` no backend |
+| 14 | `Telas.tsx` (`Config`) | `editavel: false` é literal no contrato |
+| 15 | `docs/design/sistema-visual.md` | commitado antes do primeiro componente |
+
+### Verificação manual registrada
+
+Contra a API real, com Postgres e um modelo de verdade (`anthropic:claude-haiku-4-5`):
+
+| O que | Resultado |
+|---|---|
+| `/admin/*` sem token, com token errado, e sem `OPERADOR_API_TOKEN` no ambiente | 401 nas três |
+| `/admin/*` com o token certo | 200 |
+| Preflight de CORS de `http://localhost:5173` | `allow-origin` e `X-Operador-Token` liberados |
+| Stream do painel durante uma conversa | `sessao_iniciada` → `mensagem` → `composicao_avaliada` → `mensagem`, com heartbeat |
+| Veredito no evento | idêntico ao da tool: total 484,00, 12,10/pessoa, teto 35 |
+| Read model após a conversa | 1 turno, 63.321 entrada / 1.183 saída, p95 1.208 ms |
+| Custo apurado | US$ 0,069236, e o mesmo número na lista e nas métricas |
+| Recusas por motivo, após um happy hour a R$20/pessoa | `orcamento: 3`, `slot: 1` |
+| Tempo médio de atendimento | 17.331 ms |
+| KPIs numa janela vazia | conversão, ticket, p95 e custo **todos `null`**, nenhum zero |
+| Prompts | `editavel: false`, sha e caminho por subagent |
+
+**Não verificado por quem implementou, e deliberadamente:** a aparência das duas telas num
+navegador e o comportamento de reconexão com o backend derrubado. É a verificação
+independente da spec, e o roteiro dela está em `S-07-roteiro-de-demo.md`.
 
 ## Definition of Done
 
