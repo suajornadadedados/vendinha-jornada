@@ -289,10 +289,48 @@ def test_the_model_list_comes_from_the_provider(client: TestClient) -> None:
     the same standard ADR-001 imposes on the agent, applied to our own source.
     """
     client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+    # O modelo é FIXADO aqui, e não herdado do `Settings`. Sem isto o teste depende
+    # do ambiente: `_allowed_models` acrescenta o modelo configurado à lista, então
+    # a asserção exata abaixo passava na máquina com um `.env` e reprovava no CI sem
+    # ele. Foi o que aconteceu ao pinar `LLM_MODEL` num snapshot datado.
+    client.put("/config", json={"model": "anthropic:claude-haiku-4-5"})
 
     body = client.get("/models").json()
     assert body["models"] == ["anthropic:claude-haiku-4-5", "anthropic:claude-opus-5"]
     assert body["selected"] == "anthropic:claude-haiku-4-5"
+
+
+def test_the_configured_model_is_offered_even_when_the_provider_did_not_list_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-012 — o servidor não pode recusar em `POST /chat` o modelo que ele roda.
+
+    `_allowed_models` acrescenta o modelo configurado quando o endpoint do provedor
+    não o devolveu — porque a lista pode estar defasada, ou a chamada pode ter
+    falhado, e nos dois casos o modelo continua sendo o que o servidor usa.
+
+    Este caminho não tinha teste: ele era exercitado por acidente no CI, e só
+    apareceu quando `LLM_MODEL` foi pinado num snapshot que o dublê do provedor não
+    lista. Comportamento descoberto por acidente é comportamento sem rede.
+    """
+    # O dublê oferece SÓ o opus, e o modelo configurado é sempre um haiku — então o
+    # caminho do append dispara sempre, em qualquer ambiente. Este dublê é local ao
+    # teste, e não o `offered_models`, justamente para garantir isso.
+    monkeypatch.setitem(
+        PROVIDERS,
+        "anthropic",
+        Provider("anthropic", "ANTHROPIC_API_KEY", lambda _: ["claude-opus-5"]),
+    )
+    client.put("/config", json={"provider": "anthropic", "api_key": FAKE_KEY})
+
+    body = client.get("/models").json()
+
+    # A invariante, e não uma lista literal: o nome exato do modelo configurado vem
+    # do `Settings`, e afirmá-lo aqui traria de volta a dependência de ambiente que
+    # este teste nasceu para não repetir.
+    assert body["selected"] not in ["anthropic:claude-opus-5"]
+    assert body["selected"] in body["models"]
+    assert body["models"] == sorted(["anthropic:claude-opus-5", body["selected"]])
 
 
 @pytest.mark.usefixtures("offered_models")
