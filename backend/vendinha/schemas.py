@@ -20,6 +20,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 
 from vendinha.pedidos import ComposicaoDoPedido, Endereco
+from vendinha.tools.composicao import ComposicaoValidada
 
 # `strip_whitespace` before `min_length` is the whole point: a message of three
 # spaces is an empty message, and refusing it in the contract keeps the check out
@@ -242,3 +243,122 @@ class DecisaoRegistrada(BaseModel):
         default=None, description="Preenchido quando a emissão já aconteceu."
     )
     chave_da_nota: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Os eventos do painel (S-07)
+#
+# Ficam aqui, e não em `eventos.py`, porque são contrato de fronteira como todo o
+# resto deste arquivo: eles saem por SSE e viram tipos TypeScript. Espalhar eventos
+# de SSE por dois módulos deixaria `SessionEvent` e `TokenEvent` de um lado e estes
+# do outro, sem que a divisão dissesse nada.
+#
+# `tipo` é literal em todos e é o discriminador da união — e é também o nome do
+# `event:` na linha do SSE, para que o cliente não precise inspecionar o corpo para
+# saber o que chegou.
+# ---------------------------------------------------------------------------
+
+
+class SessaoIniciada(BaseModel):
+    """Uma conversa nova apareceu. É o que faz a linha surgir na lista do painel."""
+
+    tipo: Literal["sessao_iniciada"] = "sessao_iniciada"
+    em: datetime
+    session_id: str
+    canal: str
+
+
+class MensagemRegistrada(BaseModel):
+    """Uma fala completa, do cliente ou do atendente.
+
+    O painel recebe a fala do atendente **inteira**, no fim do turno, e não token a
+    token como o cliente. O cliente espera a frase se formar porque é a conversa
+    dele; o operador está olhando uma lista de conversas, e streaming em todas ao
+    mesmo tempo é ruído que nenhuma decisão usa.
+    """
+
+    tipo: Literal["mensagem"] = "mensagem"
+    em: datetime
+    session_id: str
+    papel: Literal["cliente", "atendente"]
+    texto: str
+
+
+class ComposicaoAvaliada(BaseModel):
+    """O veredito do validador, **como ele voltou** — nunca reprojetado.
+
+    É o evento que carrega a regra de ouro até a tela: o modelo propôs, o código
+    respondeu isto, e o painel mostra a resposta do código. Reprojetar aqui seria
+    dar ao painel a chance de discordar do validador.
+    """
+
+    tipo: Literal["composicao_avaliada"] = "composicao_avaliada"
+    em: datetime
+    session_id: str
+    veredito: ComposicaoValidada
+
+
+class PedidoAtualizado(BaseModel):
+    """O pedido mudou de estado. `session_id` é o que permite avisar o cliente."""
+
+    tipo: Literal["pedido_atualizado"] = "pedido_atualizado"
+    em: datetime
+    pedido_id: str
+    session_id: str | None = None
+    status: str
+    total: Decimal
+    razao_social: str
+
+
+class AprovacaoPendente(BaseModel):
+    """Uma nota entrou na fila e espera decisão humana. É a notificação do HITL.
+
+    Deliberadamente magro: id, valor e razão social — o bastante para o sino tocar
+    com contexto. O detalhe que autoriza a decisão continua vindo de
+    `GET /operador/fila`, que é a projeção que o RF-3.2 governa. Um evento gordo
+    seria uma segunda projeção da nota, e a que fica velha.
+    """
+
+    tipo: Literal["aprovacao_pendente"] = "aprovacao_pendente"
+    em: datetime
+    pedido_id: str
+    total: Decimal
+    razao_social: str
+
+
+class NotaDecidida(BaseModel):
+    """A decisão saiu. Com `session_id`, é o que faz o cartão da NF aparecer no chat."""
+
+    tipo: Literal["nota_decidida"] = "nota_decidida"
+    em: datetime
+    pedido_id: str
+    session_id: str | None = None
+    decisao: Literal["aprovada", "rejeitada"]
+    numero_nota: int | None = None
+    motivo: str | None = None
+
+
+class AtrasoNoStream(BaseModel):
+    """Eventos foram descartados porque este assinante não os consumiu a tempo.
+
+    Existe para que a tela possa dizer *"você perdeu N atualizações, recarregando"*
+    em vez de seguir exibindo um estado furado. É o preço da fila limitada, e a
+    alternativa — bloquear quem publica — faria um painel lento segurar a resposta
+    de um cliente.
+    """
+
+    tipo: Literal["atraso"] = "atraso"
+    em: datetime
+    perdidos: int
+
+
+EventoDoPainel = Annotated[
+    SessaoIniciada
+    | MensagemRegistrada
+    | ComposicaoAvaliada
+    | PedidoAtualizado
+    | AprovacaoPendente
+    | NotaDecidida
+    | AtrasoNoStream,
+    Field(discriminator="tipo"),
+]
