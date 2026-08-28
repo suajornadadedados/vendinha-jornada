@@ -40,6 +40,9 @@ typecheck:  ## mypy strict no backend E na suite de testes
 	cd backend && uv run mypy .
 	uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
+types:  ## Regera o openapi.json (contrato -> cliente TypeScript da S-07)
+	uv run --project backend python -m vendinha.openapi
+
 evals-check:  ## Valida os casos de eval contra o schema — sem agente, sem API
 	uv run --project backend python -m pytest tests/unit/test_eval_corpus_is_traceable.py -q
 

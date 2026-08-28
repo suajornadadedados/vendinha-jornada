@@ -32,6 +32,7 @@ from html import escape
 from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from langchain.embeddings import init_embeddings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
@@ -287,6 +288,19 @@ def create_app(
         description="Agente de vendas do empório mineiro digital.",
         version="0.1.0",
         lifespan=lifespan,
+    )
+
+    # O primeiro middleware deste app, e ele chega na S-07 porque o primeiro
+    # cliente de navegador chega na S-07. `allow_credentials` fica FALSO de
+    # propósito: o painel autentica por header próprio, não por cookie, e ligá-lo
+    # sem necessidade proibiria justamente as origens explícitas de funcionarem
+    # com curinga se alguém trocar a lista por `*` um dia.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.origens_permitidas,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT"],
+        allow_headers=["Content-Type", "X-Operador-Token"],
     )
 
     async def _warm_models(app: FastAPI) -> None:
