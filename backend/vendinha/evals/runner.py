@@ -40,7 +40,7 @@ import logging
 import sys
 import unicodedata
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -57,6 +57,7 @@ from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
 from vendinha.db import with_connect_timeout
 from vendinha.evals.caso import Caso, carregar_casos
+from vendinha.evals.gasto import Gasto, gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever, verificar
 from vendinha.evals.judge import VeredictoDoJuiz, julgar
 from vendinha.graph import (
@@ -178,6 +179,12 @@ class Resultado:
     # lê-lo: a S-11 descobriu que o valor herdado da S-02 cortava composição
     # legítima, e "sobe um pouco" teria sido o mesmo chute outra vez (R6, RNF-3).
     tokens: int = 0
+
+    # O mesmo consumo, separado pelos preços que o cobram. `tokens` responde "esta
+    # conversa cabe no teto?"; `gasto` responde "quanto custa rodar a suíte?" — e a
+    # segunda não se responde com um total, porque entrada, saída e leitura de
+    # cache têm três preços diferentes. Ver `evals/gasto.py`.
+    gasto: Gasto = field(default_factory=Gasto)
 
     # Por que o cenario nao montou, quando nao montou. O caso reprova, e o relatorio
     # diz que reprovou por falta de pre-condicao — que e uma informacao diferente de
@@ -568,6 +575,7 @@ async def rodar_caso(
         juiz=veredito_do_juiz,
         erro_do_juiz=erro_do_juiz,
         tokens=tokens_spent(mensagens),
+        gasto=gasto_da_conversa(mensagens),
     )
 
 
@@ -677,7 +685,14 @@ def relatorio(resultados: Sequence[Resultado]) -> str:
             "",
             f"_{resultado.caso.titulo}_",
             "",
-            f"Gasto da conversa: **{resultado.tokens:,} tokens**.",
+            f"Gasto da conversa: **{resultado.tokens:,} tokens** "
+            f"({resultado.gasto.entrada:,} de entrada, {resultado.gasto.saida:,} de saída"
+            + (
+                f", {resultado.gasto.cache_leitura:,} lidos de cache"
+                if resultado.gasto.cache_leitura
+                else ""
+            )
+            + ").",
             "",
         ]
 

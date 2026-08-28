@@ -28,8 +28,10 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 
+from vendinha.budget import tokens_spent
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
 from vendinha.evals.caso import carregar_casos
+from vendinha.evals.gasto import gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, precos_citados, transcrever
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
 from vendinha.evals.runner import (
@@ -692,3 +694,84 @@ def test_a_scenario_that_did_not_materialise_reproves_its_case_and_spares_the_ot
     texto = relatorio([sem_cenario])
     assert "não montou" in texto
     assert "não chegaram a ser avaliados" in texto
+
+
+# --------------------------------------------------------------------------- #
+# R6 — o que a régua custa, separado por preço
+#
+# `tokens_spent` devolve um número só, e ele foi suficiente enquanto a pergunta
+# era "a conversa estourou o teto?". A pergunta desta medição é outra — "quanto
+# custa rodar a suíte?" — e essa não se responde com um total: entrada e saída têm
+# preços diferentes, e leitura de cache tem um terceiro. Somar os três num número
+# e multiplicar por um preço é a conta errada com cara de certa.
+# --------------------------------------------------------------------------- #
+
+
+def _ai(entrada: int, saida: int, **detalhes: int) -> AIMessage:
+    """Uma resposta do modelo com `usage_metadata` como o provedor a devolve."""
+    uso: dict[str, Any] = {
+        "input_tokens": entrada,
+        "output_tokens": saida,
+        "total_tokens": entrada + saida,
+    }
+    if detalhes:
+        uso["input_token_details"] = detalhes
+    return AIMessage(content="ok", usage_metadata=uso)
+
+
+@pytest.mark.risco("R6")
+def test_the_cost_breakdown_keeps_input_and_output_apart() -> None:
+    """R6 — entrada e saída são contadas separadamente, porque são cobradas assim.
+
+    Num laço agêntico a entrada é o histórico reenviado a cada ida ao modelo e a
+    saída é pequena. Um relatório que só some os dois esconde exatamente a
+    proporção que decide qual alavanca de custo vale a pena (RNF-3).
+    """
+    gasto = gasto_da_conversa([_ai(1000, 50), _ai(2000, 100)])
+
+    assert gasto.entrada == 3000
+    assert gasto.saida == 150
+
+
+@pytest.mark.risco("R6")
+def test_cached_input_is_reported_apart_from_input_paid_in_full() -> None:
+    """R6 — leitura de cache não é entrada nova, e o relatório não pode confundi-las.
+
+    Leitura de cache custa uma fração da entrada. Se as duas aparecem no mesmo
+    número, ligar o prompt caching não muda nada no relatório — e a medição que
+    deveria dizer se a alavanca funcionou fica cega justamente para ela.
+    """
+    gasto = gasto_da_conversa([_ai(5000, 100, cache_read=4000, cache_creation=500)])
+
+    assert gasto.cache_leitura == 4000
+    assert gasto.cache_escrita == 500
+    # O que sobrou é o que foi pago cheio: 5000 - 4000 - 500.
+    assert gasto.entrada_nova == 500
+
+
+@pytest.mark.risco("R6")
+def test_a_message_without_usage_metadata_counts_as_zero_instead_of_crashing() -> None:
+    """R6 — mesma tolerância de `tokens_spent`: provedor sem uso não derruba nada.
+
+    Alguns provedores omitem `usage_metadata` em chunks de streaming. Subcontar é a
+    direção errada para um teto, e por isso `budget.tokens_spent` a aceita de olhos
+    abertos; aqui o custo é ainda menor, porque isto é relatório e não guarda.
+    """
+    gasto = gasto_da_conversa([AIMessage(content="sem uso"), HumanMessage(content="oi")])
+
+    assert gasto.entrada == 0 and gasto.saida == 0
+    assert gasto.total == 0
+
+
+@pytest.mark.risco("R6")
+def test_the_breakdown_total_agrees_with_the_counter_that_guards_the_ceiling() -> None:
+    """R6 — a soma nova e `budget.tokens_spent` não podem divergir.
+
+    São duas leituras do mesmo `usage_metadata` e existem lado a lado: uma guarda o
+    teto de sessão, a outra informa o custo. Duas contagens da mesma coisa que
+    discordam é como a S-04 descobriu que a régua rodava com outro teto que o de
+    produção — o número existia em dois lugares e ninguém os prendeu.
+    """
+    conversa = [_ai(1000, 50), _ai(2000, 100, cache_read=1500)]
+
+    assert gasto_da_conversa(conversa).total == tokens_spent(conversa)
