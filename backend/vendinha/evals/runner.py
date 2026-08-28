@@ -40,23 +40,26 @@ import json
 import logging
 import sys
 import unicodedata
-from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, HumanMessage
+from langfuse import propagate_attributes
 from langgraph.checkpoint.memory import InMemorySaver
 
-from vendinha import runtime
+from vendinha import observability, runtime
 from vendinha.budget import tokens_spent
 from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, Produto, QdrantBusca
 from vendinha.config import REPO_ROOT, get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
 from vendinha.db import with_connect_timeout
+from vendinha.evals import visor
 from vendinha.evals.caso import Caso, carregar_casos
 from vendinha.evals.gasto import Gasto, gasto_da_conversa
 from vendinha.evals.groundedness import Transcricao, Veredito, transcrever, verificar
@@ -246,6 +249,12 @@ class Resultado:
     # relatório que se identifica é o que torna isso visível em vez de suspeito.
     modelo: str = ""
     juiz_nome: str = ""
+
+    # O trace deste caso no Langfuse, quando houve um. `None` significa que o visor
+    # nao estava configurado ou nao respondeu — e nao que o caso nao rodou. O
+    # veredito nao depende disto em nenhum caminho: Langfuse fora do ar nao reprova
+    # a suite (ADR-010, ADR-014).
+    trace_id: str | None = None
 
     @property
     def aprovado(self) -> bool:
@@ -616,6 +625,59 @@ async def _decidir_a_nota(
         )
 
 
+@contextmanager
+def _trace_do_caso(caso: Caso) -> Iterator[str | None]:
+    """Um trace por caso, e o id dele — ou `None` quando nao ha visor.
+
+    **Nada aqui pode levantar.** Uma execucao que ja custou dinheiro nao pode
+    reprovar porque o Langfuse nao respondeu: a instrumentacao loga e segue
+    (ADR-010). O `yield None` do caminho de falha e o que faz o caso rodar igual —
+    ele so nao aparece na tela.
+
+    `environment=evals` separa estes traces das metricas de producao. Sem isso, 23
+    conversas sinteticas por execucao entrariam na mesma janela do atendimento de
+    verdade, e a latencia media do produto passaria a incluir a regua medindo o
+    produto (ADR-014).
+    """
+    cliente = observability.client()
+    if cliente is None:
+        yield None
+        return
+    try:
+        with (
+            propagate_attributes(
+                session_id=caso.id,
+                trace_name=f"eval:{caso.id}",
+                environment=visor.AMBIENTE,
+                tags=[caso.spec, caso.familia],
+            ),
+            cliente.start_as_current_observation(name=caso.id, as_type="span"),
+        ):
+            yield cliente.get_current_trace_id()
+    except Exception:
+        logger.warning("nao consegui instrumentar %s; seguindo sem trace", caso.id, exc_info=True)
+        yield None
+
+
+def _config_da_sessao(caso_id: str) -> dict[str, Any]:
+    """A config do grafo, com o callback do Langfuse quando ele existe.
+
+    **O handler vem de `observability.callback_handler()`**, que so o constroi
+    depois de o cliente do projeto existir — e e esse cliente que carrega
+    `mask_otel_spans`. Um `CallbackHandler()` montado aqui exportaria a conversa
+    inteira pelo cliente default, sem redacao nenhuma, e o CNPJ e o e-mail de
+    `EMPRESA_DO_CENARIO` sairiam legiveis para fora da infra (ADR-010).
+
+    Sem Langfuse configurado o handler e `None` e a config e a de sempre: a regua
+    roda igual, que e a clausula do ADR-010 aplicada ao eval.
+    """
+    config = dict(session_config(caso_id))
+    handler = observability.callback_handler()
+    if handler is not None:
+        config["callbacks"] = [handler]
+    return config
+
+
 async def _falar(
     graph: Any, caso: Caso, falas: Sequence[str]
 ) -> tuple[list[str], list[AnyMessage]]:
@@ -624,7 +686,7 @@ async def _falar(
     for fala in falas:
         estado = await graph.ainvoke(
             {"session_id": caso.id, "messages": [HumanMessage(content=fala)]},
-            config=session_config(caso.id),
+            config=_config_da_sessao(caso.id),
         )
         mensagens = list(estado["messages"])
     return list(falas), mensagens
@@ -794,7 +856,7 @@ async def rodar_caso(
                 falas_do_cliente.append(fala.texto)
                 estado = await graph.ainvoke(
                     {"session_id": caso.id, "messages": [HumanMessage(content=fala.texto)]},
-                    config=session_config(caso.id),
+                    config=_config_da_sessao(caso.id),
                 )
                 mensagens = list(estado["messages"])
 
@@ -895,8 +957,13 @@ async def rodar(
 
     async def um(caso: Caso) -> Resultado:
         print(f"rodando {caso.id}...", file=sys.stderr)
+        with _trace_do_caso(caso) as trace_id:
+            resultado = await _um_caso(caso, trace_id)
+        return resultado
+
+    async def _um_caso(caso: Caso, trace_id: str | None) -> Resultado:
         try:
-            return await rodar_caso(
+            medido = await rodar_caso(
                 caso,
                 # A `temperature` vem do `Settings`, que e a configuracao do
                 # produto — o eval a HERDA, nao a escolhe (ADR-014). Um flag de
@@ -916,6 +983,7 @@ async def rodar(
                 modelo_do_agente,
                 nome_do_juiz if juiz_modelo is not None else "",
             )
+            return replace(medido, trace_id=trace_id)
         except CenarioNaoMontou as sem_cenario:
             # Reprova este caso e segue. Abortar a execucao inteira faria uma
             # pre-condicao que nao se materializou custar o relatorio dos outros
@@ -927,12 +995,24 @@ async def rodar(
                 portao=Veredito(achados=()),
                 juiz=None,
                 erro_do_cenario=str(sem_cenario),
+                trace_id=trace_id,
             )
 
+    # Mao unica, e ANTES de rodar: o dataset e uma projecao do corpus que o
+    # repositorio acabou de ler, e sincroniza-lo depois faria a run apontar para
+    # itens que talvez ainda nao existam.
+    dataset = visor.sincronizar(casos, spec)
+    execucao = visor.nome_da_execucao(spec, modelo_do_agente)
+
     try:
-        return await em_paralelo(casos, um, concorrencia)
+        resultados = await em_paralelo(casos, um, concorrencia)
     finally:
         await busca.aclose()
+
+    # O visor recebe o veredito ja decidido — ele nao participa dele. Se esta
+    # chamada nao fizer nada, o exit code e o markdown continuam os mesmos.
+    visor.registrar(resultados, spec, execucao, dataset)
+    return resultados
 
 
 def relatorio(resultados: Sequence[Resultado]) -> str:
