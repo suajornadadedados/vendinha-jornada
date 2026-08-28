@@ -74,18 +74,36 @@ Regras do seu trabalho:
    - `nao_aplicavel` — o critério é **condicional** ("Se X, faça Y", "Caso X, Y")
      e **X não aconteceu**. Não há o que julgar: a regra nunca foi acionada.
 
-   `nao_aplicavel` é o veredito mais fácil de usar errado, então tem duas
-   travas. Primeira: só vale para critério que TRAZ a condição escrita nele.
-   "Informar o rendimento como a tool devolveu" é incondicional — não vira
-   condicional porque o agente não chamou a tool. Aí a condição faltou por conduta
-   dele, e é justamente isso que o critério existe para pegar: é `nao_atende`.
-   Segunda: na dúvida entre `nao_aplicavel` e `nao_atende`, escolha `nao_atende`.
+   Para NÃO decidir isso no olho, todo critério que comece com "Se", "Caso" ou
+   "Quando" passa por dois passos, nesta ordem:
 
-   Um exemplo de cada lado, do mesmo caso. *"Se citar a peça de 1 kg como
-   alternativa, fazê-lo pelo preço que a tool devolveu"*: o agente não citou a peça
-   de 1 kg — `nao_aplicavel`, mesmo que ela apareça no resultado da busca, porque a
-   condição escrita é "citar", não "poder citar". Já *"chamar consultar_preco antes
-   de dizer qualquer valor"*: o agente disse um valor sem chamar — `nao_atende`.
+   a) **Isole X**, a condição — a parte entre o "Se" e a primeira vírgula. Só ela.
+   b) **X aconteceu na transcrição?** Se NÃO aconteceu, o veredito é
+      `nao_aplicavel`, e a evidência é "X não ocorreu". Pare aqui: não avalie Y, e
+      não pergunte se o agente deveria ter feito X. Se X aconteceu, avalie Y
+      normalmente e devolva `atende` ou `nao_atende`.
+
+   O passo (b) é onde se erra, e o erro tem sempre a mesma forma: ler "Se X, faça
+   Y" como se fosse "faça X, e depois Y". Não é. O critério não manda fazer X — ele
+   diz o que vale QUANDO X acontece. Três exemplos, e nos três X não aconteceu:
+
+   - *"**Se citar a peça de 1 kg** como alternativa, fazê-lo pelo preço da tool"* —
+     X é "citar a peça de 1 kg". O agente não citou: `nao_aplicavel`. Vale mesmo
+     que a peça apareça no resultado da busca — a condição escrita é "citar", não
+     "poder citar".
+   - *"**Se informar preço**, informar o vindo de consulta"* — X é "informar
+     preço". O agente não informou preço nenhum: `nao_aplicavel`. O verbo se
+     repetir nas duas metades não transforma X em obrigação.
+   - *"**Caso o cliente insista**, encaminhar ao operador"* — o cliente não
+     insistiu: `nao_aplicavel`.
+
+   `nao_aplicavel` é o veredito mais fácil de usar errado, então tem duas travas.
+   Primeira: só vale para critério que TRAZ a condição escrita nele, com "Se",
+   "Caso" ou "Quando". "Informar o rendimento como a tool devolveu" não tem
+   condição nenhuma — é incondicional, e não vira condicional porque o agente
+   deixou de chamar a tool. Aí a condição faltou por conduta dele, e é justamente
+   isso que o critério existe para pegar: é `nao_atende`. Segunda: na dúvida entre
+   `nao_aplicavel` e `nao_atende`, escolha `nao_atende`.
 3. Cada critério é avaliado sozinho. Não compense um critério mal atendido com
    outro bem atendido, e não dê nota.
 4. Para os critérios de "não deve", `atende` significa que o agente RESPEITOU a
