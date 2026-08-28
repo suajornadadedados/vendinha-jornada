@@ -142,6 +142,8 @@ class Telemetria(Protocol):
 
     async def sessoes(self, *, limite: int = 50, offset: int = 0) -> tuple[ResumoDaSessao, ...]: ...
 
+    async def sessoes_desde(self, desde: datetime) -> tuple[ResumoDaSessao, ...]: ...
+
     async def sessao(self, session_id: str) -> ResumoDaSessao | None: ...
 
     async def turnos(self, session_id: str) -> tuple[Turno, ...]: ...
@@ -316,6 +318,39 @@ class PostgresTelemetria:
                 )
             ).fetchall()
 
+        return tuple(_monta_resumo(linha, agregados, erros) for linha in cabecalhos)
+
+    async def sessoes_desde(self, desde: datetime) -> tuple[ResumoDaSessao, ...]:
+        """Todas as sessões da janela — sem paginar, de propósito.
+
+        Um KPI calculado sobre a primeira página é o número errado com cara de
+        certo. O que limita esta consulta é a janela, e é por isso que ela é
+        obrigatória.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            cabecalhos = await (
+                await conn.execute(
+                    "SELECT session_id, canal, iniciada_em, ultima_atividade, pedido_id"
+                    " FROM sessao WHERE ultima_atividade >= %s ORDER BY ultima_atividade DESC",
+                    (desde,),
+                )
+            ).fetchall()
+            if not cabecalhos:
+                return ()
+            ids = [linha[0] for linha in cabecalhos]
+            agregados = await (
+                await conn.execute(
+                    f"{_AGREGADO} WHERE session_id = ANY(%s) GROUP BY session_id, modelo",
+                    (ids,),
+                )
+            ).fetchall()
+            erros = await (
+                await conn.execute(
+                    "SELECT session_id, COUNT(*) FILTER (WHERE erro), COUNT(*) FROM turno"
+                    " WHERE session_id = ANY(%s) GROUP BY session_id",
+                    (ids,),
+                )
+            ).fetchall()
         return tuple(_monta_resumo(linha, agregados, erros) for linha in cabecalhos)
 
     async def sessao(self, session_id: str) -> ResumoDaSessao | None:
@@ -551,6 +586,16 @@ class TelemetriaEmMemoria:
             self.abertas.values(), key=lambda sessao: sessao.ultima_atividade, reverse=True
         )
         return tuple(self._com_uso(sessao) for sessao in ordenadas[offset : offset + limite])
+
+    async def sessoes_desde(self, desde: datetime) -> tuple[ResumoDaSessao, ...]:
+        return tuple(
+            self._com_uso(sessao)
+            for sessao in sorted(
+                (s for s in self.abertas.values() if s.ultima_atividade >= desde),
+                key=lambda sessao: sessao.ultima_atividade,
+                reverse=True,
+            )
+        )
 
     async def sessao(self, session_id: str) -> ResumoDaSessao | None:
         encontrada = self.abertas.get(session_id)

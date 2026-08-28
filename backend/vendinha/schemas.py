@@ -13,7 +13,7 @@ one thing while the emitter reads another. Reuse is not laziness here, it is the
 requirement (RF-3.2).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -362,3 +362,203 @@ EventoDoPainel = Annotated[
     | AtrasoNoStream,
     Field(discriminator="tipo"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# O painel (S-07, ADR-015) — tudo leitura, tudo já somado no backend.
+#
+# A regra que governa esta seção: se um número aparece aqui, ele foi calculado em
+# `Decimal` no servidor. O frontend formata; não soma. É métrica da spec, e é a
+# forma mais fácil de furar a regra de ouro sem ninguém notar no diff.
+# ---------------------------------------------------------------------------
+
+
+class MensagemDaConversa(BaseModel):
+    """Uma fala da conversa, lida do checkpointer — não de uma cópia nossa.
+
+    `ferramenta` e `argumentos` existem para a tela de rastreabilidade: é ali que se
+    vê **o que o modelo propôs** ao lado do que o código respondeu. Sem os
+    argumentos, a proposta do modelo some e sobra só o veredito.
+    """
+
+    papel: Literal["cliente", "atendente", "ferramenta"]
+    texto: str
+    ferramenta: str | None = None
+    argumentos: str | None = None
+
+
+class CustoApurado(BaseModel):
+    """O custo como a tela deve exibi-lo — inclusive quando não dá para saber.
+
+    `completo` é falso quando algum modelo não tem preço ou algum turno não
+    informou consumo. A tela que ignora esse campo apresenta um parcial como total,
+    que é o modo de falha que o ADR-015 nomeia.
+    """
+
+    usd: Decimal | None = None
+    brl: Decimal | None = None
+    completo: bool = True
+    modelos_sem_preco: tuple[str, ...] = ()
+    turnos_sem_uso: int = 0
+
+
+class UsoPorModelo(BaseModel):
+    modelo: str
+    tokens_entrada: int
+    tokens_saida: int
+    turnos: int
+
+
+class ConversaNaLista(BaseModel):
+    """Uma linha da lista de conversas."""
+
+    session_id: str
+    canal: str
+    iniciada_em: datetime
+    ultima_atividade: datetime
+    turnos: int
+    erros: int
+    custo: CustoApurado
+    pedido_id: str | None = None
+    status_do_pedido: str | None = None
+
+
+class PaginaDeConversas(BaseModel):
+    conversas: tuple[ConversaNaLista, ...]
+
+
+class TurnoDoPainel(BaseModel):
+    """Um turno com o que ele custou e quanto o cliente esperou."""
+
+    modelo: str
+    tokens_entrada: int | None = None
+    tokens_saida: int | None = None
+    primeiro_token_ms: int | None = None
+    duracao_ms: int
+    iniciado_em: datetime
+    erro: bool
+    custo: CustoApurado
+
+
+class VeredictoNoPainel(BaseModel):
+    """Uma passagem pelo validador, como ele a devolveu."""
+
+    aprovada: bool
+    tipo_de_evento: str
+    pessoas: int
+    total: Decimal
+    valor_por_pessoa: Decimal
+    motivos: tuple[str, ...] = ()
+    avaliado_em: datetime
+
+
+class DetalheDaConversa(BaseModel):
+    """A conversa inteira para a tela de rastreabilidade."""
+
+    resumo: ConversaNaLista
+    mensagens: tuple[MensagemDaConversa, ...]
+    turnos: tuple[TurnoDoPainel, ...]
+    vereditos: tuple[VeredictoNoPainel, ...]
+    uso: tuple[UsoPorModelo, ...]
+    mensagens_indisponiveis: bool = Field(
+        default=False,
+        description=(
+            "Verdadeiro quando o checkpointer não devolveu a conversa. A tela diz "
+            "isso em vez de mostrar uma conversa vazia como se fosse curta."
+        ),
+    )
+
+
+class PedidoNoPainel(BaseModel):
+    """Um pedido como a tela de pedidos o lista e detalha."""
+
+    pedido_id: str
+    criado_em: datetime
+    status: str
+    total: Decimal
+    razao_social: str
+    cnpj: str
+    url_pagamento: str | None = None
+    composicoes: tuple[ComposicaoDoPedido, ...] = ()
+    status_nf: str
+    numero_nota: int | None = None
+    url_danfe: str | None = None
+    url_xml: str | None = None
+
+
+class PaginaDePedidos(BaseModel):
+    pedidos: tuple[PedidoNoPainel, ...]
+
+
+class RecusaDoValidador(BaseModel):
+    motivo: str
+    recusas: int
+
+
+class Metricas(BaseModel):
+    """Os KPIs da janela. Cada número já somado, e cada ausência explícita."""
+
+    janela: str
+    desde: datetime
+
+    conversas: int
+    conversas_com_pedido: int
+    taxa_de_conversao: Decimal | None = None
+    turnos: int
+    turnos_por_conversa: Decimal | None = None
+    atendimento_medio_ms: int | None = None
+    erros_de_stream: int
+
+    uso: tuple[UsoPorModelo, ...] = ()
+    custo: CustoApurado = CustoApurado()
+
+    primeiro_token_p50_ms: int | None = None
+    primeiro_token_p95_ms: int | None = None
+    primeiro_token_alvo_ms: int = Field(
+        default=3000, description="RNF-4. Vai no contrato para a régua aparecer na tela."
+    )
+
+    pedidos: int
+    receita: Decimal
+    ticket_medio: Decimal | None = None
+    custo_sobre_ticket: Decimal | None = Field(
+        default=None,
+        description=(
+            "Custo de LLM como fração da receita. `None` sem cotação do dólar "
+            "configurada — comparar dólar com real por uma taxa inventada seria pior "
+            "que não comparar."
+        ),
+    )
+
+    fila_pendentes: int
+    decisoes: int
+    aprovadas: int
+    taxa_de_aprovacao: Decimal | None = None
+
+    recusas_do_validador: tuple[RecusaDoValidador, ...] = ()
+
+
+class PromptVigente(BaseModel):
+    """Um prompt do agente, em modo leitura. Nunca editável — ADR-015.
+
+    `sha` é do texto, não do arquivo: é o que permite conferir numa demo que o
+    prompt em memória é o do commit, sem abrir o repositório.
+    """
+
+    subagent: str
+    texto: str
+    arquivo: str
+    sha: str
+    ferramentas: tuple[str, ...] = ()
+
+
+class PromptsDoAgente(BaseModel):
+    prompts: tuple[PromptVigente, ...]
+    editavel: Literal[False] = Field(
+        default=False,
+        description=(
+            "Sempre falso, em todo ambiente. Prompt muda por PR com evals — editá-lo "
+            "em runtime contornaria o portão do ADR-014 (ADR-015)."
+        ),
+    )
+    tabela_de_precos_atualizada_em: date | None = None

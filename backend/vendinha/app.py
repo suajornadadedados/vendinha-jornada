@@ -41,6 +41,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 
+from vendinha import admin
 from vendinha.budget import run_with_timeout
 from vendinha.catalogo import Busca, Catalogo, PostgresCatalogo, QdrantBusca
 from vendinha.config import get_settings
@@ -48,6 +49,7 @@ from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConf
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
 from vendinha.documentos import formatar_cnpj
+from vendinha.eventos import Barramento, BarramentoEmMemoria
 from vendinha.fiscal import (
     Aprovacao,
     Decisao,
@@ -104,6 +106,7 @@ from vendinha.schemas import (
 )
 from vendinha.subagents import checkout, recomendacao
 from vendinha.supervisor import Supervisor, roteador_do_modelo
+from vendinha.telemetria import PostgresTelemetria, Telemetria
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +158,8 @@ def create_app(
     fiscal: Fiscal | None = None,
     emissor: NFEmitter | None = None,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
+    telemetria: Telemetria | None = None,
+    barramento: Barramento | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -228,6 +233,14 @@ def create_app(
             app.state.emissor,
             checkpointer or InMemorySaver(),
         )
+        # O read model e o barramento do painel (S-07, ADR-015). O barramento
+        # nasce sempre, mesmo sem ninguem assinando: publicar num barramento sem
+        # assinante e barato, e um `if barramento is not None` espalhado por cada
+        # publicador e a linha que alguem esquece de escrever no setimo evento.
+        app.state.telemetria = telemetria or PostgresTelemetria(
+            with_connect_timeout(settings.database_url)
+        )
+        app.state.barramento = barramento or BarramentoEmMemoria()
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -864,6 +877,10 @@ def create_app(
         )
 
     _rotas_do_mock(app)
+    # O painel (S-07). Fica num modulo proprio porque sao sete rotas de leitura
+    # e nenhuma delas muda nada aqui dentro; recebe o mesmo portao da fila, para
+    # que exista UM lugar onde o token do operador e conferido.
+    admin.montar(app, autenticado=_operador_autenticado, settings=settings)
 
     return app
 
