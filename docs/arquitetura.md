@@ -56,12 +56,22 @@ Um **supervisor** roteia a conversa e **dois subagents** executam. A divisão n�
 | Agente | Tools registradas | Pode escrever? |
 |---|---|---|
 | `supervisor` | roteamento | não |
-| `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`, `validar_composicao` | **não** — só read-only |
+| `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`, `validar_composicao`, `consultar_pedido` | **não** — só read-only |
 | `checkout` | as quatro acima, mais `validar_dados_cliente`, `consultar_pedido`, `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
 
 `desconto` **não existe** como tool em nenhum registro. Não é uma ação negada por prompt: ela
 não está lá. Um teste da camada `security` falha se qualquer tool de escrita vazar para o
 registro do subagent de recomendação (R2, R4).
+
+**`emitir_nf` e `registrar_aprovacao` também não existem, e nunca vão existir** (S-05, D-3).
+Emitir nota é ato que exige uma pessoa e o registro da aprovação é uma rota do operador —
+nenhum dos dois é ação de agente. A emissão é disparada pela retomada do grafo fiscal a partir
+da decisão gravada; o agente **lê** o desfecho por `consultar_pedido`, e é só.
+
+`consultar_pedido` está nas duas lanes desde a S-04 (DESC-5 daquela spec): ler pedido é
+leitura, e deixá-la só no checkout fazia quem voltava para perguntar sobre um pedido antigo
+cair na lane que não sabia responder — sem composição aprovada nesta conversa, não havia
+handoff. Na S-05 ela passou a carregar também o estado da nota.
 
 **O checkout também lê, e isso não move a fronteira.** O que o ADR-002 protege é a *ação*,
 nunca a *consulta*: a invariante é "`recomendacao` não escreve", jamais "`checkout` não lê".

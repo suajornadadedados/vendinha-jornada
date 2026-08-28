@@ -22,6 +22,7 @@ from vendinha.catalogo import PostgresCatalogo
 from vendinha.config import get_settings
 from vendinha.config_store import PostgresConfigStore
 from vendinha.credentials import Vault
+from vendinha.fiscal import PostgresFiscal
 from vendinha.pedidos import PostgresPedidos
 from vendinha.redaction import redact
 
@@ -69,6 +70,10 @@ async def setup() -> None:
     # Order, compositions, lines and the payment-event table whose primary key IS
     # the webhook's idempotency (S-04, RF-2.5). Nothing fills these but the agent.
     await PostgresPedidos(dsn).setup()
+    # The operator's decision and the issued invoice (S-05). After the order tables,
+    # and not before: both reference `pedido(id)`, so the order matters here in a way
+    # it does not elsewhere in this function.
+    await PostgresFiscal(dsn).setup()
 
 
 def main() -> int:
@@ -87,7 +92,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print("checkpointer, instance_config, produto and pedido ready. next: `make seed`.")
+    print("checkpointer, instance_config, produto, pedido and nota ready. next: `make seed`.")
     return 0
 
 

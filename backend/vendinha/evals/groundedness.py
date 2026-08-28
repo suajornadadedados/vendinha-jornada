@@ -77,6 +77,14 @@ CAMPO_DA_TOOL = {
     "url_pagamento": "url_pagamento",
     "status_pedido": "status_pedido",
     "cnpj_valido": "cnpj_valido",
+    # A nota, na S-05. Os tres saem de `consultar_pedido`: o numero e o motivo da
+    # rejeicao sao os fatos que o cliente ouve sobre um documento fiscal, e afirmar
+    # qualquer um deles sem retorno de tool e exatamente a classe de invencao que a
+    # R1 existe para pegar — so que agora com consequencia fiscal (`golden-004`,
+    # `golden-011`, `golden-012`).
+    "numero_nota": "numero_nota",
+    "motivo_rejeicao": "motivo_rejeicao",
+    "status_nf": "status_nf",
 }
 
 # Toda chave de retorno de tool que carrega dinheiro. `_precos_divergentes` exige

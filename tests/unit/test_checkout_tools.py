@@ -22,6 +22,8 @@ from langchain_core.tools import BaseTool
 from vendinha.catalogo import CatalogoEmMemoria, Produto, carregar_seed
 from vendinha.composicao import TipoDeEvento
 from vendinha.documentos import cnpj_valido, formatar_cnpj, mascarar_cnpj, normalizar_cnpj
+from vendinha.fiscal import Aprovacao, Decisao, FiscalEmMemoria, StatusDaNota, emitir
+from vendinha.nota import MockNFAdapter
 from vendinha.pagamento import (
     GatewayIndisponivel,
     LinkDePagamento,
@@ -64,11 +66,23 @@ def gravados() -> PedidosEmMemoria:
 
 
 @pytest.fixture
-def tools(seed: tuple[Produto, ...], gravados: PedidosEmMemoria) -> dict[str, BaseTool]:
+def fiscal() -> FiscalEmMemoria:
+    return FiscalEmMemoria()
+
+
+@pytest.fixture
+def tools(
+    seed: tuple[Produto, ...], gravados: PedidosEmMemoria, fiscal: FiscalEmMemoria
+) -> dict[str, BaseTool]:
     return {
         tool.name: tool
         for tool in ferramentas_de_checkout(
-            CatalogoEmMemoria(seed), gravados, MockPaymentAdapter(BASE_URL), SEM_TIMEOUT
+            CatalogoEmMemoria(seed),
+            gravados,
+            MockPaymentAdapter(BASE_URL),
+            SEM_TIMEOUT,
+            fiscal,
+            BASE_URL,
         )
     }
 
@@ -474,3 +488,143 @@ async def test_a_gateway_that_is_down_leaves_the_order_valid_and_asks_for_a_retr
     assert "tente de novo" in resposta["observacao"]
     assert "Mercado Pago" not in str(resposta)
     assert "ReadTimeout" not in str(resposta)
+
+
+# ---------------------------------------------- a nota, do jeito que o cliente lê
+#
+# O chat é puxado: o servidor não empurra mensagem. Então "o cliente recebe a
+# confirmação no chat com acesso à DANFE/XML" (REQ-6, RF-3.6) acontece quando ele
+# pergunta e o agente **consulta** — e é por isso que `golden-011` ancora
+# `motivo_rejeicao` e `golden-012` pede o XML, os dois em `tool:consultar_pedido`.
+#
+# Nenhum destes campos é opinião do modelo, e é isso que estes testes afirmam.
+
+
+async def _pedido_pago(
+    tools: dict[str, BaseTool],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> str:
+    """Um pedido criado pelo agente e levado até `aguardando_aprovacao_nf`.
+
+    Pelo caminho de produção: `criar_pedido` e depois `registrar_pagamento`, que é o
+    que o webhook chama. Escrever o status à mão faria o teste medir um estado que
+    o sistema pode nunca produzir.
+    """
+    criado = await chamar(
+        tools["criar_pedido"], empresa=empresa_valida, composicoes=[CAFE_DA_MANHA]
+    )
+    pedido_id: str = criado["encontrados"][0]["pedido_id"]
+    await gravados.registrar_pagamento(pedido_id, "evento-de-teste")
+    return pedido_id
+
+
+@pytest.mark.risco("R3")
+async def test_before_payment_the_invoice_is_not_pending_it_is_not_applicable(
+    tools: dict[str, BaseTool], empresa_valida: dict[str, Any], chamar: Chamar
+) -> None:
+    """RF-3.1 — a nota só entra na fila depois do pagamento confirmado.
+
+    A diferença entre `nao_aplicavel` e `aguardando_aprovacao` é o que separa "ainda
+    não começou" de "está em conferência". Dizer a segunda antes do pagamento
+    prometeria ao cliente uma etapa que nem existe ainda.
+    """
+    criado = await chamar(
+        tools["criar_pedido"], empresa=empresa_valida, composicoes=[CAFE_DA_MANHA]
+    )
+    lido = await chamar(tools["consultar_pedido"], pedido_id=criado["encontrados"][0]["pedido_id"])
+
+    resumo = lido["encontrados"][0]
+    assert resumo["status_nf"] == StatusDaNota.NAO_APLICAVEL.value
+    assert "numero_nota" not in resumo
+    assert "url_danfe" not in resumo
+
+
+@pytest.mark.risco("R3")
+async def test_a_paid_order_reports_the_invoice_as_awaiting_a_person(
+    tools: dict[str, BaseTool],
+    gravados: PedidosEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R3, RF-3.1 — pago, a nota fica em conferência, e não há link para oferecer.
+
+    A ausência das URLs importa tanto quanto a presença do status: um link de DANFE
+    antes da emissão daria ao modelo um fato para repetir e ao cliente um endereço
+    que responde 404 — a mesma falha que a D-6 da S-04 corrigiu no pagamento.
+    """
+    pedido_id = await _pedido_pago(tools, gravados, empresa_valida, chamar)
+
+    resumo = (await chamar(tools["consultar_pedido"], pedido_id=pedido_id))["encontrados"][0]
+
+    assert resumo["status_pedido"] == StatusDoPedido.AGUARDANDO_APROVACAO_NF.value
+    assert resumo["status_nf"] == StatusDaNota.AGUARDANDO_APROVACAO.value
+    assert "url_danfe" not in resumo
+    assert "url_xml" not in resumo
+
+
+@pytest.mark.risco("R3")
+async def test_after_the_invoice_is_issued_the_agent_can_hand_over_both_documents(
+    tools: dict[str, BaseTool],
+    gravados: PedidosEmMemoria,
+    fiscal: FiscalEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """R3, RF-3.6, REQ-6, `golden-012` — o número e os dois links saem por tool.
+
+    O contador da empresa compradora é destinatário real do XML, e é ele que o
+    `golden-012` tem em mente. O número da nota vem de `numero_nota`, que a régua de
+    groundedness passou a reconhecer nesta spec: um número de nota fiscal afirmado
+    sem retorno de tool é fato inventado com consequência fiscal.
+    """
+    pedido_id = await _pedido_pago(tools, gravados, empresa_valida, chamar)
+    await fiscal.registrar_decisao(
+        Aprovacao(pedido_id=pedido_id, decisao=Decisao.APROVADA, operador="ana.souza")
+    )
+    emitida = await emitir(pedido_id, pedidos=gravados, fiscal=fiscal, emissor=MockNFAdapter())
+
+    resumo = (await chamar(tools["consultar_pedido"], pedido_id=pedido_id))["encontrados"][0]
+
+    assert resumo["status_nf"] == StatusDaNota.EMITIDA.value
+    assert resumo["numero_nota"] == emitida.nota.numero
+    assert resumo["url_danfe"] == f"{BASE_URL}/pedidos/{pedido_id}/nota.pdf"
+    assert resumo["url_xml"] == f"{BASE_URL}/pedidos/{pedido_id}/nota.xml"
+    # E nenhum motivo de rejeição pendurado num pedido que foi aprovado.
+    assert "motivo_rejeicao" not in resumo
+
+
+@pytest.mark.risco("R3")
+async def test_a_rejected_invoice_gives_the_agent_the_reason_to_relay(
+    tools: dict[str, BaseTool],
+    gravados: PedidosEmMemoria,
+    fiscal: FiscalEmMemoria,
+    empresa_valida: dict[str, Any],
+    chamar: Chamar,
+) -> None:
+    """RF-4.2, `golden-011` — o motivo chega ao cliente pelo mesmo caminho de sempre.
+
+    *"Registrar a rejeição com quem, quando e motivo"* é da API do operador; o que
+    este teste fecha é a outra metade — *"comunicar ao cliente o motivo em linguagem
+    útil, pedindo o dado que falta"*. Sem o motivo aqui, a rejeição viraria silêncio
+    para quem pagou, e a única saída do agente seria inventar uma explicação.
+    """
+    motivo = "inscricao estadual da empresa nao confere com o CNPJ informado"
+    pedido_id = await _pedido_pago(tools, gravados, empresa_valida, chamar)
+    await fiscal.registrar_decisao(
+        Aprovacao(
+            pedido_id=pedido_id,
+            decisao=Decisao.REJEITADA,
+            operador="ana.souza",
+            motivo=motivo,
+        )
+    )
+    await gravados.registrar_rejeicao(pedido_id)
+
+    resumo = (await chamar(tools["consultar_pedido"], pedido_id=pedido_id))["encontrados"][0]
+
+    assert resumo["status_nf"] == StatusDaNota.REJEITADA.value
+    assert resumo["motivo_rejeicao"] == motivo
+    assert "numero_nota" not in resumo
+    assert "url_danfe" not in resumo

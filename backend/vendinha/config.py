@@ -167,6 +167,32 @@ class Settings(BaseSettings):
     # `PAYMENT_GATEWAY` switch: it would allow `mercadopago` with no token, which
     # boots fine and breaks on the first order. See D-4 and `pagamento.gateway_de`.
     mercadopago_access_token: str | None = None
+    # Emissor de NF-e, S-05. `mock` (default) gera DANFE e XML fiéis ao leiaute 55
+    # com tarja "SEM VALOR FISCAL"; `homologacao` é o adapter da S-09 e é recusado
+    # aqui com uma frase que diz isso, em vez de cair no mock em silêncio.
+    #
+    # Ao contrário do pagamento, a escolha é EXPLÍCITA (ver `nota.emissor_de`). As
+    # três variáveis estavam no `.env.example` desde a S-02 e nenhum código as lia —
+    # mesma classe da ressalva R-5 da verificação da S-02 e da DESC-3 da S-04.
+    nf_emitter: str = "mock"
+    nf_emitter_api_key: str | None = None
+    nf_emitter_base_url: str | None = None
+
+    # A porta da fila do operador (S-05, REQ-2). Ela lista dados completos da nota —
+    # CNPJ, contato, endereço de entrega — e autoriza uma emissão irreversível, então
+    # não pode ficar aberta.
+    #
+    # **Sem token configurado, nada confere**, exatamente como o segredo do webhook:
+    # a alternativa — "sem token, aceita tudo" — transformaria esquecer uma variável
+    # de ambiente num endpoint aberto que emite documento fiscal. Quem roda o
+    # quickstart e quer aprovar uma nota define esta linha; é a única coisa a mais
+    # que o fluxo completo pede (RNF-1).
+    #
+    # O `operador` do corpo da requisição é gravado como veio. Este projeto não tem
+    # autenticação (é a mesma razão de `PUT /config` só aceitar escrita em
+    # `APP_ENV=local`), então o campo é uma **declaração**, não uma identidade
+    # provada — e está dito assim na rota, em vez de fingir o contrário.
+    operador_api_token: str | None = None
     # Origin verification of the payment webhook (RF-2.5, R8). Absent means no
     # signature verifies — the safe side. "No secret, accept anything" would turn
     # a forgotten environment variable into an open endpoint that moves money.

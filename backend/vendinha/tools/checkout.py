@@ -51,6 +51,7 @@ from vendinha.budget import TimedOut, run_with_timeout
 from vendinha.catalogo import Alergeno, Catalogo, Produto
 from vendinha.composicao import TipoDeEvento
 from vendinha.documentos import cnpj_valido, mascarar_cnpj
+from vendinha.fiscal import Fiscal, StatusDaNota, status_da_nota
 from vendinha.pagamento import GatewayIndisponivel, PaymentGateway
 from vendinha.pedidos import (
     ComposicaoDoPedido,
@@ -59,6 +60,7 @@ from vendinha.pedidos import (
     ItemDoPedido,
     Pedido,
     Pedidos,
+    StatusDoPedido,
     novo_id,
     total_de,
 )
@@ -124,6 +126,14 @@ class EmpresaEntrada(BaseModel):
     )
     cnpj: str | None = Field(
         default=None, description="Como o cliente informou. Não corrija, não complete."
+    )
+    inscricao_estadual: str | None = Field(
+        default=None,
+        description=(
+            "A inscrição estadual da empresa, se ela for contribuinte de ICMS. "
+            "OPCIONAL: muita empresa não tem, e a nota sai como ISENTO. Registre se "
+            "o cliente informar; não peça como se fosse obrigatória e nunca invente."
+        ),
     )
     contato_nome: str | None = Field(default=None, description="Quem está falando com você.")
     contato_email: str | None = None
@@ -208,6 +218,17 @@ class PedidoResumido(ItemDeResultado):
     `total_pedido` é o nome que `golden-003` e `golden-015` usam em
     `fatos_ancorados`. O vocabulário é de quem define a régua, e a tool se ajusta a
     ele.
+
+    **Os cinco campos fiscais entraram na S-05, e é por aqui que a nota chega ao
+    cliente** (REQ-3, REQ-6). O chat é puxado — o servidor não empurra mensagem —,
+    então "o cliente recebe a confirmação no chat" acontece quando ele pergunta e o
+    agente consulta. `golden-011` ancora `motivo_rejeicao` e `golden-012` pede o
+    acesso ao XML e à DANFE, os dois em `tool:consultar_pedido`: é aqui.
+
+    Nenhum deles é opinião do modelo. `status_nf` é derivado do status do pedido,
+    `numero_nota` sai da nota gravada, `motivo_rejeicao` sai do registro do operador
+    e as duas URLs são construídas a partir do id — que é a única coisa que o
+    cliente precisa ter para buscar o documento.
     """
 
     pedido_id: str
@@ -217,9 +238,28 @@ class PedidoResumido(ItemDeResultado):
     cnpj: str
     url_pagamento: str | None = None
     composicoes: tuple[ComposicaoValidada, ...] = ()
+    status_nf: str = StatusDaNota.NAO_APLICAVEL.value
+    numero_nota: int | None = None
+    motivo_rejeicao: str | None = None
+    url_danfe: str | None = None
+    url_xml: str | None = None
 
 
-def _resumir(pedido: Pedido, vereditos: Sequence[motor.Veredito] = ()) -> PedidoResumido:
+def _resumir(
+    pedido: Pedido,
+    vereditos: Sequence[motor.Veredito] = (),
+    *,
+    numero_nota: int | None = None,
+    motivo_rejeicao: str | None = None,
+    base_url: str = "",
+) -> PedidoResumido:
+    """O pedido como retorno de tool. Os links só existem quando a nota existe.
+
+    Apresentar uma URL de DANFE antes da emissão daria ao modelo um fato para
+    repetir e ao cliente um link que responde 404 — a mesma falha que a D-6 da S-04
+    corrigiu no link de pagamento.
+    """
+    emitida = numero_nota is not None
     return PedidoResumido(
         pedido_id=pedido.id,
         status_pedido=pedido.status.value,
@@ -228,6 +268,11 @@ def _resumir(pedido: Pedido, vereditos: Sequence[motor.Veredito] = ()) -> Pedido
         cnpj=mascarar_cnpj(pedido.empresa.cnpj),
         url_pagamento=pedido.url_pagamento,
         composicoes=tuple(ComposicaoValidada.de(veredito) for veredito in vereditos),
+        status_nf=status_da_nota(pedido.status).value,
+        numero_nota=numero_nota,
+        motivo_rejeicao=motivo_rejeicao,
+        url_danfe=f"{base_url}/pedidos/{pedido.id}/nota.pdf" if emitida else None,
+        url_xml=f"{base_url}/pedidos/{pedido.id}/nota.xml" if emitida else None,
     )
 
 
@@ -303,6 +348,10 @@ def _empresa_ou_problemas(entrada: EmpresaEntrada) -> tuple[Empresa | None, tupl
         empresa = Empresa(
             razao_social=entrada.razao_social or "",
             cnpj=entrada.cnpj or "",
+            # Sem `or ""`: aqui a string vazia e a ausência são a mesma coisa, e o
+            # modelo do pedido distingue `None` de `""`. Uma IE vazia gravada faria
+            # a nota sair com inscrição em branco em vez de `ISENTO` (S-05).
+            inscricao_estadual=(entrada.inscricao_estadual or "").strip() or None,
             contato_nome=entrada.contato_nome or "",
             contato_email=entrada.contato_email or "",
             endereco=Endereco(
@@ -328,13 +377,59 @@ def ferramentas_de_checkout(
     pedidos: Pedidos,
     gateway: PaymentGateway,
     timeout_seconds: float,
+    fiscal: Fiscal | None = None,
+    base_url: str = "",
 ) -> tuple[BaseTool, ...]:
     """Constrói as tools do checkout contra as portas recebidas.
 
     Fábrica, como `ferramentas_de_catalogo` e `ferramentas_de_composicao`: é o que
     permite as duas camadas de teste rodarem contra `CatalogoEmMemoria` e
     `PedidosEmMemoria` sem mockar nada interno (ADR-004, `docs/testes.md` §4).
+
+    `fiscal` e `base_url` entraram na S-05 e são **opcionais de propósito**: um
+    teste que exercita a criação do pedido não precisa montar o lado fiscal para
+    isso, e sem eles `consultar_pedido` continua respondendo — com `status_nf`
+    derivado do status do pedido e sem número nem links, que é a verdade quando não
+    há de onde lê-los. Repare que a porta fiscal entra aqui **só para leitura**: a
+    tool que ela alimenta é `consultar_pedido`, e nenhuma tool deste arquivo emite
+    nada. Quem emite é `fiscal.emitir`, e ele não é tool de ninguém (ADR-003, R3).
     """
+
+    async def _com_a_nota(
+        pedido: Pedido, vereditos: Sequence[motor.Veredito] = ()
+    ) -> PedidoResumido:
+        """O resumo do pedido, com o estado fiscal quando ele existe.
+
+        As duas consultas só acontecem nos status que as justificam: um pedido
+        recém-criado não tem nota nem decisão, e ir ao banco para descobrir isso
+        seria pagar duas leituras por turno de checkout para receber `None`.
+        """
+        if fiscal is None:
+            return _resumir(pedido, vereditos, base_url=base_url)
+
+        if pedido.status is StatusDoPedido.NOTA_EMITIDA:
+            emitida = await run_with_timeout(
+                fiscal.nota_de(pedido.id), timeout_seconds, "leitura da nota"
+            )
+            return _resumir(
+                pedido,
+                vereditos,
+                numero_nota=emitida.nota.numero if emitida else None,
+                base_url=base_url,
+            )
+
+        if pedido.status is StatusDoPedido.NOTA_REJEITADA:
+            decisao = await run_with_timeout(
+                fiscal.decisao_de(pedido.id), timeout_seconds, "leitura da decisão da nota"
+            )
+            return _resumir(
+                pedido,
+                vereditos,
+                motivo_rejeicao=decisao.motivo if decisao else None,
+                base_url=base_url,
+            )
+
+        return _resumir(pedido, vereditos, base_url=base_url)
 
     async def _revalidar(
         propostas: Sequence[ComposicaoProposta],
@@ -452,7 +547,7 @@ def ferramentas_de_checkout(
                 total=total_de(do_banco),
             )
         )
-        return Resultado(encontrados=(_resumir(pedido, vereditos),)).model_dump_json(
+        return Resultado(encontrados=(await _com_a_nota(pedido, vereditos),)).model_dump_json(
             exclude_none=True
         )
 
@@ -470,7 +565,9 @@ def ferramentas_de_checkout(
         # mesmo pedido são dois links vivos: o cliente paga por um, o financeiro
         # dele vê o outro em aberto, e a conciliação vira telefonema.
         if pedido.url_pagamento:
-            return Resultado(encontrados=(_resumir(pedido),)).model_dump_json(exclude_none=True)
+            return Resultado(encontrados=(await _com_a_nota(pedido),)).model_dump_json(
+                exclude_none=True
+            )
 
         try:
             link = await run_with_timeout(
@@ -483,7 +580,7 @@ def ferramentas_de_checkout(
             # fornecedor, código de status nem configuração (`adversarial-006`).
             logger.warning("o gateway de pagamento falhou para %s: %s", pedido_id, fora_do_ar)
             return Resultado(
-                encontrados=(_resumir(pedido),),
+                encontrados=(await _com_a_nota(pedido),),
                 observacao=(
                     "não consegui gerar o link de pagamento agora. O pedido está "
                     "registrado; avise o cliente e tente de novo em seguida"
@@ -492,7 +589,9 @@ def ferramentas_de_checkout(
 
         await pedidos.registrar_link(pedido.id, link.url)
         atualizado = pedido.model_copy(update={"url_pagamento": link.url})
-        return Resultado(encontrados=(_resumir(atualizado),)).model_dump_json(exclude_none=True)
+        return Resultado(encontrados=(await _com_a_nota(atualizado),)).model_dump_json(
+            exclude_none=True
+        )
 
     async def consultar_pedido(pedido_id: str) -> str:
         pedido = await run_with_timeout(
@@ -503,7 +602,9 @@ def ferramentas_de_checkout(
                 nao_encontrados=(pedido_id,),
                 observacao="não existe pedido com esse id",
             ).model_dump_json(exclude_none=True)
-        return Resultado(encontrados=(_resumir(pedido),)).model_dump_json(exclude_none=True)
+        return Resultado(encontrados=(await _com_a_nota(pedido),)).model_dump_json(
+            exclude_none=True
+        )
 
     return (
         StructuredTool.from_function(
@@ -544,9 +645,11 @@ def ferramentas_de_checkout(
             coroutine=consultar_pedido,
             name="consultar_pedido",
             description=(
-                "O estado atual de um pedido: status, total e link de pagamento. Use antes "
-                "de afirmar qualquer coisa sobre um pedido já criado — inclusive para "
-                "responder se houve ou não cobrança."
+                "O estado atual de um pedido: status, total, link de pagamento e a "
+                "situação da nota fiscal — status_nf, numero_nota, motivo_rejeicao e os "
+                "links da DANFE e do XML quando ela já saiu. Use antes de afirmar "
+                "qualquer coisa sobre um pedido já criado: se houve cobrança, em que pé "
+                "está a nota, ou por que ela foi recusada."
             ),
             args_schema=ConsultarPedido,
         ),

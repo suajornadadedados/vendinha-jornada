@@ -55,15 +55,27 @@ Texto = Annotated[str, Field(min_length=1)]
 
 
 class StatusDoPedido(StrEnum):
-    """Onde o pedido está. Dois estados nesta spec, e o terceiro é da S-05.
+    """Onde o pedido está. A S-05 acrescentou os dois desfechos fiscais.
 
     `aguardando_aprovacao_nf` é o nome que `golden-010` cita literalmente, e é o
     estado em que o pedido pousa depois do webhook: pago, e parado à espera da
-    aprovação humana que a S-05 vai implementar (ADR-003, R3).
+    aprovação humana (ADR-003, R3).
+
+    **Este status É a fila do operador.** Não existe uma tabela de fila: a fila é a
+    consulta *"quem está em `aguardando_aprovacao_nf`"*, e sair dela é receber um
+    desfecho. É o que faz um pedido rejeitado ficar **fora do caminho de emissão**
+    sem depender de ninguém lembrar de tirá-lo de lá (`golden-011`), e o que o
+    `adversarial-002` descreve quando diz *"permanecer em `aguardando_aprovacao_nf`
+    até que exista decisão do operador"*.
+
+    Não confunda com a decisão: quem autoriza uma emissão é a linha em
+    `aprovacao_de_nf` (`fiscal.emitir`), nunca o status. O status é o que se lê.
     """
 
     AGUARDANDO_PAGAMENTO = "aguardando_pagamento"
     AGUARDANDO_APROVACAO_NF = "aguardando_aprovacao_nf"
+    NOTA_EMITIDA = "nota_emitida"
+    NOTA_REJEITADA = "nota_rejeitada"
 
 
 class Endereco(BaseModel):
@@ -109,6 +121,16 @@ class Empresa(BaseModel):
 
     razao_social: Texto
     cnpj: Texto
+    # A inscrição estadual da compradora, e ela é **opcional por decisão** (S-05).
+    # Não contribuinte de ICMS é a situação normal de boa parte das empresas que
+    # compram um café da manhã, e exigi-la recusaria compradora legítima — além de
+    # transformar a coleta num interrogatório. Ausente, a nota sai com `ISENTO` e
+    # `indIEDest=9`, que é o que a norma manda imprimir (`nota/documento.py`).
+    #
+    # Repare que quem julga se a IE **confere** com o CNPJ não é código nenhum: é o
+    # operador, na fila da S-05 — o `golden-011` rejeita a nota exatamente por isso.
+    # É um bom exemplo do que a fila existe para pegar e o schema não.
+    inscricao_estadual: str | None = None
     contato_nome: Texto
     contato_email: Texto
     endereco: Endereco
@@ -199,6 +221,12 @@ class Pedidos(Protocol):
 
     async def registrar_pagamento(self, pedido_id: str, evento_id: str) -> bool: ...
 
+    async def aguardando_aprovacao_de_nf(self) -> tuple["Pedido", ...]: ...
+
+    async def registrar_emissao(self, pedido_id: str) -> None: ...
+
+    async def registrar_rejeicao(self, pedido_id: str) -> None: ...
+
 
 class PedidoInexistente(LookupError):
     """Pediram para mexer num pedido que não existe."""
@@ -218,6 +246,14 @@ CREATE TABLE IF NOT EXISTS pedido (
     url_pagamento text,
     criado_em     timestamptz NOT NULL DEFAULT now()
 )
+""",
+    # A S-05 acrescentou a coluna, e `CREATE TABLE IF NOT EXISTS` não a levaria a um
+    # banco que já existe — quem rodou `make db-setup` na S-04 ficaria com a tabela
+    # antiga e um `INSERT` quebrado. Não há ferramenta de migração neste projeto (e
+    # trazer uma é decisão de ADR, não de spec), então a alteração é idempotente e
+    # fica ao lado do `CREATE` que ela corrige.
+    """
+ALTER TABLE pedido ADD COLUMN IF NOT EXISTS inscricao_estadual text
 """,
     """
 CREATE TABLE IF NOT EXISTS composicao_do_pedido (
@@ -281,13 +317,15 @@ class PostgresPedidos:
         async with await psycopg.AsyncConnection.connect(self._dsn) as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "INSERT INTO pedido (id, razao_social, cnpj, contato_nome, contato_email,"
+                    "INSERT INTO pedido (id, razao_social, cnpj, inscricao_estadual,"
+                    " contato_nome, contato_email,"
                     " endereco, total, status, url_pagamento, criado_em)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         pedido.id,
                         pedido.empresa.razao_social,
                         pedido.empresa.cnpj,
+                        pedido.empresa.inscricao_estadual,
                         pedido.empresa.contato_nome,
                         pedido.empresa.contato_email,
                         Json(pedido.empresa.endereco.model_dump()),
@@ -340,7 +378,8 @@ class PostgresPedidos:
             cabecalho = await (
                 await conn.execute(
                     "SELECT id, razao_social, cnpj, contato_nome, contato_email, endereco,"
-                    " total, status, url_pagamento, criado_em FROM pedido WHERE id = %s",
+                    " total, status, url_pagamento, criado_em, inscricao_estadual"
+                    " FROM pedido WHERE id = %s",
                     (pedido_id,),
                 )
             ).fetchone()
@@ -383,6 +422,10 @@ class PostgresPedidos:
             empresa=Empresa(
                 razao_social=cabecalho[1],
                 cnpj=cabecalho[2],
+                # No fim do SELECT, e não na posição do modelo: a coluna chegou
+                # depois (S-05) e um `ALTER TABLE` a acrescenta no fim. Ler pelo
+                # índice que a query declara é o que mantém as duas coisas juntas.
+                inscricao_estadual=cabecalho[10],
                 contato_nome=cabecalho[3],
                 contato_email=cabecalho[4],
                 endereco=Endereco.model_validate(cabecalho[5]),
@@ -449,6 +492,50 @@ class PostgresPedidos:
             await conn.commit()
         return True
 
+    async def aguardando_aprovacao_de_nf(self) -> tuple[Pedido, ...]:
+        """A fila do operador, do mais antigo para o mais novo (S-05, REQ-2).
+
+        Uma consulta pelos ids e depois um `por_id` por pedido. É N+1, e é a escolha
+        certa aqui: a fila do operador tem a ordem de grandeza de "o que chegou hoje"
+        (o PRD assume uma loja e um operador), e reescrever a leitura completa do
+        pedido — cabeçalho, composições e itens — numa segunda query com três joins
+        criaria uma segunda montagem do mesmo objeto. Duas montagens divergem, e a
+        que diverge é sempre a que o operador está olhando na hora de aprovar.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (
+                await conn.execute(
+                    "SELECT id FROM pedido WHERE status = %s ORDER BY criado_em",
+                    (StatusDoPedido.AGUARDANDO_APROVACAO_NF.value,),
+                )
+            ).fetchall()
+
+        na_fila = [await self.por_id(linha[0]) for linha in linhas]
+        return tuple(pedido for pedido in na_fila if pedido is not None)
+
+    async def registrar_emissao(self, pedido_id: str) -> None:
+        await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_EMITIDA)
+
+    async def registrar_rejeicao(self, pedido_id: str) -> None:
+        await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_REJEITADA)
+
+    async def _desfecho_da_nota(self, pedido_id: str, status: StatusDoPedido) -> None:
+        """Tira o pedido da fila. Só a partir de `aguardando_aprovacao_nf`.
+
+        O `AND status = ...` é a transição, e ele é o que impede uma segunda
+        chamada de mexer num pedido que já teve desfecho — um pedido rejeitado não
+        vira emitido porque alguém chamou a função de novo. Silencioso quando não
+        muda nada, de propósito: `fiscal.emitir` é idempotente e chama isto nos dois
+        caminhos, e a segunda chamada não tem nada a consertar.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            cursor = await conn.execute(
+                "UPDATE pedido SET status = %s WHERE id = %s AND status = %s",
+                (status.value, pedido_id, StatusDoPedido.AGUARDANDO_APROVACAO_NF.value),
+            )
+        if cursor.rowcount == 0 and await self.por_id(pedido_id) is None:
+            raise PedidoInexistente(pedido_id)
+
 
 class PedidosEmMemoria:
     """A mesma porta, sem contêiner. Não é stub: é a implementação das duas suítes.
@@ -487,6 +574,37 @@ class PedidosEmMemoria:
                 update={"status": StatusDoPedido.AGUARDANDO_APROVACAO_NF}
             )
         return True
+
+    async def aguardando_aprovacao_de_nf(self) -> tuple[Pedido, ...]:
+        return tuple(
+            sorted(
+                (
+                    pedido
+                    for pedido in self.gravados.values()
+                    if pedido.status is StatusDoPedido.AGUARDANDO_APROVACAO_NF
+                ),
+                key=lambda pedido: pedido.criado_em,
+            )
+        )
+
+    async def registrar_emissao(self, pedido_id: str) -> None:
+        await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_EMITIDA)
+
+    async def registrar_rejeicao(self, pedido_id: str) -> None:
+        await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_REJEITADA)
+
+    async def _desfecho_da_nota(self, pedido_id: str, status: StatusDoPedido) -> None:
+        """A mesma transição guardada do Postgres, à mão.
+
+        A guarda é reproduzida e não simplificada: as duas implementações da porta
+        têm que se comportar igual, e é justamente contra as duas que
+        `tests/security/test_hitl_invariant.py` roda.
+        """
+        pedido = self.gravados.get(pedido_id)
+        if pedido is None:
+            raise PedidoInexistente(pedido_id)
+        if pedido.status is StatusDoPedido.AGUARDANDO_APROVACAO_NF:
+            self.gravados[pedido_id] = pedido.model_copy(update={"status": status})
 
 
 def total_de(composicoes: Sequence[ComposicaoDoPedido]) -> Decimal:

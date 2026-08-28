@@ -22,6 +22,7 @@ Shipping that route open to a public host and planning to fix it later is how it
 never gets fixed. See D-8 in the spec.
 """
 
+import hmac
 import logging
 import time
 import uuid
@@ -31,10 +32,13 @@ from html import escape
 from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from langchain.embeddings import init_embeddings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langfuse import propagate_attributes
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 
 from vendinha.budget import run_with_timeout
@@ -43,7 +47,19 @@ from vendinha.config import get_settings
 from vendinha.config_store import ConfigStore, InMemoryConfigStore, PostgresConfigStore
 from vendinha.credentials import CredentialsUnavailable, Vault
 from vendinha.db import open_checkpointer, with_connect_timeout
+from vendinha.documentos import formatar_cnpj
+from vendinha.fiscal import (
+    Aprovacao,
+    Decisao,
+    Fiscal,
+    PostgresFiscal,
+    abrir_fila_da_nota,
+    build_emissao_graph,
+    decidir,
+    pendentes,
+)
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
+from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.pagamento import (
     MOCK,
@@ -52,7 +68,13 @@ from vendinha.pagamento import (
     assinatura_confere,
     gateway_de,
 )
-from vendinha.pedidos import PedidoInexistente, Pedidos, PostgresPedidos
+from vendinha.pedidos import (
+    Pedido,
+    PedidoInexistente,
+    Pedidos,
+    PostgresPedidos,
+    StatusDoPedido,
+)
 from vendinha.providers import (
     PROVIDERS,
     credentials_from_environment,
@@ -65,11 +87,16 @@ from vendinha.schemas import (
     ChatRequest,
     ConfigResponse,
     ConfigUpdate,
+    DecisaoDoOperador,
+    DecisaoRegistrada,
+    DestinatarioDaNota,
     DoneEvent,
     ErrorEvent,
+    FilaDoOperador,
     HealthResponse,
     ModelsResponse,
     NotificacaoDePagamento,
+    PedidoNaFila,
     ProviderStatus,
     SessionEvent,
     TokenEvent,
@@ -125,6 +152,9 @@ def create_app(
     catalogo: Catalogo | None = None,
     pedidos: Pedidos | None = None,
     gateway: PaymentGateway | None = None,
+    fiscal: Fiscal | None = None,
+    emissor: NFEmitter | None = None,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -179,6 +209,25 @@ def create_app(
         app.state.gateway = gateway or gateway_de(
             settings.mercadopago_access_token, settings.public_base_url
         )
+        # O lado fiscal (S-05). A porta guarda a decisão do operador e a nota; o
+        # emissor é escolhido por `NF_EMITTER` e diz em voz alta qual é, como o
+        # gateway faz — escolha de integração que ninguém anuncia é a que vira
+        # dúvida três semanas depois (D-4 da S-04).
+        app.state.fiscal = fiscal or PostgresFiscal(with_connect_timeout(settings.database_url))
+        app.state.emissor = emissor or emissor_de(
+            settings.nf_emitter, settings.nf_emitter_api_key, settings.nf_emitter_base_url
+        )
+        # O grafo da emissão existe SEMPRE, porque é ele que persiste a pausa do
+        # ADR-003 — sem ele, um pedido pago não teria onde parar. Em produção o
+        # checkpointer é o do Postgres; num teste que injeta o grafo da conversa é o
+        # `InMemorySaver`, que é outra implementação da MESMA interface do LangGraph
+        # e não um dublê de nada (`docs/testes.md` §4).
+        app.state.emissao = build_emissao_graph(
+            app.state.pedidos,
+            app.state.fiscal,
+            app.state.emissor,
+            checkpointer or InMemorySaver(),
+        )
         app.state.store = store or PostgresConfigStore(
             with_connect_timeout(settings.database_url),
             Vault(settings.config_encryption_key),
@@ -190,15 +239,22 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if graph is not None:
-            await preparar(app, checkpointer=None, fixed_graph=graph)
+            # `checkpointer` injetado ou nenhum: com o grafo da conversa fixo, o
+            # único que ainda precisa de um é o da emissão, e `preparar` cai no
+            # `InMemorySaver` quando não recebe. Um teste que queira provar retomada
+            # da nota passa o seu.
+            await preparar(app, checkpointer=checkpointer, fixed_graph=graph)
             try:
                 yield
             finally:
                 await _fechar_busca(app)
             return
 
-        async with open_checkpointer(settings.database_url) as checkpointer:
-            await preparar(app, checkpointer=checkpointer, fixed_graph=None)
+        # `saver` e não `checkpointer`: o parâmetro de `create_app` tem esse nome, e
+        # um `as checkpointer` aqui o tornaria local de `lifespan` — o ramo acima
+        # passaria a ler uma variável ainda não atribuída, na subida, em produção.
+        async with open_checkpointer(settings.database_url) as saver:
+            await preparar(app, checkpointer=saver, fixed_graph=None)
             try:
                 yield
             finally:
@@ -338,13 +394,22 @@ def create_app(
             model,
             app.state.checkpointer,
             Supervisor(
-                recomendacao=recomendacao(busca, app.state.catalogo, app.state.pedidos, timeout),
+                recomendacao=recomendacao(
+                    busca,
+                    app.state.catalogo,
+                    app.state.pedidos,
+                    timeout,
+                    app.state.fiscal,
+                    settings.public_base_url,
+                ),
                 checkout=checkout(
                     busca,
                     app.state.catalogo,
                     app.state.pedidos,
                     app.state.gateway,
                     timeout,
+                    app.state.fiscal,
+                    settings.public_base_url,
                 ),
                 perguntar=roteador_do_modelo(model),
             ),
@@ -604,7 +669,199 @@ def create_app(
             logger.warning("webhook para um pedido que não existe: %s", pagamento.pedido_id)
             return WebhookProcessado(resultado="ignorado")
 
+        if aplicado:
+            await _abrir_fila_da_nota(request.app, pagamento.pedido_id)
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+    # ------------------------------------------------------ a fila do operador
+
+    def _operador_autenticado(token: str | None) -> None:
+        """O portao da fila (S-05, REQ-2), e ele e o mesmo do webhook do gateway.
+
+        **Sem `OPERADOR_API_TOKEN` configurado, nada confere.** E o lado seguro: a
+        alternativa — "sem token, aceita tudo" — transformaria esquecer uma variavel
+        de ambiente num endpoint aberto que lista CNPJ e endereco de compradoras e
+        autoriza uma emissao irreversivel.
+
+        `compare_digest` e nao `==`: comparar segredo com `==` vaza o prefixo correto
+        pelo tempo de resposta, e a rota do outro lado da comparacao e a que emite
+        documento fiscal.
+
+        Um 401 sem detalhe, pelo mesmo motivo do webhook: quem mandou o token errado
+        nao precisa saber se ele estava ausente, curto ou trocado.
+        """
+        esperado = settings.operador_api_token
+        if not esperado or not token or not hmac.compare_digest(esperado, token):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "credencial de operador invalida")
+
+    def _na_fila(pedido: Pedido) -> PedidoNaFila:
+        """O pedido como o operador o ve: dados da nota, e a composicao item a item.
+
+        As composicoes vao como estao gravadas, sem reprojecao. E o que o RF-3.2
+        pede — *"dados completos da nota, incluindo destinatario PJ e a composicao
+        item a item"* — e e tambem o que garante que o que ele aprova e o que o
+        emissor vai ler.
+        """
+        return PedidoNaFila(
+            pedido_id=pedido.id,
+            criado_em=pedido.criado_em,
+            total=pedido.total,
+            destinatario=DestinatarioDaNota(
+                razao_social=pedido.empresa.razao_social,
+                cnpj=formatar_cnpj(pedido.empresa.cnpj),
+                inscricao_estadual=inscricao_do_destinatario(pedido),
+                contato_nome=pedido.empresa.contato_nome,
+                contato_email=pedido.empresa.contato_email,
+                endereco=pedido.empresa.endereco,
+            ),
+            composicoes=pedido.composicoes,
+        )
+
+    @app.get("/operador/fila", response_model=FilaDoOperador)
+    async def fila_do_operador(
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> FilaDoOperador:
+        """Os pedidos pagos esperando decisao (RF-3.2, REQ-2).
+
+        A fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja
+        pausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o
+        grafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que
+        perde pedido em silencio.
+        """
+        _operador_autenticado(x_operador_token)
+        na_fila = await pendentes(request.app.state.pedidos)
+        return FilaDoOperador(pendentes=tuple(_na_fila(pedido) for pedido in na_fila))
+
+    async def _decidir_pela_fila(
+        request: Request, pedido_id: str, decisao: Decisao, corpo: DecisaoDoOperador
+    ) -> DecisaoRegistrada:
+        """Grava a decisao e conduz o grafo. O corpo comum de aprovar e rejeitar.
+
+        **A resposta e a decisao VIGENTE, que pode nao ser esta.** A primeira vence
+        (chave primaria de `aprovacao_de_nf`), entao um segundo operador clicando em
+        "aprovar" num pedido ja rejeitado recebe de volta a rejeicao — com quem,
+        quando e por que — em vez de um 200 que o faria acreditar que aprovou.
+        """
+        pedido = await request.app.state.pedidos.por_id(pedido_id)
+        if pedido is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido nao encontrado")
+        if pedido.status is StatusDoPedido.AGUARDANDO_PAGAMENTO:
+            # O unico estado em que decidir seria errado — e o erro seria caro:
+            # emitir nota de um pedido que ninguem pagou. A fila so existe depois da
+            # confirmacao do pagamento (RF-3.1).
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "este pedido ainda nao foi pago; a nota so entra na fila depois da "
+                "confirmacao do pagamento",
+            )
+
+        try:
+            pedida = Aprovacao(
+                pedido_id=pedido_id,
+                decisao=decisao,
+                operador=corpo.operador,
+                motivo=corpo.motivo,
+            )
+        except ValidationError as sem_motivo:
+            # A regra mora no modelo, nao aqui (RF-4.2). A rota so traduz a recusa
+            # para o codigo HTTP que o cliente da S-07 vai tratar.
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "rejeicao exige motivo: ele e o que o cliente recebe no chat",
+            ) from sem_motivo
+
+        vigente = await decidir(request.app.state.emissao, pedida, fiscal=request.app.state.fiscal)
+        emitida = await request.app.state.fiscal.nota_de(pedido_id)
+        return DecisaoRegistrada(
+            pedido_id=pedido_id,
+            decisao=vigente.decisao.value,
+            operador=vigente.operador,
+            decidido_em=vigente.decidido_em,
+            motivo=vigente.motivo,
+            numero_nota=emitida.nota.numero if emitida else None,
+            chave_da_nota=emitida.nota.chave if emitida else None,
+        )
+
+    @app.post("/operador/pedidos/{pedido_id}/aprovar", response_model=DecisaoRegistrada)
+    async def aprovar_a_nota(
+        pedido_id: str,
+        corpo: DecisaoDoOperador,
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> DecisaoRegistrada:
+        """Aprova e retoma o grafo, que entao emite (RF-3.3, REQ-3).
+
+        Repare no que esta rota **nao** faz: ela nao emite. Ela grava a decisao e
+        conduz o grafo; quem emite e `fiscal.emitir`, que rele a decisao do banco
+        antes de agir. Parece um rodeio e e a garantia inteira — a autorizacao e o
+        registro, nunca a chamada.
+        """
+        _operador_autenticado(x_operador_token)
+        return await _decidir_pela_fila(request, pedido_id, Decisao.APROVADA, corpo)
+
+    @app.post("/operador/pedidos/{pedido_id}/rejeitar", response_model=DecisaoRegistrada)
+    async def rejeitar_a_nota(
+        pedido_id: str,
+        corpo: DecisaoDoOperador,
+        request: Request,
+        x_operador_token: Annotated[str | None, Header()] = None,
+    ) -> DecisaoRegistrada:
+        """Rejeita com motivo, e tira o pedido do caminho de emissao (RF-4.2).
+
+        O motivo nao e burocracia: ele e o que o cliente le no chat quando pergunta
+        pela nota, por `consultar_pedido`. Uma rejeicao sem motivo vira silencio para
+        quem pagou, e e o que o `golden-011` existe para nao deixar acontecer.
+        """
+        _operador_autenticado(x_operador_token)
+        return await _decidir_pela_fila(request, pedido_id, Decisao.REJEITADA, corpo)
+
+    # ------------------------------------------------ o documento, para o cliente
+
+    async def _nota_ou_404(request: Request, pedido_id: str) -> Any:
+        """A nota emitida, ou 404.
+
+        **Um 404 e nao um 409 para "ainda nao emitida".** De fora, "este pedido nao
+        existe" e "a nota dele ainda nao saiu" tem que ser a mesma resposta: a URL e
+        aberta, e distinguir os dois casos transformaria a rota num oraculo que diz
+        quais ids de pedido existem.
+        """
+        emitida = await request.app.state.fiscal.nota_de(pedido_id)
+        if emitida is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "nota nao encontrada")
+        return emitida
+
+    @app.get("/pedidos/{pedido_id}/nota.xml", response_class=Response)
+    async def xml_da_nota(pedido_id: str, request: Request) -> Response:
+        """O XML da NF-e, para o contador da empresa compradora (RF-3.6, REQ-6).
+
+        **Aberta por link, e o link e o id opaco do pedido** — mesmo raciocinio do
+        link de pagamento (S-04). Diferente da pagina do mock, este documento
+        *carrega* dados do destinatario: e da natureza dele, e a alternativa seria
+        autenticar o comprador, que e um sistema que este projeto ainda nao tem. O
+        `uuid4` de `pedidos.novo_id` e o que sustenta a decisao, e ela esta escrita
+        aqui em vez de escondida.
+        """
+        emitida = await _nota_ou_404(request, pedido_id)
+        return Response(
+            content=emitida.xml,
+            media_type="application/xml",
+            headers={
+                "Content-Disposition": (f'inline; filename="nfe-{emitida.nota.numero:09d}.xml"')
+            },
+        )
+
+    @app.get("/pedidos/{pedido_id}/nota.pdf", response_class=Response)
+    async def danfe_da_nota(pedido_id: str, request: Request) -> Response:
+        """A DANFE em PDF. `inline` para abrir no navegador, com nome ao salvar."""
+        emitida = await _nota_ou_404(request, pedido_id)
+        return Response(
+            content=emitida.danfe,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (f'inline; filename="danfe-{emitida.nota.numero:09d}.pdf"')
+            },
+        )
 
     _rotas_do_mock(app)
 
@@ -671,7 +928,32 @@ def _rotas_do_mock(app: FastAPI) -> None:
             )
         except PedidoInexistente:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido não encontrado") from None
+        if aplicado:
+            await _abrir_fila_da_nota(request.app, pedido_id)
         return WebhookProcessado(resultado="registrado" if aplicado else "duplicado")
+
+
+async def _abrir_fila_da_nota(app: FastAPI, pedido_id: str) -> None:
+    """Pagamento confirmado: o grafo fiscal entra e para no `interrupt` (REQ-1).
+
+    **Falhar aqui não derruba o webhook, e isso não é tolerância a erro — é a
+    consequência de a fila do operador ser derivada do banco.** O pedido já está em
+    `aguardando_aprovacao_nf`, então ele aparece na fila de qualquer jeito, e a rota
+    de aprovação conduz o grafo do começo quando a thread não existe
+    (`fiscal.conduzir_ate_o_fim`). Devolver 5xx aqui faria o gateway reenviar um
+    evento que já teve efeito, pelo motivo errado.
+
+    O log é `exception` de propósito: o caminho normal é a thread abrir, e cair aqui
+    significa que o checkpointer não respondeu — notícia, não ruído.
+    """
+    try:
+        await abrir_fila_da_nota(app.state.emissao, pedido_id)
+    except Exception:
+        logger.exception(
+            "não consegui abrir a pausa da nota para o pedido %s; ele continua na fila "
+            "pelo status, e a aprovação conduz o grafo do começo",
+            pedido_id,
+        )
 
 
 async def _pedido_ou_404(request: Request, pedido_id: str) -> Any:

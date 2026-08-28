@@ -52,6 +52,14 @@ dependencies = [
     # andou sozinha: versão que muda de um lado só. Subir a imagem passa a ser um
     # commit que mexe nos dois lugares juntos.
     "qdrant-client>=1.13,<1.14",
+
+    # A DANFE do `MockNFAdapter` (S-05). Puro Python, sem binário externo e sem
+    # serviço: o quickstart continua sendo `docker compose up` (RNF-1). O ADR-004
+    # pede o mock como cidadão de primeira classe, e um PDF de mentira — texto
+    # solto, ou um arquivo que o leitor recusa abrir — seria o "stub jogado" que
+    # aquele ADR recusa. Gerar o layout à mão custaria umas duzentas linhas de
+    # escritor de PDF que não são o assunto de nenhuma spec deste projeto.
+    "reportlab>=4.2",
 ]
 
 [dependency-groups]
@@ -69,6 +77,11 @@ dev = [
     # O runner de evals (S-03) lê os casos de `evals/*.yaml`. Fica no grupo dev
     # porque eval é portão de release, não caminho de atendimento.
     "pyyaml>=6.0",
+    # Stubs do reportlab (S-05). O `mypy` roda em `strict`, e sem eles a DANFE
+    # inteira seria `Any` — o único arquivo do backend fora do portão de tipos, e
+    # justo o que desenha um documento fiscal. A alternativa era pôr `reportlab.*`
+    # na lista de `ignore_missing_imports`, que é para dependência SEM stub.
+    "types-reportlab>=4.4",
 ]
 
 [build-system]
