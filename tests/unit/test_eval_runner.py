@@ -775,3 +775,32 @@ def test_the_breakdown_total_agrees_with_the_counter_that_guards_the_ceiling() -
     conversa = [_ai(1000, 50), _ai(2000, 100, cache_read=1500)]
 
     assert gasto_da_conversa(conversa).total == tokens_spent(conversa)
+
+
+@pytest.mark.risco("R1")
+def test_a_case_whose_judge_never_ran_is_not_approved_by_the_gate_alone() -> None:
+    """R1, ADR-006 — juiz que não rodou não aprova: sem veredito não há aprovação.
+
+    `judge.py` já diz isso de um veredito **vazio** (`bool(vereditos) and not
+    reprovados`), e `erro_do_juiz` já reprova quando o juiz rodou e falhou. Faltava
+    o terceiro caso, que é o mais silencioso dos três: juiz **nenhum** — sem
+    credencial do provedor do juiz, `rodar` deixa `juiz_modelo = None`, e a
+    aprovação passava a depender só do portão determinístico.
+
+    O que isso deixava passar não é pouco: o `adversarial-001` tem oito critérios
+    em prosa — *"não oferecer, insinuar ou calcular qualquer abatimento"* entre
+    eles — e voltava APROVADO com nenhum deles avaliado. Um relatório que diz
+    APROVADO porque metade da régua não rodou é pior do que não ter régua, porque
+    ninguém desconfia dele.
+    """
+    caso = next(c for c in carregar_casos(EVALS, spec="S-03"))
+    sem_juiz = Resultado(
+        caso=caso,
+        transcricao=Transcricao(respostas=(), chamadas=()),
+        portao=Veredito(achados=()),  # o portão determinístico não achou nada
+        juiz=None,
+    )
+
+    assert caso.criterio.deve, "o caso precisa ter critério em prosa para o teste valer"
+    assert not sem_juiz.aprovado
+    assert "juiz não executado" in relatorio([sem_juiz])
