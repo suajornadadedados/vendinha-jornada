@@ -63,6 +63,7 @@ from vendinha.fiscal import (
 )
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
+from vendinha.nota.documento import numero_da_nota
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.observador import ObservadorDoTurno
 from vendinha.pagamento import (
@@ -840,13 +841,24 @@ def create_app(
         if not esperado or not token or not hmac.compare_digest(esperado, token):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "credencial de operador invalida")
 
-    def _na_fila(pedido: Pedido) -> PedidoNaFila:
+    def _na_fila(
+        pedido: Pedido,
+        *,
+        decisao: Aprovacao | None = None,
+        numero_nota: int | None = None,
+    ) -> PedidoNaFila:
         """O pedido como o operador o ve: dados da nota, e a composicao item a item.
 
         As composicoes vao como estao gravadas, sem reprojecao. E o que o RF-3.2
         pede — *"dados completos da nota, incluindo destinatario PJ e a composicao
         item a item"* — e e tambem o que garante que o que ele aprova e o que o
         emissor vai ler.
+
+        **Um pedido decidido passa por aqui pelo mesmo caminho**, com a decisao
+        anexada. Quem abre um pedido ja aprovado precisa ver a mesma composicao item
+        a item que foi aprovada; montar um modelo enxuto so para o historico seria
+        uma segunda projecao do mesmo dado, e o historico da nota fiscal e
+        exatamente o lugar onde a projecao velha custa caro.
         """
         return PedidoNaFila(
             pedido_id=pedido.id,
@@ -861,23 +873,59 @@ def create_app(
                 endereco=pedido.empresa.endereco,
             ),
             composicoes=pedido.composicoes,
+            status=pedido.status.value,
+            decisao=None if decisao is None else decisao.decisao.value,
+            operador=None if decisao is None else decisao.operador,
+            decidido_em=None if decisao is None else decisao.decidido_em,
+            motivo=None if decisao is None else decisao.motivo,
+            numero_nota=numero_nota,
         )
 
     @app.get("/operador/fila", response_model=FilaDoOperador)
     async def fila_do_operador(
         request: Request,
+        limite: int = 50,
         x_operador_token: Annotated[str | None, Header()] = None,
     ) -> FilaDoOperador:
-        """Os pedidos pagos esperando decisao (RF-3.2, REQ-2).
+        """Os pedidos pagos esperando decisao, e os que ja foram decididos (RF-3.2, RF-4.2).
 
         A fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja
         pausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o
         grafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que
         perde pedido em silencio.
+
+        **O historico sai da tabela de decisoes, nao do status do pedido.** Sao coisas
+        diferentes: `nota_emitida` diz o que aconteceu com a nota, e `aprovacao_de_nf`
+        diz quem decidiu e quando. Um pedido rejeitado nao vira nota nenhuma e
+        precisa aparecer no historico do mesmo jeito — e um dia em que a emissao
+        falhar depois de uma aprovacao valida, a aprovacao continua sendo um fato
+        registrado.
         """
         _operador_autenticado(x_operador_token)
-        na_fila = await pendentes(request.app.state.pedidos)
-        return FilaDoOperador(pendentes=tuple(_na_fila(pedido) for pedido in na_fila))
+        pedidos_do_painel = request.app.state.pedidos
+        fiscal = request.app.state.fiscal
+
+        na_fila = await pendentes(pedidos_do_painel)
+        recentes = await pedidos_do_painel.listar(limite=min(max(limite, 1), 200), offset=0)
+        decisoes = await fiscal.decisoes_de([pedido.id for pedido in recentes])
+
+        decididos = []
+        for pedido in recentes:
+            decisao = decisoes.get(pedido.id)
+            if decisao is None:
+                continue
+            decididos.append(
+                _na_fila(
+                    pedido,
+                    decisao=decisao,
+                    numero_nota=numero_da_nota(await fiscal.nota_de(pedido.id)),
+                )
+            )
+
+        return FilaDoOperador(
+            pendentes=tuple(_na_fila(pedido) for pedido in na_fila),
+            decididos=tuple(decididos),
+        )
 
     async def _decidir_pela_fila(
         request: Request, pedido_id: str, decisao: Decisao, corpo: DecisaoDoOperador

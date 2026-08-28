@@ -367,6 +367,47 @@ body {
   color: var(--tinta-suave);
 }
 
+/* O detalhe de um pedido — a composição item a item, fechada por padrão.
+   `<details>` nativo, e não um estado em React: um por linha da tabela de pedidos
+   significaria um `useState` por linha, e o navegador já sabe abrir e fechar isto,
+   com teclado e com leitor de tela de graça. */
+.detalhe-do-pedido > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--tinta-suave);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detalhe-do-pedido > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A seta desenhada aqui porque o marcador nativo não é estilizável entre
+   navegadores — e sem marcador nenhum ninguém descobre que a linha abre. */
+.detalhe-do-pedido > summary::before {
+  content: "▸";
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+
+.detalhe-do-pedido[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.detalhe-do-pedido > summary:hover {
+  color: var(--tinta);
+}
+
+/* A linha que só existe para segurar o detalhe: sem borda de cima, para ela ler
+   como continuação da linha do pedido e não como um pedido a mais. */
+.linha-do-detalhe > td {
+  border-top: none;
+  padding-top: 0;
+}
+
 .linhas {
   margin: 0;
   display: grid;

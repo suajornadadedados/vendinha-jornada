@@ -252,12 +252,19 @@ export interface paths {
         };
         /**
          * Fila Do Operador
-         * @description Os pedidos pagos esperando decisao (RF-3.2, REQ-2).
+         * @description Os pedidos pagos esperando decisao, e os que ja foram decididos (RF-3.2, RF-4.2).
          *
          *     A fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja
          *     pausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o
          *     grafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que
          *     perde pedido em silencio.
+         *
+         *     **O historico sai da tabela de decisoes, nao do status do pedido.** Sao coisas
+         *     diferentes: `nota_emitida` diz o que aconteceu com a nota, e `aprovacao_de_nf`
+         *     diz quem decidiu e quando. Um pedido rejeitado nao vira nota nenhuma e
+         *     precisa aparecer no historico do mesmo jeito — e um dia em que a emissao
+         *     falhar depois de uma aprovacao valida, a aprovacao continua sendo um fato
+         *     registrado.
          */
         get: operations["fila_do_operador_operador_fila_get"];
         put?: never;
@@ -871,9 +878,20 @@ export interface components {
         };
         /**
          * FilaDoOperador
-         * @description A fila inteira, do mais antigo para o mais novo.
+         * @description A fila e o que já saiu dela.
+         *
+         *     **Duas listas, e não uma ordenada.** O que espera decisão vem em `pendentes`,
+         *     sempre, e o histórico em `decididos`. Uma lista só com um campo de ordenação
+         *     deixaria "pendente primeiro" nas mãos de quem renderiza — e o dia em que alguém
+         *     ordenasse por data para ver o mais recente, um pedido esperando aprovação
+         *     afundaria no meio do histórico sem nada acusar.
          */
         FilaDoOperador: {
+            /**
+             * Decididos
+             * @default []
+             */
+            decididos: components["schemas"]["PedidoNaFila"][];
             /** Pendentes */
             pendentes: components["schemas"]["PedidoNaFila"][];
         };
@@ -1184,9 +1202,27 @@ export interface components {
              * Format: date-time
              */
             criado_em: string;
+            /** Decidido Em */
+            decidido_em?: string | null;
+            /** Decisao */
+            decisao?: ("aprovada" | "rejeitada") | null;
             destinatario: components["schemas"]["DestinatarioDaNota"];
+            /** Motivo */
+            motivo?: string | null;
+            /** Numero Nota */
+            numero_nota?: number | null;
+            /**
+             * Operador
+             * @description Quem decidiu, como se declarou. Este projeto ainda não tem autenticação: é declaração, não identidade provada (S-08).
+             */
+            operador?: string | null;
             /** Pedido Id */
             pedido_id: string;
+            /**
+             * Status
+             * @description O status do pedido, para a tela não deduzi-lo.
+             */
+            status: string;
             /** Total */
             total: string;
         };
@@ -1867,7 +1903,9 @@ export interface operations {
     };
     fila_do_operador_operador_fila_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limite?: number;
+            };
             header?: {
                 "x-operador-token"?: string | null;
             };

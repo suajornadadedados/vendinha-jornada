@@ -1,7 +1,7 @@
 // As telas do painel. Uma por seção, e todas leitura — exceto a fila, que é a
 // única que decide (ADR-015).
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   ArrowSquareOut,
   CaretRight,
@@ -605,14 +605,123 @@ export function Rastreabilidade({ sessionId }: { sessionId: string | null }) {
 
 // --------------------------------------------------------------- a fila HITL
 
+/** As composições item a item, como o operador as aprova — e como as reviu depois. */
+function ComposicoesDoPedido({ pedido }: { pedido: PedidoNaFila }) {
+  return (
+    <>
+      {pedido.composicoes.map((composicao, indice) => (
+        <div key={indice} className="tabela-rolante">
+          <p className="rotulo rotulo--frase mb-1">
+            {TIPO_DE_EVENTO[composicao.tipo_de_evento] ?? composicao.tipo_de_evento} ·{" "}
+            {composicao.pessoas} pessoas · {reais(composicao.valor_por_pessoa)} por pessoa
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead className="num">Quantidade</TableHead>
+                <TableHead className="num">Preço unitário</TableHead>
+                <TableHead className="num">Subtotal</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {composicao.itens.map((item) => (
+                <TableRow key={item.produto_id}>
+                  <TableCell>{item.nome}</TableCell>
+                  <TableCell className="num">{inteiro(item.quantidade)}</TableCell>
+                  <TableCell className="num">{reais(item.preco_unitario)}</TableCell>
+                  <TableCell className="num">{reais(item.subtotal)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Destinatário e datas — o mesmo bloco antes e depois da decisão. */
+function DadosDoPedido({ pedido }: { pedido: PedidoNaFila }) {
+  return (
+    <dl className="linhas">
+      <div>
+        <dt>Contato</dt>
+        <dd>
+          {pedido.destinatario.contato_nome} · {pedido.destinatario.contato_email}
+        </dd>
+      </div>
+      <div>
+        <dt>Entrega</dt>
+        <dd>
+          {pedido.destinatario.endereco.logradouro}, {pedido.destinatario.endereco.numero} —{" "}
+          {pedido.destinatario.endereco.bairro}, {pedido.destinatario.endereco.cidade}/
+          {pedido.destinatario.endereco.uf}
+        </dd>
+      </div>
+      <div>
+        <dt>Pedido feito em</dt>
+        <dd className="mono">{quando(pedido.criado_em)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/**
+ * Quem decidiu, quando e — na rejeição — por quê.
+ *
+ * É a rastreabilidade do RF-4.2 na tela, e ela precisa sobreviver à decisão: antes
+ * disto, aprovar fazia o pedido sumir da fila e não havia onde reler o que tinha
+ * sido aprovado, nem por quem. O operador é uma declaração, não uma identidade
+ * provada — este projeto ainda não tem autenticação, e a tela diz isso em vez de
+ * deixar parecer que diz mais.
+ */
+function Decisao({ pedido }: { pedido: PedidoNaFila }) {
+  const aprovada = pedido.decisao === "aprovada";
+  return (
+    <dl className="linhas">
+      <div>
+        <dt>{aprovada ? "Aprovada por" : "Rejeitada por"}</dt>
+        <dd>{pedido.operador ?? <Ausente porque="a decisão não registrou quem decidiu" />}</dd>
+      </div>
+      <div>
+        <dt>Quando</dt>
+        <dd className="mono">
+          {pedido.decidido_em ? quando(pedido.decidido_em) : <Ausente porque="sem data" />}
+        </dd>
+      </div>
+      {pedido.motivo && (
+        <div>
+          <dt>Motivo</dt>
+          <dd>{pedido.motivo}</dd>
+        </div>
+      )}
+      <div>
+        <dt>Nota fiscal</dt>
+        <dd className="mono">
+          {pedido.numero_nota !== null && pedido.numero_nota !== undefined ? (
+            `nº ${inteiro(pedido.numero_nota)}`
+          ) : (
+            <Ausente porque="a nota não foi emitida" />
+          )}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export function Fila() {
   const fila = useFila();
   const [decidindo, setDecidindo] = useState<{ pedido: PedidoNaFila; qual: "aprovar" | "rejeitar" } | null>(null);
 
   if (fila.isLoading) return <Carregando linhas={3} />;
+  // Duas listas, e não uma ordenada: o servidor separa o que espera decisão do que
+  // já saiu da fila, então "pendente primeiro" é estrutura e não ordenação que
+  // alguém pode inverter sem perceber.
   const pendentes = fila.data?.pendentes ?? [];
+  const decididos = fila.data?.decididos ?? [];
 
-  if (pendentes.length === 0) {
+  if (pendentes.length === 0 && decididos.length === 0) {
     return (
       <Empty>
         <EmptyHeader>
@@ -629,6 +738,12 @@ export function Fila() {
   return (
     <>
       <div className="flex flex-col gap-4">
+        {pendentes.length === 0 && (
+          <p className="rotulo rotulo--frase">
+            Nada esperando decisão agora. Abaixo, o que já foi decidido.
+          </p>
+        )}
+
         {pendentes.map((pedido) => (
           <Card key={pedido.pedido_id}>
             <CardHeader>
@@ -643,55 +758,8 @@ export function Fila() {
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <dl className="linhas">
-                <div>
-                  <dt>Contato</dt>
-                  <dd>
-                    {pedido.destinatario.contato_nome} · {pedido.destinatario.contato_email}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Entrega</dt>
-                  <dd>
-                    {pedido.destinatario.endereco.logradouro},{" "}
-                    {pedido.destinatario.endereco.numero} — {pedido.destinatario.endereco.bairro},{" "}
-                    {pedido.destinatario.endereco.cidade}/{pedido.destinatario.endereco.uf}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Pedido feito em</dt>
-                  <dd className="mono">{quando(pedido.criado_em)}</dd>
-                </div>
-              </dl>
-
-              {pedido.composicoes.map((composicao, indice) => (
-                <div key={indice} className="tabela-rolante">
-                  <p className="rotulo rotulo--frase mb-1">
-                    {TIPO_DE_EVENTO[composicao.tipo_de_evento] ?? composicao.tipo_de_evento} ·{" "}
-                    {composicao.pessoas} pessoas · {reais(composicao.valor_por_pessoa)} por pessoa
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead className="num">Quantidade</TableHead>
-                        <TableHead className="num">Preço unitário</TableHead>
-                        <TableHead className="num">Subtotal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {composicao.itens.map((item) => (
-                        <TableRow key={item.produto_id}>
-                          <TableCell>{item.nome}</TableCell>
-                          <TableCell className="num">{inteiro(item.quantidade)}</TableCell>
-                          <TableCell className="num">{reais(item.preco_unitario)}</TableCell>
-                          <TableCell className="num">{reais(item.subtotal)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ))}
+              <DadosDoPedido pedido={pedido} />
+              <ComposicoesDoPedido pedido={pedido} />
 
               {/* Os dois botões NÃO são espelhados: peso visual igual em ações de
                   consequência desigual é como se clica errado. */}
@@ -711,6 +779,54 @@ export function Fila() {
             </CardContent>
           </Card>
         ))}
+
+        {decididos.length > 0 && (
+          <>
+            <h2 className="rotulo mt-2">Já decididos ({inteiro(decididos.length)})</h2>
+            {decididos.map((pedido) => (
+              <Card key={pedido.pedido_id}>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>{pedido.destinatario.razao_social}</CardTitle>
+                      <CardDescription className="mono">
+                        CNPJ {pedido.destinatario.cnpj} · {quando(pedido.decidido_em)}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`estado ${
+                          pedido.decisao === "aprovada" ? "estado--ok" : "estado--recusa"
+                        }`}
+                      >
+                        {pedido.decisao === "aprovada" ? (
+                          <CheckCircle size={14} weight="regular" aria-hidden="true" />
+                        ) : (
+                          <XCircle size={14} weight="regular" aria-hidden="true" />
+                        )}
+                        {pedido.decisao === "aprovada" ? "Aprovada" : "Rejeitada"}
+                      </span>
+                      <p className="fila__total num">{reais(pedido.total)}</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <Decisao pedido={pedido} />
+                  {/* Fechado por padrão: o histórico cresce, e a fila é uma tela de
+                      trabalho antes de ser um arquivo. O detalhe continua a um clique
+                      — some da vista, não do registro. */}
+                  <details className="detalhe-do-pedido">
+                    <summary>O que foi aprovado, item a item</summary>
+                    <div className="flex flex-col gap-4 pt-3">
+                      <DadosDoPedido pedido={pedido} />
+                      <ComposicoesDoPedido pedido={pedido} />
+                    </div>
+                  </details>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
 
       {decidindo && (
@@ -881,29 +997,86 @@ export function Pedidos() {
           </TableHeader>
           <TableBody>
             {lista.map((pedido) => (
-              <TableRow key={pedido.pedido_id}>
-                <TableCell>{pedido.razao_social}</TableCell>
-                <TableCell className="mono">{pedido.cnpj}</TableCell>
-                <TableCell className="num">{reais(pedido.total)}</TableCell>
-                <TableCell>
-                  <Estado status={pedido.status} />
-                </TableCell>
-                <TableCell>
-                  {pedido.url_danfe ? (
-                    <span className="flex gap-2">
-                      <a className="link-doc" href={pedido.url_danfe} target="_blank" rel="noreferrer">
-                        <FilePdf size={14} weight="regular" aria-hidden="true" /> DANFE
-                      </a>
-                      <a className="link-doc" href={pedido.url_xml!} target="_blank" rel="noreferrer">
-                        <FileXls size={14} weight="regular" aria-hidden="true" /> XML
-                      </a>
-                    </span>
-                  ) : (
-                    <Ausente porque="a nota ainda não foi emitida" />
-                  )}
-                </TableCell>
-                <TableCell className="mono">{quando(pedido.criado_em)}</TableCell>
-              </TableRow>
+              <Fragment key={pedido.pedido_id}>
+                <TableRow>
+                  <TableCell>{pedido.razao_social}</TableCell>
+                  <TableCell className="mono">{pedido.cnpj}</TableCell>
+                  <TableCell className="num">{reais(pedido.total)}</TableCell>
+                  <TableCell>
+                    <Estado status={pedido.status} />
+                  </TableCell>
+                  <TableCell>
+                    {pedido.url_danfe ? (
+                      <span className="flex gap-2">
+                        <a className="link-doc" href={pedido.url_danfe} target="_blank" rel="noreferrer">
+                          <FilePdf size={14} weight="regular" aria-hidden="true" /> DANFE
+                        </a>
+                        <a className="link-doc" href={pedido.url_xml!} target="_blank" rel="noreferrer">
+                          <FileXls size={14} weight="regular" aria-hidden="true" /> XML
+                        </a>
+                      </span>
+                    ) : (
+                      <Ausente porque="a nota ainda não foi emitida" />
+                    )}
+                  </TableCell>
+                  <TableCell className="mono">{quando(pedido.criado_em)}</TableCell>
+                </TableRow>
+                {/* O detalhe numa linha própria, e não num drawer: comparar dois
+                    pedidos é o que mais se faz aqui, e drawer só deixa um aberto
+                    por vez. `colSpan` cobre a tabela inteira. */}
+                <TableRow className="linha-do-detalhe">
+                  <TableCell colSpan={6}>
+                    <details className="detalhe-do-pedido">
+                      <summary>
+                        Composição, item a item
+                        {pedido.numero_nota !== null && pedido.numero_nota !== undefined
+                          ? ` · nota nº ${inteiro(pedido.numero_nota)}`
+                          : ""}
+                      </summary>
+                      <div className="flex flex-col gap-4 pt-3">
+                        {pedido.composicoes.length === 0 ? (
+                          <Ausente porque="este pedido não guardou composição" />
+                        ) : (
+                          pedido.composicoes.map((composicao, indice) => (
+                            <div key={indice} className="tabela-rolante">
+                              <p className="rotulo rotulo--frase mb-1">
+                                {TIPO_DE_EVENTO[composicao.tipo_de_evento] ??
+                                  composicao.tipo_de_evento}{" "}
+                                · {composicao.pessoas} pessoas ·{" "}
+                                {reais(composicao.valor_por_pessoa)} por pessoa
+                              </p>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Item</TableHead>
+                                    <TableHead className="num">Quantidade</TableHead>
+                                    <TableHead className="num">Preço unitário</TableHead>
+                                    <TableHead className="num">Subtotal</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {composicao.itens.map((item) => (
+                                    <TableRow key={item.produto_id}>
+                                      <TableCell>{item.nome}</TableCell>
+                                      <TableCell className="num">
+                                        {inteiro(item.quantidade)}
+                                      </TableCell>
+                                      <TableCell className="num">
+                                        {reais(item.preco_unitario)}
+                                      </TableCell>
+                                      <TableCell className="num">{reais(item.subtotal)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </details>
+                  </TableCell>
+                </TableRow>
+              </Fragment>
             ))}
           </TableBody>
         </Table>

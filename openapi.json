@@ -832,8 +832,16 @@
         "type": "object"
       },
       "FilaDoOperador": {
-        "description": "A fila inteira, do mais antigo para o mais novo.",
+        "description": "A fila e o que já saiu dela.\n\n**Duas listas, e não uma ordenada.** O que espera decisão vem em `pendentes`,\nsempre, e o histórico em `decididos`. Uma lista só com um campo de ordenação\ndeixaria \"pendente primeiro\" nas mãos de quem renderiza — e o dia em que alguém\nordenasse por data para ver o mais recente, um pedido esperando aprovação\nafundaria no meio do histórico sem nada acusar.",
         "properties": {
+          "decididos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PedidoNaFila"
+            },
+            "title": "Decididos",
+            "type": "array"
+          },
           "pendentes": {
             "items": {
               "$ref": "#/components/schemas/PedidoNaFila"
@@ -1526,11 +1534,77 @@
             "title": "Criado Em",
             "type": "string"
           },
+          "decidido_em": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidido Em"
+          },
+          "decisao": {
+            "anyOf": [
+              {
+                "enum": [
+                  "aprovada",
+                  "rejeitada"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisao"
+          },
           "destinatario": {
             "$ref": "#/components/schemas/DestinatarioDaNota"
           },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo"
+          },
+          "numero_nota": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Nota"
+          },
+          "operador": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Quem decidiu, como se declarou. Este projeto ainda não tem autenticação: é declaração, não identidade provada (S-08).",
+            "title": "Operador"
+          },
           "pedido_id": {
             "title": "Pedido Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "O status do pedido, para a tela não deduzi-lo.",
+            "title": "Status",
             "type": "string"
           },
           "total": {
@@ -1544,7 +1618,8 @@
           "criado_em",
           "total",
           "destinatario",
-          "composicoes"
+          "composicoes",
+          "status"
         ],
         "title": "PedidoNaFila",
         "type": "object"
@@ -2764,9 +2839,19 @@
     },
     "/operador/fila": {
       "get": {
-        "description": "Os pedidos pagos esperando decisao (RF-3.2, REQ-2).\n\nA fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja\npausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o\ngrafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que\nperde pedido em silencio.",
+        "description": "Os pedidos pagos esperando decisao, e os que ja foram decididos (RF-3.2, RF-4.2).\n\nA fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja\npausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o\ngrafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que\nperde pedido em silencio.\n\n**O historico sai da tabela de decisoes, nao do status do pedido.** Sao coisas\ndiferentes: `nota_emitida` diz o que aconteceu com a nota, e `aprovacao_de_nf`\ndiz quem decidiu e quando. Um pedido rejeitado nao vira nota nenhuma e\nprecisa aparecer no historico do mesmo jeito — e um dia em que a emissao\nfalhar depois de uma aprovacao valida, a aprovacao continua sendo um fato\nregistrado.",
         "operationId": "fila_do_operador_operador_fila_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
           {
             "in": "header",
             "name": "x-operador-token",

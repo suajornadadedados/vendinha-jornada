@@ -333,6 +333,74 @@ def test_an_approved_order_leaves_the_queue(client: TestClient) -> None:
 
 @pytest.mark.risco("R3")
 @pytest.mark.usefixtures("com_token")
+def test_an_approved_order_keeps_who_decided_and_what_was_approved(client: TestClient) -> None:
+    """RF-4.2 — sair da fila não é sumir do registro.
+
+    Aprovar tirava o pedido de `pendentes` e não havia mais onde reler o que tinha
+    sido aprovado, nem por quem, nem quando. A decisão ficava gravada em
+    `aprovacao_de_nf` e não aparecia em tela nenhuma — registro que ninguém alcança
+    é registro pela metade.
+
+    A composição vai junto, item a item, e não um resumo dela: quem confere uma
+    aprovação depois precisa ver **o que o emissor leu**, que é a mesma exigência do
+    RF-3.2 um passo adiante no tempo.
+    """
+    client.post(
+        f"/operador/pedidos/{PEDIDO_ID}/aprovar",
+        json={"operador": OPERADOR},
+        headers=AUTORIZADO,
+    )
+
+    fila = client.get("/operador/fila", headers=AUTORIZADO).json()
+
+    assert fila["pendentes"] == [], "decidido não espera decisão"
+    decididos = fila["decididos"]
+    assert len(decididos) == 1, f"a decisão sumiu do histórico: {decididos}"
+
+    registro = decididos[0]
+    assert registro["pedido_id"] == PEDIDO_ID
+    assert registro["decisao"] == Decisao.APROVADA.value
+    assert registro["operador"] == OPERADOR
+    assert registro["decidido_em"], "sem quando, não é rastreabilidade"
+    assert registro["numero_nota"] == 1
+    assert registro["composicoes"], "o que foi aprovado tem que continuar legível"
+
+
+@pytest.mark.usefixtures("com_token")
+def test_the_orders_screen_survives_an_order_that_has_an_invoice(client: TestClient) -> None:
+    """A regressão que fez a tela de pedidos parecer vazia — e era um 500.
+
+    `nota_de` devolve `NotaEmitida`, que **embrulha** a nota: o número é
+    `.nota.numero`. O painel lia `.numero` direto, o que é `AttributeError`, e o
+    caminho só é percorrido quando existe nota emitida de verdade — coisa que nenhum
+    teste do painel tinha. Em produção, o primeiro pedido com nota derrubava
+    `GET /admin/pedidos` inteiro com 500, e a tela mostrava "nenhum pedido": parecia
+    que o pedido tinha sumido, e o que tinha sumido era a rota.
+
+    Por isso a asserção é sobre a rota inteira respondendo, e não sobre a função que
+    lê o número: era exatamente a travessia entre as duas que estava quebrada.
+    """
+    client.post(
+        f"/operador/pedidos/{PEDIDO_ID}/aprovar",
+        json={"operador": OPERADOR},
+        headers=AUTORIZADO,
+    )
+
+    resposta = client.get("/admin/pedidos", headers=AUTORIZADO)
+
+    assert resposta.status_code == 200, resposta.text
+    pedidos = resposta.json()["pedidos"]
+    assert len(pedidos) == 1
+    assert pedidos[0]["numero_nota"] == 1
+    assert pedidos[0]["url_danfe"], "com nota emitida, o DANFE é alcançável"
+
+    detalhe = client.get(f"/admin/pedidos/{PEDIDO_ID}", headers=AUTORIZADO)
+    assert detalhe.status_code == 200, detalhe.text
+    assert detalhe.json()["numero_nota"] == 1
+
+
+@pytest.mark.risco("R3")
+@pytest.mark.usefixtures("com_token")
 def test_approving_twice_issues_one_invoice_and_not_two(
     client: TestClient, fiscal: FiscalEmMemoria
 ) -> None:
