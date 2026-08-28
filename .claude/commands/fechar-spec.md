@@ -1,6 +1,6 @@
 ---
 description: Encerra uma spec — verificação independente, correção, e só então o PR
-argument-hint: <id da spec, ex- S-11>
+argument-hint: <id da spec, ex.: S-11>
 ---
 
 # /fechar-spec — Encerramento de uma spec
