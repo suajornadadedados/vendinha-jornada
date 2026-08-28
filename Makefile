@@ -3,7 +3,7 @@
 # dentro do alvo e chega no mesmo lugar (ver README, seção Quickstart).
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals-composicao evals-checkout evals hooks
+.PHONY: help up down logs db-setup seed api test lint format typecheck evals-check evals-groundedness evals-composicao evals-checkout evals-observabilidade evals-hitl evals evals-afetadas hooks
 
 help:  ## Lista os alvos disponíveis
 	@grep -E "^[a-z-]+:.*?## " $(MAKEFILE_LIST) | sed "s/:.*## /\t/" | expand -t24
@@ -52,11 +52,20 @@ evals-composicao:  ## Roda os 4 casos de composição da S-11 contra o agente (p
 evals-checkout:  ## Roda os 7 casos da S-04 contra o agente (precisa de `make up`, `db-setup` e `seed`)
 	cd backend && uv run python -m vendinha.evals.runner --spec S-04
 
-evals:  ## Executa a suíte de evals contra o agente (chega na S-06)
-	@echo "A suíte completa é entregável da S-06 (docs/specs/S-06-qualidade-como-gate.md)."
-	@echo "Por enquanto: make evals-check (schema, sem agente), make evals-groundedness (S-03)"
-	@echo "make evals-composicao (S-11) e make evals-checkout (S-04)."
-	@exit 1
+evals-observabilidade:  ## Roda os 2 casos da S-02 — PII e teto de custo (precisa de `make up`, `db-setup` e `seed`)
+	cd backend && uv run python -m vendinha.evals.runner --spec S-02
+
+evals-hitl:  ## Roda os 4 casos da S-05 — aprovação e emissão de NF (precisa de `make up`, `db-setup` e `seed`)
+	cd backend && uv run python -m vendinha.evals.runner --spec S-05
+
+# A suíte inteira, as cinco sub-suítes, 23 casos. É a camada 2 do ADR-014, e é o
+# MESMO comando que o CI roda no pós-merge — não uma segunda receita que envelhece
+# em paralelo. `--tudo` pula a decisão por diff e roda tudo.
+evals:  ## Suíte completa: as cinco sub-suítes, contra o agente (precisa de `make up`, `db-setup` e `seed`)
+	bash scripts/evals-ci.sh --tudo
+
+evals-afetadas:  ## Só as sub-suítes que o seu diff contra a main pode ter mudado — o que o CI faz no PR
+	bash scripts/evals-ci.sh
 
 hooks:  ## Instala os portões locais (pre-commit, commit-msg, pre-push)
 	pre-commit install --install-hooks

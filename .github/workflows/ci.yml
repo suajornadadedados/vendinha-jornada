@@ -16,12 +16,12 @@ name: CI
 # `false` para sempre, parecendo "ainda não chegou" quando na verdade já tinha
 # chegado. A verificação independente da S-03 pegou isso (NC-5).
 #
-# O novo gatilho não é o runner, e isso também é decisão: o runner já existe e
-# **mesmo assim o job não pode ligar hoje**, porque rodar a suíte exige Postgres,
-# Qdrant e catálogo semeado, que este workflow não sobe. `scripts/evals-ci.sh` é
-# o artefato que a S-06 precisa escrever de qualquer forma — subir os serviços,
-# rodar `db-setup` e `seed`, e então `python -m vendinha.evals.runner`. Gatilho
-# que descreve o que falta de verdade não caduca em silêncio.
+# **A S-06 escreveu `scripts/evals-ci.sh`, e com isso o `evals` ligou sozinho** —
+# que era exatamente o desenho: gatilho que descreve o que falta de verdade não
+# caduca em silêncio, e sai do caminho quando a coisa chega. O comentário anterior
+# dizia que o job "não pode ligar hoje"; agora pode, e este parágrafo é o registro
+# da virada. O `detect` continua como está: se alguém apagar o script, o job volta
+# a pular em vez de ficar vermelho para sempre.
 #
 # O gatilho é calculado pelo job `detect`, e NÃO por `if: hashFiles(...)` no
 # nível do job: `hashFiles` só é permitido em contexto de step. Usá-la em
@@ -143,27 +143,31 @@ jobs:
       - name: mypy na suite
         run: uv run --project backend mypy --config-file backend/pyproject.toml --explicit-package-bases tests
 
+  # A camada 1 do ADR-014: as sub-suítes que o diff pode ter mudado. Required
+  # check a partir da S-06, que é quando `scripts/evals-ci.sh` passou a existir e
+  # o `detect` acima começou a ligar este job sozinho.
+  #
+  # **O escopo é decidido DENTRO do script, e nunca por um path filter aqui.** Um
+  # job pulado que é required trava a `main` para sempre; o script sai 0 dizendo
+  # "nada a avaliar neste diff" e o check fica verde. É a outra metade do problema
+  # que o job `detect` resolveu na S-00 (D-10).
+  #
+  # `fetch-depth: 0` porque o escopo vem de um `git merge-base` com a `origin/main`
+  # — com o clone raso do default o merge-base não existe, o script cai no ramo
+  # "base indisponível" e roda a suíte inteira em todo PR. Caro, não inseguro, e
+  # exatamente o tipo de desperdício silencioso que o ADR-014 quis evitar.
+  #
+  # A suíte inteira roda no pós-merge, em `evals-pos-merge.yml`.
   evals:
-    # Vira required check a partir da S-06, junto com o código que o deixa verde.
-    # Requer secret ANTHROPIC_API_KEY. Observabilidade é Langfuse Cloud (ADR-010).
-    #
-    # O gatilho é `scripts/evals-ci.sh`, não o runner: o runner chegou na S-03 e
-    # o job continua pulado de propósito, porque a suíte precisa de Postgres,
-    # Qdrant e catálogo semeado — e é isso que o script da S-06 vai montar.
-    # Ver o cabeçalho deste arquivo.
     needs: detect
     if: needs.detect.outputs.evals == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --dev
         working-directory: backend
-      # O script é da S-06 e sobe a infraestrutura antes de chamar o runner. O
-      # módulo é `vendinha.evals.runner` (não `evals.runner`), e as flags reais
-      # são `--spec`, `--caso` e `--saida` — `--report github-summary` nunca
-      # existiu, e o job teria falhado na linha de comando em vez de na qualidade
-      # do agente (S-03, NC-5).
       - run: bash scripts/evals-ci.sh
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
