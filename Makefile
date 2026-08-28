@@ -43,7 +43,7 @@ typecheck:  ## mypy strict no backend E na suite de testes
 web-install:  ## Instala as dependencias do frontend
 	npm install --prefix frontend
 
-web:  ## Sobe o frontend em http://localhost:5173 (landing) e /admin.html
+web:  ## Sobe o frontend em http://localhost:5173 (landing) e /admin (painel)
 	npm --prefix frontend run dev
 
 web-build:  ## Build de producao das duas entradas

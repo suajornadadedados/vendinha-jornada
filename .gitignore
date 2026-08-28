@@ -50,3 +50,8 @@ Thumbs.db
 # CI compara. Gerado e ignorado nao sao sinonimos.
 frontend/node_modules/
 frontend/dist/
+
+# Cache incremental do `tsc -b`. Guarda caminhos e hashes da maquina que compilou:
+# conflita em todo PR que toque o frontend e nao descreve nada do produto. Foi
+# commitado por engano na S-07 e sai aqui (NC-2 da verificacao independente).
+frontend/tsconfig.tsbuildinfo

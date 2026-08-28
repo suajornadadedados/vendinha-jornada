@@ -21,15 +21,15 @@ Duas abas, lado a lado:
 | Aba | Onde | Quem é |
 |---|---|---|
 | Esquerda | `http://localhost:5173/` | o comprador corporativo |
-| Direita | `http://localhost:5173/admin.html` | o operador da Vendinha |
+| Direita | `http://localhost:5173/admin` | o operador da Vendinha |
 
 ---
 
 ## 1. O painel vazio é honesto
 
 Conecte com o `OPERADOR_API_TOKEN`. A visão geral abre **sem nenhum número inventado**:
-conversão, ticket médio e p95 aparecem como **traço**, não como zero — passe o mouse e o
-`title` diz por quê ("nenhuma conversa nesta janela").
+"viraram pedido", "valor médio do pedido" e o tempo de resposta aparecem como **traço**, não
+como zero — passe o mouse e o `title` diz por quê ("nenhum atendimento neste período").
 
 > É a primeira coisa a mostrar, e a mais fácil de perder de vista: um painel que exibisse
 > `0%` de conversão num dia sem conversa estaria afirmando algo falso sobre um dia que não
@@ -57,12 +57,15 @@ Agora force a recusa. Peça um **happy hour para 30 pessoas com no máximo R$20 
 O código recusa, e a tela mostra **o motivo tipado** — orçamento, item obrigatório,
 restrição —, não "não foi possível".
 
-Na aba do operador, em **Visão geral**, o gráfico *"O que o código recusou"* ganhou barras.
-Cada uma é uma vez em que o modelo propôs e o código não deixou passar.
+Na aba do operador, em **Visão geral** (`/admin`), o gráfico *"Sugestões barradas na
+conferência"* ganhou barras. Cada uma é uma vez em que o modelo propôs e o código não deixou
+passar.
 
-Em **Conversas**, clique na linha: à esquerda a conversa, à direita **o que o modelo propôs
-ao lado do que o código respondeu** — o argumento de cada tool e o retorno dela, com
-latência, tokens e custo por turno.
+Em **Conversas** (`/admin/conversas`), clique na linha — a URL vira
+`/admin/conversas/<id>`, e é um link que se manda para alguém. À direita, a conversa inteira
+em português: o que o cliente escreveu, o que o agente pediu ao sistema, o que o sistema
+respondeu, e o que a conferência decidiu — com o custo de cada resposta. **Nenhum JSON e
+nenhum nome de variável na tela**, que é a regra de vocabulário do `sistema-visual.md`.
 
 ## 4. Fechar o pedido
 
@@ -120,18 +123,21 @@ Suba a API de novo. As duas telas reconectam sozinhas, sem F5.
 
 ## 9. Onde o dinheiro aparece
 
-Em **Métricas**: custo de LLM da janela, custo por conversa, tokens por modelo, p95 do
-primeiro token contra a régua de 3s do RNF-4.
+Em **Métricas** (`/admin/metricas`): custo de IA do período, quanto ele representa do que
+foi vendido, uso por modelo, e o tempo até a resposta começar a aparecer contra a meta de 3s.
+Na tela a meta se chama **meta** — o nome do requisito interno (RNF-4) fica na spec, que é
+onde ele significa alguma coisa.
 
-Repare no que **não** aparece: `custo / receita` fica em traço, porque não há cotação do
-dólar configurada em `data/precos-modelos.json` — comparar dólar com real por uma taxa
-inventada seria pior do que não comparar. E um modelo sem preço cadastrado nunca custa
+Repare no que **não** aparece: "custo de IA sobre o vendido" fica em traço, porque não há
+cotação do dólar configurada em `data/precos-modelos.json` — comparar dólar com real por uma
+taxa inventada seria pior do que não comparar. E um modelo sem preço cadastrado nunca custa
 R$ 0,00; custa traço, com o motivo no `title`.
 
 ## 10. O que não se edita
 
-Em **Configurações**, o modelo é trocável (fora de `APP_ENV=local` a tela avisa que é
-somente leitura). Os **prompts são exibidos e não editáveis**, com sha e caminho do arquivo.
+Em **Configurações** (`/admin/configuracoes`), o modelo é trocável por um dropdown (fora de
+`APP_ENV=local` a tela avisa que é somente leitura). As **instruções do agente são exibidas e
+não editáveis**, uma de cada vez por um seletor, com sha e caminho do arquivo.
 
 > Não é falta de tempo: prompt editável em runtime contornaria o portão de evals do
 > ADR-014, e o campo `editavel` é o literal `false` no contrato — um botão de salvar prompt

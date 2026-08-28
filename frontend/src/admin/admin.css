@@ -146,7 +146,7 @@ body {
   gap: 2px;
 }
 
-.painel__lado nav button {
+.painel__lado nav a {
   display: flex;
   align-items: center;
   gap: var(--e-2);
@@ -160,18 +160,19 @@ body {
   color: var(--tinta-suave);
   font-size: 14px;
   text-align: left;
+  text-decoration: none;
   transition: background var(--transicao), color var(--transicao);
 }
 
-.painel__lado nav button:hover {
+.painel__lado nav a:hover {
   background: var(--papel);
   color: var(--tinta);
 }
 
-.painel__lado nav button[data-ativa] {
+.painel__lado nav a.ativa {
   background: var(--verde-fundo);
   color: var(--verde);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .painel__nota {
@@ -386,7 +387,55 @@ body {
 
 .linhas dd {
   margin: 0;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+/* A variante explicada: o rótulo em duas linhas, a de baixo dizendo o que o
+   número mede. Custa altura e economiza a pergunta "isso é o quê?". */
+.linhas--explicadas > div {
+  align-items: flex-start;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.linhas--explicadas > div:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.linhas--explicadas dt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--tinta);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.linhas--explicadas dt span {
+  font-weight: 400;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--tinta-suave);
+  max-width: 42ch;
+}
+
+.linhas--explicadas dd {
+  padding-top: 1px;
+}
+
+.secao__nota {
+  margin: 0 0 var(--e-2);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tinta-suave);
+  max-width: 68ch;
+}
+
+.campo-rotulado {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* --------------------------------------------------------------- gráficos */
@@ -430,6 +479,14 @@ body {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--tinta-suave);
+}
+
+.grafico__explica {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--tinta-suave);
+  max-width: 60ch;
 }
 
 .barras {
@@ -516,22 +573,21 @@ body {
   gap: 2px;
 }
 
-.conversas-curtas button {
+.conversas-curtas a {
   display: flex;
   align-items: center;
   gap: var(--e-3);
   width: 100%;
   min-height: 40px;
   padding: 0 var(--e-2);
-  border: none;
   border-radius: var(--raio);
-  background: none;
-  font: inherit;
   color: var(--tinta);
+  font-size: 13px;
   text-align: left;
+  text-decoration: none;
 }
 
-.conversas-curtas button:hover {
+.conversas-curtas a:hover {
   background: var(--papel);
 }
 
@@ -543,19 +599,21 @@ body {
 
 /* ------------------------------------------------------ rastreabilidade */
 
+/* Uma linha por acontecimento, fechada. O detalhe é um clique — a seção inteira
+   cabe na tela em vez de virar uma barra de rolagem de 340px onde nada é
+   encontrável. O teto sobe porque agora ele quase nunca é atingido. */
 .linha-do-tempo {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--e-2);
-  max-height: 340px;
+  gap: 1px;
+  max-height: 60vh;
   overflow-y: auto;
 }
 
 .linha-do-tempo li {
   border-left: 2px solid var(--linha);
-  padding: 2px 0 2px var(--e-3);
 }
 
 .linha-do-tempo--cliente {
@@ -566,36 +624,191 @@ body {
   border-left-color: var(--verde);
 }
 
-.linha-do-tempo--ferramenta {
+.linha-do-tempo--ferramenta,
+.linha-do-tempo--passo {
   border-left-color: var(--ocre-cheio);
 }
 
-.linha-do-tempo__tag {
-  display: block;
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+/* Quem pediu × quem respondeu, distinguidos por ícone E por cor E pela frase.
+   A linha do tempo é onde a regra de ouro fica visível para quem nunca vai abrir
+   um trace, então quem fala precisa ser lido de relance. */
+.passo > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* 36px: alvo de clique confortável sem transformar 20 passos em duas telas. */
+  min-height: 36px;
+  padding: 0 var(--e-2) 0 10px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--raio);
   color: var(--tinta-suave);
-  margin-bottom: 2px;
+  transition: background var(--transicao);
 }
 
-.linha-do-tempo p {
+.passo > summary::-webkit-details-marker {
+  display: none;
+}
+
+.passo > summary:hover {
+  background: var(--papel);
+}
+
+.passo__seta {
+  flex-shrink: 0;
+  transition: transform var(--transicao);
+}
+
+.passo[open] > summary .passo__seta {
+  transform: rotate(90deg);
+}
+
+.passo__titulo {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tinta);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* A prévia da fala some antes do título quando falta largura: saber QUE o cliente
+   escreveu vale mais do que ler metade do que ele escreveu. */
+.passo__previa {
+  font-size: 12px;
+  color: var(--tinta-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Aberto, a prévia sai: o texto inteiro está logo abaixo, e repetir o começo dele
+   na mesma altura é ruído. */
+.passo[open] > summary .passo__previa {
+  display: none;
+}
+
+.passo__corpo {
+  padding: 2px var(--e-2) 10px 29px;
+}
+
+.passo__fala {
   margin: 0;
   font-size: 13px;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
 
-.linha-do-tempo__json {
+.passo__texto {
   margin: 0;
-  font-family: var(--f-mono);
-  font-size: 11.5px;
-  background: var(--papel);
-  border-radius: 4px;
-  padding: 6px 8px;
-  max-height: 110px;
-  overflow: auto;
+  font-size: 12.5px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.passo__vazio {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tinta-suave);
+}
+
+/* ------------------------------------ os campos de uma chamada, sem JSON */
+
+.campos {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  background: var(--papel);
+  border-radius: var(--raio);
+  padding: 8px 10px;
+}
+
+.campos > div {
+  display: flex;
+  gap: var(--e-2);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.campos dt {
+  font-size: 12px;
+  color: var(--tinta-suave);
+  flex-shrink: 0;
+}
+
+.campos dd {
+  margin: 0;
+  font-size: 12.5px;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* Um objeto ou tabela aninhada ocupa a largura inteira: espremê-lo na coluna
+   da direita é como o JSON ficava — legível só para quem já sabia o que era. */
+.campos__bloco {
+  display: block !important;
+}
+
+.campos__bloco > dt {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.campos__bloco > dd {
+  text-align: left;
+}
+
+.campos .campos {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+}
+
+.campos__fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.ficha {
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+}
+
+.tabelinha {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tabelinha th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--tinta-suave);
+  border-bottom: 1px solid var(--linha);
+  padding: 3px 8px 3px 0;
+  white-space: nowrap;
+}
+
+.tabelinha td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--linha);
+  vertical-align: top;
+}
+
+.tabelinha tr:last-child td {
+  border-bottom: none;
+}
+
+.tabelinha th.num,
+.tabelinha td.num {
+  text-align: right;
+  padding-right: 0;
 }
 
 .vereditos {
@@ -658,39 +871,6 @@ body {
 
 /* --------------------------------------------------------- configurações */
 
-.modelos {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.modelos__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--e-3);
-  width: 100%;
-  min-height: 40px;
-  padding: 0 var(--e-3);
-  border: 1px solid var(--linha);
-  border-radius: var(--raio);
-  background: var(--cartao);
-  font-size: 13px;
-  color: var(--tinta);
-}
-
-.modelos__item[data-atual] {
-  border-color: var(--verde);
-  background: var(--verde-fundo);
-}
-
-.modelos__item:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .provedores {
   display: flex;
   gap: var(--e-3);
@@ -710,35 +890,22 @@ body {
   background: var(--cartao);
 }
 
-.prompt summary {
+.prompt__origem {
   display: flex;
   align-items: center;
-  gap: var(--e-3);
+  gap: 5px;
   flex-wrap: wrap;
-  padding: var(--e-3);
-  cursor: pointer;
-  min-height: 44px;
-}
-
-.prompt__nome {
-  font-weight: 600;
-}
-
-.prompt__sha {
-  font-size: 11px;
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  font-size: 11.5px;
   color: var(--tinta-suave);
+}
+
+.prompt__origem .mono {
+  font-size: 11px;
   background: var(--papel);
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 4px;
-}
-
-.prompt__arquivo {
-  font-size: 11px;
-  color: var(--tinta-suave);
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
 }
 
 .prompt__texto {

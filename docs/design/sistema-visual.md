@@ -29,9 +29,9 @@ o que muda é a densidade e a temperatura.
 | Pattern | *Trust & Authority + Conversion* — hero de credibilidade, prova, visão da solução, CTA | **Adotado** na estrutura da landing |
 | Style | *Accessible & Ethical* — contraste 4.5:1, navegação por teclado, foco visível, reduced-motion, alvo 44×44 | **Adotado como requisito**, não como sugestão |
 | Paleta | navy `#0F172A` + azul `#0369A1` ("Professional navy + blue CTA") | **Recusada.** É o SaaS genérico que o PO descartou nominalmente. Mantida a paleta terrosa dos diagramas do repo — mas submetida à régua de contraste do style acima, que reprovou um tom (abaixo) |
-| Tipografia | *SaaS Mobile Boutique*: **Calistoga** + **Inter** + **JetBrains Mono** — "warm, editorial, human warmth", B2B SaaS e dashboards | **Adotada integralmente.** É exatamente o problema dos dois registros: a serifa quente serve o empório, a Inter serve a tabela densa, e a mono serve dinheiro e id |
+| Tipografia | *SaaS Mobile Boutique*: **Calistoga** + **Inter** + **JetBrains Mono** — "warm, editorial, human warmth", B2B SaaS e dashboards | **Adotada com uma troca.** A serifa quente serve o empório e a mono serve dinheiro e id, mas a Inter saiu no lugar da **Nunito** por decisão do PO (ver "O corpo é Nunito", abaixo) |
 | Ícones | **Phosphor** | **Adotado, e um set só** |
-| Gráfico: KPI contra alvo | *Bullet chart* (Performance vs Target, compacto; grid de bullets para 3+ KPIs) | **Adotado** para o p95 do primeiro token contra os 3s do RNF-4 |
+| Gráfico: KPI contra alvo | *Bullet chart* (Performance vs Target, compacto; grid de bullets para 3+ KPIs) | **Adotado** para o tempo até a resposta começar, contra a meta de 3s (RNF-4 — que é como o requisito se chama aqui e **nunca** na tela) |
 | Gráfico: série temporal | *Line chart*; nunca distinguir série só por matiz | **Adotado** para custo ao longo do tempo |
 | Gráfico: categórico | a busca devolveu radar/scatter — **não é o caso**. A própria ficha nomeia *grouped bar* como a alternativa quando a comparação precisa ser precisa | **Barra horizontal ordenada** para recusas por motivo. Registrado que aqui a escolha foi nossa, e não um match do banco |
 | Estado de conexão perdida | **nenhum match no banco** (duas tentativas) | Regra escrita por nós, abaixo, e marcada como tal |
@@ -67,9 +67,17 @@ demo: a tela vai ser projetada.
 
 ```
 Calistoga        títulos e números de destaque      display
-Inter            corpo, UI, tabelas                 400 / 500 / 600
+Nunito           corpo, UI, tabelas                 400 / 500 / 600 / 700
 JetBrains Mono   dinheiro, id, token, latência      400 / 500
 ```
+
+> **O corpo é Nunito, e não a Inter que a skill recomendou.** Decisão do PO ao ver o painel
+> montado: a Inter é uma grotesca fechada, desenhada para densidade máxima, e o resultado
+> ficou frio para um empório mineiro e cansativo de ler numa tabela por muito tempo. A Nunito
+> é humanista de terminais arredondados — contraforma mais aberta, `l` que não se confunde com
+> `1`, e uma voz que combina com a marca sem perder a legibilidade em 13px. Métrica parecida o
+> bastante para não mexer em nenhuma escala abaixo; um peso a mais (800) disponível para o
+> destaque no painel.
 
 **Dinheiro e id nunca em fonte proporcional.** `R$ 1.920,00` e `R$ 1.020,00` precisam alinhar
 na coluna, e um `session_id` precisa ser conferível caractere a caractere. É a mesma razão
@@ -150,6 +158,29 @@ layout.*
 - Números alinhados à direita, em mono, com casas fixas.
 - Linha inteira clicável, **e** um alvo de 44×44 para a ação — o requisito de toque vale no
   desktop porque a demo pode ser num laptop com trackpad.
+
+### Vocabulário — a regra que não veio de skill nenhuma
+
+**Nenhum nome de variável, chave de JSON, sigla de requisito ou nome de subagente aparece na
+tela.** O painel é operado por quem vende, não por quem escreveu o backend; a primeira versão
+mostrava o argumento de cada tool como `<pre>` de JSON e chamava o requisito de latência de
+"RNF-4", e as duas coisas são legíveis exatamente para quem não precisa da tela.
+
+A tradução vive em `frontend/src/admin/traducao.tsx` e obedece a três regras:
+
+1. **Cada ferramenta tem duas frases**, uma para o que o agente pediu e outra para o que o
+   sistema respondeu — é a regra de ouro ficando visível para quem nunca vai abrir um trace.
+2. **Campo sem rótulo cadastrado não some**: `valor_por_pessoa` vira "Valor por pessoa" pela
+   regra geral. Esconder um dado porque ninguém atualizou o dicionário seria pior do que um
+   rótulo tosco, e uma tool nova nasce legível.
+3. **Traduzir é escolher palavra, nunca calcular.** Todo número exibido chega pronto do
+   backend. Um "helper" de tradução que somasse um subtotal seria conta de dinheiro no
+   navegador com outro nome — a métrica da spec é zero, e é aqui que ela vazaria sem
+   aparecer no diff como uma conta.
+
+O corolário para os indicadores: **cada número diz o que mede, em uma linha, ao lado dele.**
+"p50 do primeiro token" virou "Numa resposta comum — metade das respostas começou a aparecer
+antes disto". O nome curto é para o eixo do gráfico; a frase é para a pessoa.
 
 ## Gráficos
 

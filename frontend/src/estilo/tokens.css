@@ -6,7 +6,7 @@
  * de texto (3.72 sobre papel) e "pendente" é justamente um badge com palavra dentro.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Calistoga&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Calistoga&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   /* ------------------------------------------------------------- cor */
@@ -27,8 +27,12 @@
   --vermelho-fundo: #f7e9e9;
 
   /* ------------------------------------------------------ tipografia */
+  /* O corpo é Nunito: terminais arredondados, contraforma aberta e um `l` que não
+   * se confunde com `1`. Trocou a Inter, cujo desenho é mais fechado e mais frio do
+   * que um empório mineiro pede — e mais duro de ler numa tabela densa por muito
+   * tempo. A escala de peso é a mesma, então nenhum componente muda de tamanho. */
   --f-display: Calistoga, Georgia, "Times New Roman", serif;
-  --f-corpo: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-corpo: Nunito, -apple-system, "Segoe UI", Roboto, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
 
   /* --------------------------------------------------------- espaço */
@@ -113,6 +117,21 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--tinta-suave);
+}
+
+/* Rótulo que é FRASE, e não etiqueta.
+ *
+ * A mono maiúscula com tracking funciona em "PEDIDOS" e vira sopa em "TEMPO ATÉ A
+ * RESPOSTA COMEÇAR A APARECER" — que é exatamente o tipo de rótulo que o painel
+ * passou a usar quando cada indicador ganhou nome de gente. Etiqueta curta continua
+ * mono; título de seção e rótulo de gráfico usam a fonte do corpo. */
+.rotulo--frase {
+  font-family: var(--f-corpo);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--tinta);
 }
 
 /* -------------------------------------------------------------- estados

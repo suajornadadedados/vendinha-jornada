@@ -1,17 +1,19 @@
 // A casca do painel: navegação, sino do HITL e o indicador de conexão.
 //
-// **Não há roteador.** A navegação é estado, e é deliberado: `admin.html` é uma
-// entrada estática servida por caminho fixo, e um `BrowserRouter` exigiria reescrita
-// no servidor para sobreviver a um F5 numa sub-rota. A métrica da spec é "jornada
-// completa sem recarregar a página" — que este desenho satisfaz sem trazer a máquina
-// que só serviria para URLs compartilháveis que ninguém pediu.
+// **A navegação é por rota.** A versão anterior guardava a seção em `useState` e
+// argumentava que um roteador só serviria para URLs compartilháveis que ninguém
+// tinha pedido. O PO pediu: cada seção do painel tem endereço próprio
+// (`/admin`, `/admin/conversas`, `/admin/pedidos`, …), uma conversa aberta é um
+// link que se manda para alguém, e o botão "voltar" do navegador faz o que a
+// pessoa espera. O custo é a reescrita de `/admin/*` para `admin.html`, que está
+// no `vite.config.ts` — em produção é a mesma linha no servidor de estáticos.
 //
 // **O indicador de conexão é o requisito difícil.** A verificação independente derruba
 // o backend com a tela aberta: enquanto desconectado, o conteúdo esmaece e a barra
 // diz desde quando o dado é velho, em vez de continuar apresentando o último estado
 // conhecido como se fosse o atual.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import {
   Bell,
   ChartLineUp,
@@ -23,29 +25,49 @@ import {
   WifiHigh,
   WifiSlash,
 } from "@phosphor-icons/react";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { useEventos } from "./dados";
-import { Config, Conversas, Fila, Metricas, Pedidos, VisaoGeral } from "./Telas";
 import { hora, reais } from "./formato";
 
 const SECOES = [
-  { id: "visao", nome: "Visão geral", icone: SquaresFour },
-  { id: "conversas", nome: "Conversas", icone: ChatsCircle },
-  { id: "fila", nome: "Aprovações", icone: SealCheck },
-  { id: "pedidos", nome: "Pedidos", icone: Receipt },
-  { id: "metricas", nome: "Métricas", icone: ChartLineUp },
-  { id: "config", nome: "Configurações", icone: Gear },
+  { rota: "/", nome: "Visão geral", icone: SquaresFour, fim: true },
+  { rota: "/conversas", nome: "Conversas", icone: ChatsCircle, fim: false },
+  { rota: "/aprovacoes", nome: "Aprovações", icone: SealCheck, fim: false },
+  { rota: "/pedidos", nome: "Pedidos", icone: Receipt, fim: false },
+  { rota: "/metricas", nome: "Métricas", icone: ChartLineUp, fim: false },
+  { rota: "/configuracoes", nome: "Configurações", icone: Gear, fim: false },
 ] as const;
 
-const JANELAS = ["24h", "7d", "30d"] as const;
+const JANELAS = [
+  { id: "24h", nome: "24 h" },
+  { id: "7d", nome: "7 dias" },
+  { id: "30d", nome: "30 dias" },
+] as const;
+
+/** A janela vive na URL: `/admin/metricas?janela=7d` é um link que abre no mesmo lugar. */
+export const JANELA_PADRAO = "24h";
+
+export function useJanela(): [string, (valor: string) => void] {
+  const [busca, setBusca] = useSearchParams();
+  const atual = busca.get("janela") ?? JANELA_PADRAO;
+  const trocar = (valor: string) => {
+    const proxima = new URLSearchParams(busca);
+    if (valor === JANELA_PADRAO) proxima.delete("janela");
+    else proxima.set("janela", valor);
+    setBusca(proxima, { replace: true });
+  };
+  return [atual, trocar];
+}
 
 export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
-  const [secao, setSecao] = useState<string>("visao");
-  const [janela, setJanela] = useState<string>("24h");
+  const navegar = useNavigate();
+  const local = useLocation();
+  const [janela, trocarJanela] = useJanela();
 
   const perdeuAcesso = useCallback(() => {
     toast.error("O token do operador não foi aceito.");
@@ -61,12 +83,16 @@ export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
     if (!painel.aviso) return;
     toast(`Nota aguardando decisão — ${painel.aviso.razaoSocial}`, {
       description: `${reais(painel.aviso.total)} · nenhuma nota sai sem uma pessoa aprovar`,
-      action: { label: "Abrir a fila", onClick: () => setSecao("fila") },
+      action: { label: "Abrir a fila", onClick: () => navegar("/aprovacoes") },
     });
     painel.limparAviso();
-  }, [painel]);
+  }, [painel, navegar]);
 
   const desconectado = painel.conexao === "desconectado";
+  const secao = SECOES.find((s) =>
+    s.fim ? local.pathname === "/" : local.pathname.startsWith(s.rota),
+  );
+  const comJanela = local.pathname === "/" || local.pathname.startsWith("/metricas");
 
   return (
     <div className="painel">
@@ -76,19 +102,19 @@ export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
           <span className="painel__marca-cauda mono">painel</span>
         </div>
         <nav aria-label="Seções do painel">
-          {SECOES.map(({ id, nome, icone: Icone }) => (
-            <button
-              key={id}
-              onClick={() => setSecao(id)}
-              data-ativa={id === secao ? "" : undefined}
-              aria-current={id === secao ? "page" : undefined}
+          {SECOES.map(({ rota, nome, icone: Icone, fim }) => (
+            <NavLink
+              key={rota}
+              to={rota}
+              end={fim}
+              className={({ isActive }) => (isActive ? "ativa" : undefined)}
             >
               <Icone size={18} weight="regular" aria-hidden="true" />
               {nome}
-              {id === "fila" && painel.pendentes > 0 && (
+              {rota === "/aprovacoes" && painel.pendentes > 0 && (
                 <Badge className="ml-auto">{painel.pendentes}</Badge>
               )}
-            </button>
+            </NavLink>
           ))}
         </nav>
         <p className="painel__nota">
@@ -98,18 +124,18 @@ export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
 
       <div className="painel__conteudo">
         <header className="painel__topo">
-          <h1>{SECOES.find((s) => s.id === secao)?.nome}</h1>
+          <h1>{secao?.nome ?? "Painel"}</h1>
 
           <div className="painel__ferramentas">
-            {(secao === "visao" || secao === "metricas") && (
-              <div className="janelas" role="group" aria-label="Janela temporal">
+            {comJanela && (
+              <div className="janelas" role="group" aria-label="Período">
                 {JANELAS.map((opcao) => (
                   <button
-                    key={opcao}
-                    onClick={() => setJanela(opcao)}
-                    data-ativa={opcao === janela ? "" : undefined}
+                    key={opcao.id}
+                    onClick={() => trocarJanela(opcao.id)}
+                    data-ativa={opcao.id === janela ? "" : undefined}
                   >
-                    {opcao}
+                    {opcao.nome}
                   </button>
                 ))}
               </div>
@@ -134,7 +160,11 @@ export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
             </span>
 
             {painel.pendentes > 0 && (
-              <button className="sino" onClick={() => setSecao("fila")} aria-label="Ir para a fila">
+              <button
+                className="sino"
+                onClick={() => navegar("/aprovacoes")}
+                aria-label="Ir para as aprovações"
+              >
                 <Bell size={18} weight="fill" aria-hidden="true" />
                 <span className="sino__badge">{painel.pendentes}</span>
               </button>
@@ -155,12 +185,7 @@ export function Admin({ aoPerderAcesso }: { aoPerderAcesso: () => void }) {
         {/* Esmaecer é a diferença entre "número velho apresentado como atual" e
             "número velho rotulado como velho". A barra acima diz desde quando. */}
         <main className={`painel__main ${desconectado ? "painel__main--velho" : ""}`}>
-          {secao === "visao" && <VisaoGeral janela={janela} irPara={setSecao} />}
-          {secao === "conversas" && <Conversas />}
-          {secao === "fila" && <Fila />}
-          {secao === "pedidos" && <Pedidos />}
-          {secao === "metricas" && <Metricas janela={janela} />}
-          {secao === "config" && <Config />}
+          <Outlet />
         </main>
       </div>
     </div>

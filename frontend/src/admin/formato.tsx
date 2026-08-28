@@ -142,10 +142,17 @@ export function Estado({ status }: { status: string | null | undefined }) {
   );
 }
 
+/**
+ * O motivo da devolução, em português de quem opera a loja.
+ *
+ * Curto porque vira rótulo de eixo, e explícito porque "Orçamento" sozinho não diz
+ * se estourou ou se faltou informar. A versão longa, para o corpo de texto, está em
+ * `traducao.tsx` (`MOTIVO_DO_PROBLEMA`).
+ */
 export const NOME_DO_MOTIVO: Record<string, string> = {
-  orcamento: "Orçamento",
-  slot: "Item obrigatório",
+  orcamento: "Estourou o orçamento",
+  slot: "Faltou item obrigatório",
   restricao: "Restrição alimentar",
-  disponibilidade: "Disponibilidade",
-  composicao_vazia: "Composição vazia",
+  disponibilidade: "Produto indisponível",
+  composicao_vazia: "Sem nenhum item",
 };

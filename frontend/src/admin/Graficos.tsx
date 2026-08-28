@@ -14,26 +14,33 @@
 import { Ausente, inteiro, milissegundos } from "./formato";
 
 /**
- * Bullet chart: um valor contra um alvo. O p95 do primeiro token contra os 3s do
- * RNF-4.
+ * Bullet chart: um valor contra um alvo.
  *
  * O alvo é uma **marca no eixo**, não uma faixa colorida de fundo: a pergunta é
  * "passou da linha?", e a linha precisa ser uma linha. A cor da barra muda com o
  * veredito, mas o texto ao lado diz o mesmo — a skill proíbe cor sozinha.
+ *
+ * `explica` e `alvoRotulo` existem porque o gráfico é lido por quem opera a loja, e
+ * não por quem escreveu a spec: o número sozinho não diz o que mede, e a sigla do
+ * requisito interno não significa nada para essa pessoa.
  */
 export function Bullet({
   valor,
   alvo,
   rotulo,
+  explica,
+  alvoRotulo = "meta",
 }: {
   valor: number | null | undefined;
   alvo: number;
+  explica?: string;
+  alvoRotulo?: string;
   rotulo: string;
 }) {
   if (valor === null || valor === undefined) {
     return (
       <div className="grafico">
-        <p className="rotulo">{rotulo}</p>
+        <p className="rotulo rotulo--frase">{rotulo}</p>
         <p className="grafico__vazio">
           <Ausente porque="nenhum turno com primeiro token medido nesta janela" /> sem amostra
           nesta janela
@@ -50,7 +57,7 @@ export function Bullet({
   return (
     <div className="grafico">
       <div className="grafico__topo">
-        <p className="rotulo">{rotulo}</p>
+        <p className="rotulo rotulo--frase">{rotulo}</p>
         <p className={`grafico__valor num ${dentro ? "grafico__valor--ok" : "grafico__valor--fora"}`}>
           {milissegundos(valor)}
         </p>
@@ -60,8 +67,8 @@ export function Bullet({
         preserveAspectRatio="none"
         className="grafico__bullet"
         role="img"
-        aria-label={`${rotulo}: ${milissegundos(valor)}, alvo ${milissegundos(alvo)}, ${
-          dentro ? "dentro do alvo" : "acima do alvo"
+        aria-label={`${rotulo}: ${milissegundos(valor)}, ${alvoRotulo} de ${milissegundos(alvo)}, ${
+          dentro ? "dentro da meta" : "acima da meta"
         }`}
       >
         <rect x="0" y="3" width="100" height="6" rx="3" fill="var(--linha)" />
@@ -79,14 +86,15 @@ export function Bullet({
         <rect x={posicaoDoAlvo - 0.25} y="1" width="0.5" height="10" fill="var(--tinta)" />
       </svg>
       <p className="grafico__nota">
-        alvo {milissegundos(alvo)} · {dentro ? "dentro" : "acima"} — RNF-4
+        {alvoRotulo}: {milissegundos(alvo)} · {dentro ? "dentro da meta" : "acima da meta"}
       </p>
+      {explica && <p className="grafico__explica">{explica}</p>}
     </div>
   );
 }
 
 /**
- * Barras horizontais ordenadas. Recusas do validador por motivo.
+ * Barras horizontais ordenadas. As devoluções da conferência, por motivo.
  *
  * É a regra de ouro virando gráfico: cada barra é uma vez em que o modelo propôs e o
  * código recusou. Uma cor só — a categoria está no rótulo à esquerda.
@@ -103,7 +111,7 @@ export function BarrasOrdenadas({
   if (dados.length === 0) {
     return (
       <div className="grafico">
-        <p className="rotulo">{rotulo}</p>
+        <p className="rotulo rotulo--frase">{rotulo}</p>
         <p className="grafico__vazio">{vazio}</p>
       </div>
     );
@@ -113,7 +121,7 @@ export function BarrasOrdenadas({
 
   return (
     <div className="grafico">
-      <p className="rotulo">{rotulo}</p>
+      <p className="rotulo rotulo--frase">{rotulo}</p>
       <ul className="barras">
         {dados.map((linha) => (
           <li key={linha.chave}>
@@ -150,7 +158,7 @@ export function Linha({
   if (pontos.length < 4) {
     return (
       <div className="grafico">
-        <p className="rotulo">{rotulo}</p>
+        <p className="rotulo rotulo--frase">{rotulo}</p>
         <p className="grafico__vazio">
           {pontos.length === 0
             ? "sem dados nesta janela"
@@ -175,7 +183,7 @@ export function Linha({
   return (
     <div className="grafico">
       <div className="grafico__topo">
-        <p className="rotulo">{rotulo}</p>
+        <p className="rotulo rotulo--frase">{rotulo}</p>
         {ultimo && <p className="grafico__valor num">{formatar(ultimo.valor)}</p>}
       </div>
       <svg

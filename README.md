@@ -60,7 +60,7 @@ vê o atendimento acontecer — é preciso Node 22 e mais dois comandos, num seg
 
 ```bash
 make web-install           # npm install --prefix frontend
-make web                   # http://localhost:5173 (landing) e /admin.html (painel)
+make web                   # http://localhost:5173 (landing) e /admin (painel)
 ```
 
 A porta 5173 é fixa (`strictPort`) porque ela está na allowlist de CORS do backend
