@@ -1173,7 +1173,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     texto = relatorio(resultados)
     print(texto)
     if args.saida is not None:
-        args.saida.write_text(texto + "\n", encoding="utf-8")
+        # `mkdir` antes de escrever, e o `except` largo em volta: este arquivo e o
+        # produto de uma execucao que ja custou dinheiro e minutos, e perde-lo por
+        # um diretorio inexistente ou um caminho sem permissao seria pagar duas
+        # vezes pelo mesmo resultado. Aconteceu na S-06 — um caminho relativo
+        # resolvido a partir de `backend/` derrubou o relatorio das cinco
+        # sub-suites depois de todas terem rodado.
+        #
+        # O veredito nao muda: ele ja esta no `return` abaixo e o texto ja foi
+        # impresso. O que se perde e a copia em arquivo, e e sobre isso que o aviso
+        # fala.
+        try:
+            args.saida.parent.mkdir(parents=True, exist_ok=True)
+            args.saida.write_text(texto + "\n", encoding="utf-8")
+        except OSError as nao_deu:
+            print(
+                f"AVISO: nao consegui gravar o relatorio em {args.saida}: {nao_deu}. "
+                f"Ele esta acima, no stdout — o veredito abaixo nao muda.",
+                file=sys.stderr,
+            )
 
     return 0 if all(resultado.aprovado for resultado in resultados) else 1
 

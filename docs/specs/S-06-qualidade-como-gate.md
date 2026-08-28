@@ -1,7 +1,7 @@
 ---
 id: S-06
 titulo: Qualidade como gate (EDD)
-status: rascunho
+status: em-revisao
 branch: spec/s-06-evals-gate
 issue: #7
 adrs: [ADR-006, ADR-014]
@@ -121,13 +121,75 @@ Cenário: diff que não pode ter mudado nada não paga a suíte
 Medidas na Fase 0, não estimadas — as da versão anterior (≤10 min, ≤US$ 0,50) foram escritas antes
 de existir medição e não se sustentam.
 
-| Métrica | Alvo | Como medir |
-|---|---|---|
-| Custo da suíte inteira | ≤ US$ 2,00 | soma do `gasto` no relatório (~US$ 1,35 hoje, extrapolado de 897k tokens medidos em 17 casos) |
-| Duração do job, camada 1 | ≤ 25 min | CI, com concorrência 4 |
-| Duração do PR que não toca o agente | ≤ 1 min | CI — o script sai cedo |
-| Variância entre execuções | 0 casos virando | duas execuções seguidas da mesma sub-suíte, mesmo commit (REQ-2) |
-| Casos sem execução | 0 de 23 | hoje são 4 (REQ-4) |
+| Métrica | Alvo | Como medir | **Medido** |
+|---|---|---|---|
+| Custo da suíte inteira | ≤ US$ 2,00 | soma do `gasto` no relatório (~US$ 1,35 hoje, extrapolado de 897k tokens medidos em 17 casos) | **US$ 1,21** (1,15 M tokens, 98,7% entrada) |
+| Duração do job, camada 1 | ≤ 25 min | CI, com concorrência 4 | **3,3 min** para a suíte INTEIRA |
+| Duração do PR que não toca o agente | ≤ 1 min | CI — o script sai cedo | **segundos**: sai antes de subir a infra |
+| Variância entre execuções | 0 casos virando | duas execuções seguidas da mesma sub-suíte, mesmo commit (REQ-2) | **0 de 52 itens** de veredito |
+| Casos sem execução | 0 de 23 | hoje são 4 (REQ-4) | **0** |
+
+Os relatórios estão em `docs/specs/relatorios/S-06-suite-completa.md` (consolidado),
+`S-06-variancia-temperature.md` (o A/B) e `S-06-suite-completa/` (caso a caso).
+
+**A suíte reprova: 14 de 23 aprovados.** Isso não é métrica falhada — é o portão dizendo, pela
+primeira vez sobre o corpus inteiro e com número reprodutível, onde o agente não está bom. A S-03
+saiu de 0 de 6 para 5 de 6; as outras oito reprovações são medição nova, não regressão desta branch,
+e o que fazer com cada uma é decisão do PO. Nenhuma se conserta editando caso (ADR-006, CODEOWNERS).
+
+## Descobertas
+
+**DESC-1 — o REQ-4 descreve a causa errada, e o trabalho é o mesmo.** Ele diz que os quatro casos
+`spec: S-05` estavam *"recusados por terem turno `de: operador`"*. Só **dois** têm (`golden-004` e
+`golden-011`). O `golden-012` e o `adversarial-002` passariam pela guarda e mesmo assim não rodavam,
+por uma razão estrutural: `SPECS_COM_CHECKOUT` não incluía a S-05, então `--spec S-05` montava só a
+lane de recomendação, e `_monta_o_grafo` não passava `fiscal=` — com isso `consultar_pedido` devolvia
+`status_nf="nao_aplicavel"` e os `fatos_ancorados` reprovavam por campo ausente. Corrigido junto; o
+registro fica porque a spec afirmava uma causa que não era a única.
+
+**DESC-2 — a `golden-006` não fecha por prompt, e a DESC-1 da S-03 já dizia por quê.** Ela é o
+único caso da S-03 que continua reprovando, com os **sete critérios em prosa passando** e só o portão
+determinístico apontando `disponivel='<nenhuma chamada>'`. O caso ancora `disponivel` em
+`tool:detalhar_produto` e **está certo em ancorar**. O problema é que `buscar_produtos` já devolve
+`disponivel`, então o agente não tem motivo funcional para chamar o detalhe — e quatro rodadas de
+prompt nesta spec confirmaram o que a S-03 mediu: *"não são corrigíveis por prompt, e tentar
+corrigi-las por prompt é exatamente o que `docs/testes.md` recusa"*.
+
+A saída que a DESC-1 da S-03 nomeou continua sendo a única: **tirar `preco` e `disponivel` do
+retorno de `buscar_produtos`**, tornando a regra estrutura em vez de instrução. O PO decidiu manter o
+D-3 na S-03; a decisão volta à mesa com uma medição a mais. **Não implementado aqui** — é mudança de
+contrato de tool, fora do escopo desta spec.
+
+**DESC-3 — três casos da S-05 rodaram pela primeira vez e reprovam, por três causas distintas.**
+Nenhuma delas é o portão errado; todas são achado que só apareceu porque os casos passaram a rodar.
+
+- `golden-012`: `consultar_pedido` **nunca devolve as composições do pedido**. `_com_a_nota(pedido)`
+  é chamada sem `vereditos` (`tools/checkout.py`), então o campo volta vazio sempre. O agente não
+  sabe quais produtos o pedido contém e não tem como chamar `detalhar_produto` para o
+  `prazo_estimado` que o caso exige. É lacuna de produto, não do caso.
+- `golden-011`: o agente responde *"a nota está em conferência"* a partir de um `consultar_pedido` de
+  um turno anterior, sem reconsultar depois da rejeição. **Três variantes de prompt foram medidas e
+  nenhuma mudou o comportamento** — inclusive uma regra mecânica no mesmo formato das que
+  funcionaram. O texto foi removido em vez de ficar no prompt sem efeito: a Fase 0 já tinha
+  estabelecido que instrução que não muda comportamento é peso morto num prefixo que é 98,7% do
+  custo. É a mesma classe da DESC-2, e provavelmente pede a mesma resposta estrutural.
+- `golden-004`: o caso ancora `numero_nota`, mas **a conversa dele não tem turno depois da
+  aprovação** — o operador aprova na última fala. Não existe momento em que o agente possa reportar o
+  número. É defeito de caso, do tipo que a S-04 já corrigiu uma vez movendo o fato de lugar (P-4), e
+  a correção seria acrescentar uma fala de cliente ao final. **Editar caso é decisão do PO**, e por
+  isso está aqui e não no diff.
+
+**DESC-4 — `LLM_TEMPERATURE=` vazia caía no default `0.0` em vez de significar ausente.** Mesma
+classe do `EVALS_JUDGE_MODEL` vazio, e descoberta do mesmo jeito: tentando usar. Corrigido nesta spec
+com validador e teste, porque a primeira tentativa de medir o efeito da temperatura **rodou duas
+vezes a mesma configuração** e produziu um A/B sem dois lados — limpo, plausível e sem valor.
+
+**DESC-5 — o juiz devolveu bytes nulos no lugar de acentos numa execução.** Uma das quatro
+execuções da S-03 gravou 23 `\x00` dentro da evidência (`est\x00 dispon\x00vel`), e as outras não.
+Vem do provedor do juiz, não do runner — `--saida` grava em UTF-8 e as demais execuções saíram
+limpas. Não afeta veredito nenhum: o `atende`/`nao_atende` é campo estruturado, e só a prosa da
+evidência degrada. Registrado porque um relatório com nulo dentro é desagradável de ler e ninguém
+saberia de onde veio.
 
 ## Verificação independente
 

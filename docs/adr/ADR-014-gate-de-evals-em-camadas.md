@@ -1,7 +1,23 @@
 # ADR-014 — Gate de evals em camadas, e o Langfuse como visor
 
-- Status: proposto · Data: 2026-08-28
+- Status: **aceito** · Data: 2026-08-28
 - Decisão relacionada: D17 (docs/decisoes.md) · Riscos: R7, R1, R6
+
+> **Nota de cabeçalho, 2026-08-28 — aceito com a entrega da S-06.** O corpo abaixo não mudou; o que
+> mudou é que ele deixou de descrever um plano e passa a descrever o que existe. As três camadas, o
+> mapa, o terceiro estado do juiz e o Langfuse como visor estão implementados e medidos
+> (`docs/specs/relatorios/S-06-suite-completa.md`).
+>
+> Duas coisas que este ADR previu em prosa e agora têm número: `temperature` pinada leva a variância
+> de **5 itens de veredito para 0** entre execuções — com o veredito da suíte inteira virando de
+> aprovada para reprovada no lado não pinado (`S-06-variancia-temperature.md`) —, e o terceiro estado
+> do juiz fechou os dois casos condicionais que a persuasão por prompt não fechava.
+>
+> Uma que ele **não** previu, e vale registrar aqui porque é consequência do desenho: o visor engole
+> toda exceção por decisão deste ADR, e por isso quebra em silêncio. A primeira execução mandou a
+> suíte inteira para o Langfuse com a chamada de dataset run errada e "deu certo", com zero runs do
+> outro lado. A resposta não foi deixar a exceção subir — isso poria o portão atrás do SaaS —, e sim
+> o runner dizer em voz alta quantos casos chegaram ao visor.
 - Complementa o **ADR-006**, que continua valendo em tudo que não está aqui. Não o substitui: a
   régua continua sendo o caso, continua sendo aprovado-ou-reprovado, e continua não existindo
   arquivo de rubric.

@@ -26,12 +26,14 @@ cd "$REPO_ROOT"
 
 BASE="${EVALS_BASE_REF:-origin/main}"
 TUDO=0
+SAIDA=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --tudo) TUDO=1 ;;
     --diff-de) BASE="$2"; shift ;;
-    *) echo "uso: $0 [--tudo] [--diff-de <ref>]" >&2; exit 1 ;;
+    --saida-em) SAIDA="$2"; shift ;;
+    *) echo "uso: $0 [--tudo] [--diff-de <ref>] [--saida-em <dir>]" >&2; exit 1 ;;
   esac
   shift
 done
@@ -106,7 +108,18 @@ docker compose up -d --wait || { echo "erro: docker compose nao subiu" >&2; exit
 
 # ------------------------------------------------------------------- rodar
 
-RELATORIOS="$(mktemp -d)"
+# No CI o resumo do job e onde se le o relatorio, e um diretorio temporario basta.
+# Fora dele nao ha resumo nenhum, e a execucao que acabou de custar minutos e
+# dinheiro nao pode deixar o resultado so no scrollback do terminal — que e onde
+# ele estava ate esta linha existir. `--saida-em` diz onde guardar, e o caminho e
+# impresso no fim de qualquer jeito.
+# **Absoluto, e nao relativo.** O runner e invocado com `cd backend && ...`, entao
+# um caminho relativo daqui resolve dentro de `backend/` — e a escrita falha
+# DEPOIS de a execucao ter custado dinheiro e minutos, levando o relatorio junto.
+# Aconteceu na primeira execucao da suite inteira desta spec.
+RELATORIOS="${SAIDA:-$(mktemp -d)}"
+mkdir -p "$RELATORIOS"
+RELATORIOS="$(cd "$RELATORIOS" && pwd)"
 FALHOU=0
 
 for SPEC in $SUITES; do
@@ -127,6 +140,9 @@ done
     echo
   done
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+
+echo
+echo "relatorios em: $RELATORIOS"
 
 if [ "$FALHOU" -ne 0 ]; then
   echo
