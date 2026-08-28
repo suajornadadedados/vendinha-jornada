@@ -223,6 +223,12 @@ class Pedidos(Protocol):
 
     async def aguardando_aprovacao_de_nf(self) -> tuple["Pedido", ...]: ...
 
+    async def listar(self, *, limite: int = 50, offset: int = 0) -> tuple[Pedido, ...]: ...
+
+    async def criados_desde(self, desde: datetime) -> tuple[Pedido, ...]: ...
+
+    async def pagos_desde(self, desde: datetime) -> dict[str, datetime]: ...
+
     async def registrar_emissao(self, pedido_id: str) -> None: ...
 
     async def registrar_rejeicao(self, pedido_id: str) -> None: ...
@@ -513,6 +519,55 @@ class PostgresPedidos:
         na_fila = [await self.por_id(linha[0]) for linha in linhas]
         return tuple(pedido for pedido in na_fila if pedido is not None)
 
+    async def _ids(self, sql: str, args: tuple[object, ...]) -> tuple[str, ...]:
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (await conn.execute(sql, args)).fetchall()
+        return tuple(str(linha[0]) for linha in linhas)
+
+    async def _muitos(self, ids: Sequence[str]) -> tuple["Pedido", ...]:
+        """Monta cada pedido pelo caminho que já existe.
+
+        É N+1 e é deliberado: `por_id` faz três consultas para montar cabeçalho,
+        composições e itens, e uma segunda montagem em lote seria a projeção que
+        diverge — exatamente o que `PedidoNaFila` recusa fazer com a nota. A página
+        do painel é de 50, e o limite está no contrato para que continue sendo.
+        """
+        encontrados = [await self.por_id(pedido_id) for pedido_id in ids]
+        return tuple(pedido for pedido in encontrados if pedido is not None)
+
+    async def listar(self, *, limite: int = 50, offset: int = 0) -> tuple["Pedido", ...]:
+        return await self._muitos(
+            await self._ids(
+                "SELECT id FROM pedido ORDER BY criado_em DESC LIMIT %s OFFSET %s",
+                (limite, offset),
+            )
+        )
+
+    async def criados_desde(self, desde: datetime) -> tuple["Pedido", ...]:
+        return await self._muitos(
+            await self._ids(
+                "SELECT id FROM pedido WHERE criado_em >= %s ORDER BY criado_em DESC",
+                (desde,),
+            )
+        )
+
+    async def pagos_desde(self, desde: datetime) -> dict[str, datetime]:
+        """Quando cada pedido teve o pagamento registrado — é a entrada na fila.
+
+        `MIN` porque um gateway reenvia evento e a idempotência guarda o segundo
+        como linha nova de `evento_de_pagamento`: o que interessa é o primeiro, que
+        é quando o pedido de fato passou a esperar decisão.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (
+                await conn.execute(
+                    "SELECT pedido_id, MIN(recebido_em) FROM evento_de_pagamento"
+                    " WHERE recebido_em >= %s GROUP BY pedido_id",
+                    (desde,),
+                )
+            ).fetchall()
+        return {str(linha[0]): linha[1] for linha in linhas}
+
     async def registrar_emissao(self, pedido_id: str) -> None:
         await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_EMITIDA)
 
@@ -548,6 +603,10 @@ class PedidosEmMemoria:
     def __init__(self) -> None:
         self.gravados: dict[str, Pedido] = {}
         self.eventos: set[str] = set()
+        # Quando cada pedido teve o PRIMEIRO pagamento registrado. Separado de
+        # `eventos` porque aquele conjunto é a idempotência e um teste afirma o
+        # seu conteúdo exato; este é a medida de quando a fila começou a esperar.
+        self.pagos: dict[str, datetime] = {}
 
     async def criar(self, pedido: Pedido) -> Pedido:
         self.gravados[pedido.id] = pedido
@@ -569,6 +628,7 @@ class PedidosEmMemoria:
         if evento_id in self.eventos:
             return False
         self.eventos.add(evento_id)
+        self.pagos.setdefault(pedido_id, datetime.now(UTC))
         if pedido.status is StatusDoPedido.AGUARDANDO_PAGAMENTO:
             self.gravados[pedido_id] = pedido.model_copy(
                 update={"status": StatusDoPedido.AGUARDANDO_APROVACAO_NF}
@@ -586,6 +646,24 @@ class PedidosEmMemoria:
                 key=lambda pedido: pedido.criado_em,
             )
         )
+
+    async def listar(self, *, limite: int = 50, offset: int = 0) -> tuple[Pedido, ...]:
+        ordenados = sorted(
+            self.gravados.values(), key=lambda pedido: pedido.criado_em, reverse=True
+        )
+        return tuple(ordenados[offset : offset + limite])
+
+    async def criados_desde(self, desde: datetime) -> tuple[Pedido, ...]:
+        return tuple(
+            sorted(
+                (p for p in self.gravados.values() if p.criado_em >= desde),
+                key=lambda pedido: pedido.criado_em,
+                reverse=True,
+            )
+        )
+
+    async def pagos_desde(self, desde: datetime) -> dict[str, datetime]:
+        return {pedido_id: em for pedido_id, em in self.pagos.items() if em >= desde}
 
     async def registrar_emissao(self, pedido_id: str) -> None:
         await self._desfecho_da_nota(pedido_id, StatusDoPedido.NOTA_EMITIDA)

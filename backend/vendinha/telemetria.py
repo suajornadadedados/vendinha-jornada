@@ -33,6 +33,7 @@ sobre o câmbio do dia em que a linha foi gravada.
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, Protocol
 
 import psycopg
@@ -92,12 +93,50 @@ class ResumoDaSessao(BaseModel):
     pedido_id: str | None = None
 
 
+class VereditoRegistrado(BaseModel):
+    """Uma passagem da composição pelo validador, guardada para a tela ver depois.
+
+    Isto **não** é uma segunda fonte de verdade sobre nada: nenhum estado do produto
+    é derivado desta tabela. É um registro de decisões já tomadas — o mesmo tipo de
+    fato que `evento_de_pagamento` guarda. Sem ele, o gráfico de recusas por motivo
+    só existiria enquanto a aba estivesse aberta, porque o veredito hoje só passa
+    pelo barramento.
+
+    `motivos` guarda o campo tipado (`orcamento`, `slot`, `restricao`, ...) e não a
+    frase: `golden-014` exige que uma recusa por slot seja distinguível de uma por
+    preço sem que ninguém interprete texto, e um gráfico agrupado por frase seria
+    exatamente essa interpretação.
+    """
+
+    session_id: str
+    aprovada: bool
+    tipo_de_evento: str
+    pessoas: int
+    total: Decimal
+    valor_por_pessoa: Decimal
+    motivos: tuple[str, ...] = ()
+    avaliado_em: datetime
+
+
+class RecusaPorMotivo(BaseModel):
+    """Quantas recusas cada motivo produziu numa janela."""
+
+    motivo: str
+    recusas: int
+
+
 class Telemetria(Protocol):
     """A porta. Duas implementações, como todas as outras deste repositório."""
 
     async def abrir_sessao(self, session_id: str, *, canal: str) -> None: ...
 
     async def registrar_turno(self, turno: Turno) -> None: ...
+
+    async def registrar_veredito(self, veredito: VereditoRegistrado) -> None: ...
+
+    async def vereditos(self, session_id: str) -> tuple[VereditoRegistrado, ...]: ...
+
+    async def recusas_desde(self, desde: datetime) -> tuple[RecusaPorMotivo, ...]: ...
 
     async def vincular_pedido(self, session_id: str, pedido_id: str) -> None: ...
 
@@ -146,6 +185,28 @@ CREATE INDEX IF NOT EXISTS turno_por_sessao ON turno (session_id, iniciado_em)
     # tela de métricas faz seq scan de toda a história a cada troca de seletor.
     """
 CREATE INDEX IF NOT EXISTS turno_por_data ON turno (iniciado_em)
+""",
+    # Sem FK, pela mesma razão de `turno`: o veredito é o registro de uma avaliação
+    # que aconteceu, e perdê-lo porque a sessão sumiu perderia o dado do gráfico.
+    """
+CREATE TABLE IF NOT EXISTS veredito_de_composicao (
+    id               bigserial PRIMARY KEY,
+    session_id       text NOT NULL,
+    aprovada         boolean NOT NULL,
+    tipo_de_evento   text NOT NULL,
+    pessoas          integer NOT NULL,
+    total            numeric(12,2) NOT NULL,
+    valor_por_pessoa numeric(10,2) NOT NULL,
+    motivos          text[] NOT NULL DEFAULT '{}',
+    avaliado_em      timestamptz NOT NULL
+)
+""",
+    """
+CREATE INDEX IF NOT EXISTS veredito_por_sessao
+    ON veredito_de_composicao (session_id, avaliado_em)
+""",
+    """
+CREATE INDEX IF NOT EXISTS veredito_por_data ON veredito_de_composicao (avaliado_em)
 """,
 )
 
@@ -317,6 +378,57 @@ class PostgresTelemetria:
             ).fetchall()
         return _uso(linhas)
 
+    async def registrar_veredito(self, veredito: VereditoRegistrado) -> None:
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            await conn.execute(
+                "INSERT INTO veredito_de_composicao (session_id, aprovada, tipo_de_evento,"
+                " pessoas, total, valor_por_pessoa, motivos, avaliado_em)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    veredito.session_id,
+                    veredito.aprovada,
+                    veredito.tipo_de_evento,
+                    veredito.pessoas,
+                    veredito.total,
+                    veredito.valor_por_pessoa,
+                    list(veredito.motivos),
+                    veredito.avaliado_em,
+                ),
+            )
+
+    async def vereditos(self, session_id: str) -> tuple[VereditoRegistrado, ...]:
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (
+                await conn.execute(
+                    "SELECT session_id, aprovada, tipo_de_evento, pessoas, total,"
+                    " valor_por_pessoa, motivos, avaliado_em FROM veredito_de_composicao"
+                    " WHERE session_id = %s ORDER BY avaliado_em",
+                    (session_id,),
+                )
+            ).fetchall()
+        return tuple(_veredito(linha) for linha in linhas)
+
+    async def recusas_desde(self, desde: datetime) -> tuple[RecusaPorMotivo, ...]:
+        """Agrupa por motivo, e um veredito com dois motivos conta nos dois.
+
+        `unnest` e não "o primeiro motivo": uma composição que estourou o orçamento
+        **e** ficou sem bebida quente foi recusada pelas duas coisas, e escolher uma
+        para o gráfico esconderia metade do trabalho que o código fez.
+        """
+        async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as conn:
+            linhas = await (
+                await conn.execute(
+                    "SELECT motivo, COUNT(*) FROM veredito_de_composicao,"
+                    " unnest(motivos) AS motivo"
+                    " WHERE avaliado_em >= %s AND NOT aprovada GROUP BY motivo"
+                    " ORDER BY COUNT(*) DESC, motivo",
+                    (desde,),
+                )
+            ).fetchall()
+        return tuple(
+            RecusaPorMotivo(motivo=str(linha[0]), recusas=int(linha[1])) for linha in linhas
+        )
+
     async def latencias_desde(self, desde: datetime) -> tuple[int, ...]:
         """Os tempos até o primeiro token, ordenados — o percentil é de quem agrega.
 
@@ -334,6 +446,19 @@ class PostgresTelemetria:
                 )
             ).fetchall()
         return tuple(int(linha[0]) for linha in linhas)
+
+
+def _veredito(linha: tuple[Any, ...]) -> VereditoRegistrado:
+    return VereditoRegistrado(
+        session_id=str(linha[0]),
+        aprovada=bool(linha[1]),
+        tipo_de_evento=str(linha[2]),
+        pessoas=int(linha[3]),
+        total=linha[4],
+        valor_por_pessoa=linha[5],
+        motivos=tuple(linha[6] or ()),
+        avaliado_em=linha[7],
+    )
 
 
 def _monta_resumo(
@@ -372,6 +497,7 @@ class TelemetriaEmMemoria:
     def __init__(self) -> None:
         self.abertas: dict[str, ResumoDaSessao] = {}
         self.registrados: list[Turno] = []
+        self.avaliados: list[VereditoRegistrado] = []
 
     async def abrir_sessao(self, session_id: str, *, canal: str) -> None:
         agora = datetime.now(UTC)
@@ -390,6 +516,29 @@ class TelemetriaEmMemoria:
 
     async def registrar_turno(self, turno: Turno) -> None:
         self.registrados.append(turno)
+
+    async def registrar_veredito(self, veredito: VereditoRegistrado) -> None:
+        self.avaliados.append(veredito)
+
+    async def vereditos(self, session_id: str) -> tuple[VereditoRegistrado, ...]:
+        return tuple(
+            sorted(
+                (v for v in self.avaliados if v.session_id == session_id),
+                key=lambda v: v.avaliado_em,
+            )
+        )
+
+    async def recusas_desde(self, desde: datetime) -> tuple[RecusaPorMotivo, ...]:
+        contagem: dict[str, int] = {}
+        for veredito in self.avaliados:
+            if veredito.aprovada or veredito.avaliado_em < desde:
+                continue
+            for motivo in veredito.motivos:
+                contagem[motivo] = contagem.get(motivo, 0) + 1
+        return tuple(
+            RecusaPorMotivo(motivo=motivo, recusas=quantas)
+            for motivo, quantas in sorted(contagem.items(), key=lambda par: (-par[1], par[0]))
+        )
 
     async def vincular_pedido(self, session_id: str, pedido_id: str) -> None:
         existente = self.abertas.get(session_id)
