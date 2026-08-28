@@ -294,6 +294,92 @@ o interrupt.
 | `GET /openapi.json` | as cinco rotas novas presentes (é o que gera o cliente TS da S-07) |
 | Limpeza | os pedidos e os checkpoints de verificação foram removidos; `pedido`, `nota_fiscal` e `aprovacao_de_nf` voltaram a zero |
 
+## Ressalvas da verificação independente — como cada uma fechou
+
+Veredito: **APROVADO COM RESSALVAS** (`docs/specs/relatorios/S-05-verificacao.md`, commit
+`33a6075`). 25 falsificações, 16 reprovaram, **9 sobreviveram** — nenhuma sobre autorização.
+O revisor refez o roteiro manual inteiro contra um Postgres próprio, em dois processos
+separados, e **as quinze linhas se reproduzem**.
+
+O achado positivo mais importante ele confirmou: quebrar o guarda de `fiscal.emitir` não derruba
+os testes de grafo, e forçar a aresta condicional não derruba os de chamada direta. As duas
+guardas são defesa em profundidade **de verdade**, não a mesma checagem escrita duas vezes.
+
+As seis condições de fechamento, na ordem em que o relatório as numerou:
+
+| # | Ressalva | Como fechou |
+|---|---|---|
+| 1 | **A-2 / A-1** a DANFE não era provada campo a campo | código |
+| 2 | **A-3** a asserção do dígito verificador era tautológica | código |
+| 3 | **A-4** o elo *pagamento → interrupt* não tinha teste | código |
+| 4 | **M-1** a precondição de pagamento vivia só como `if` de rota | código |
+| 5 | **M-2** a guarda de transição de `PedidosEmMemoria` sem teste | código |
+| 6 | **M-4** evals vermelhos — decisão do PO, fora da spec | levado ao PO |
+
+**1 — A-2 e A-1.** O achado mais caro, e ele estava certo: o revisor trocou razão social, CNPJ e
+endereço do destinatário na DANFE pelos do **emitente**, e as 898 asserções ficaram verdes. O XML
+tinha onze asserções campo a campo; o PDF não tinha nenhuma — a única cobertura era acidental,
+porque a asserção de IE procurava uma string que por acaso mora naquele quadro. É a ressalva A-1
+da S-04 outra vez, *projetar sete campos e afirmar sobre um*, no outro artefato.
+
+`test_the_danfe_prints_the_buying_company_field_by_field` afirma agora razão social, CNPJ
+formatado, contato, e-mail, `ISENTO` e **as duas linhas de endereço**, todos da compradora — que
+é o que some do arquivo quando a troca acontece.
+
+A tarja ganhou teste próprio, e a aritmética dele é a parte que dá precisão: `TARJA_LONGA` sai em
+**três** lugares (faixa preta, quadro de protocolo, dados adicionais) e `TARJA` sozinha em
+**dois** (marca d'água, título do PDF). Remover a faixa derruba a primeira contagem; remover a
+marca d'água ou o título derruba a segunda. Um `in` simples não distinguiria nenhum dos três.
+
+**2 — A-3.** `assert chave[-1] == digito_da_chave(chave[:43])` chamava a mesma função que gera o
+dígito: fazê-la devolver sempre `"0"` deixava a suíte verde. `docs/testes.md` §4 nomeia o defeito
+com todas as letras. O esperado agora é `CHAVE_ESPERADA`, escrita à mão no arquivo de teste, com
+a data de emissão **pinada** (a chave carrega o `AAMM`, então sem data fixa o valor esperado
+mudaria de mês em mês). O DV foi conferido fora do repositório, com o módulo 11 montado de outro
+jeito: soma 608, resto 3, DV 8. `chave_confere` continua existindo e deixou de ser a asserção
+principal de qualquer teste.
+
+**3 — A-4.** Havia dois testes cobrindo as duas pontas e nenhum ligando as duas: um chamava
+`abrir_fila_da_nota` direto, o outro passava pela rota mas só olhava o status.
+`test_confirming_the_payment_through_the_route_opens_the_persisted_interrupt` pergunta ao
+**checkpointer** depois do `POST /pagamento/mock/{id}/confirmar`, e afirma `next` e `values`.
+
+**4 — M-1, e este é o achado que mais mudou o código.** O revisor provou que `fiscal.emitir`
+emitia nota de um pedido em `aguardando_pagamento` se existisse aprovação: a precondição vivia só
+como `if` na rota. Não era alcançável pelo produto — a rota barra antes de gravar a decisão —, mas
+é exatamente a distinção que `docs/testes.md` §2 faz, e o argumento é o desta própria spec:
+*"uma segunda rota nasceria sem ele"* foi o que pôs o motivo da rejeição no modelo em vez da rota.
+
+A porta única passou a ter **duas precondições, as duas lidas do banco**, com exceções irmãs sob
+uma base comum: `EmissaoNaoAprovada` e `EmissaoSemPagamento`, ambas `EmissaoBloqueada`. A base
+existe para quem só precisa dizer *"a emissão foi barrada"*; as subclasses, para quem precisa
+saber qual falhou.
+
+**5 — M-2.** A guarda que impede um pedido rejeitado de virar emitido não tinha teste em memória —
+e é contra a implementação em memória que as **duas camadas** rodam. Dois testes agora, um por
+sentido.
+
+**6 — M-4.** Levado ao PO como pergunta explícita, fora da spec, porque é suspensão de guardrail
+do `CLAUDE.md` e não decisão de implementação. Ver DESC-8: as três suítes reprovam e o A/B contra
+a `main` mostra a causa como anterior a esta spec.
+
+**Ressalvas não-bloqueantes, e o que foi feito com elas.** **B-1** (namespace `nf:` sem teste)
+fechou junto, e o caminho vale registro: a primeira versão do teste comparava `aget_state` dos
+dois grafos e **sobrevivia à mutação**, porque o LangGraph filtra os valores pelos canais do grafo
+que pergunta e a colisão fica invisível de dentro. A versão que morde pergunta direto ao
+checkpointer. **B-2** (o XML aberto carrega o e-mail do contato) fica declarada: a decisão está
+escrita na rota, e a S-08 herda a superfície. **B-3** é justa e não tem conserto barato: a task 5
+se chama *"integration test"* num repositório cujo ADR-011 nega essa camada — o arquivo entregue
+está no lugar certo (`tests/security/`), mas o nome ficou no histórico do commit `90e5dcd` e é
+citação errada esperando para acontecer. **R-1** e **R-2** são observações sobre a hierarquia da
+spec, não sobre a entrega, e ficam para quem escrever a S-07.
+
+**As 7 falsificações sobreviventes foram refeitas uma a uma e todas passaram a reprovar** — A-1,
+A-2, A-3, A-4, M-1, M-2 e B-1, cada uma nomeando o teste que a pega. A mutação 19 o próprio
+relatório classifica como mutante equivalente, e a M-3 (`PostgresFiscal` sem cobertura
+automatizada) é a lacuna estrutural que `docs/testes.md` §1 declara — não tem conserto dentro
+desta spec.
+
 ### Verificação de mutação registrada
 
 Duas mutações, porque há **duas guardas independentes** e cada uma cobre o que a outra não cobre.

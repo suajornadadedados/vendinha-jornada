@@ -152,11 +152,34 @@ class Aprovacao(BaseModel):
         return Autorizacao(operador=self.operador, decidido_em=self.decidido_em)
 
 
-class EmissaoNaoAprovada(PermissionError):
-    """Tentou-se emitir uma nota sem aprovação registrada. É o incidente da R3.
+class EmissaoBloqueada(PermissionError):
+    """Uma emissão foi recusada por precondição. É o incidente da R3.
 
     `PermissionError` e não `ValueError`: o que aconteceu não foi um dado errado, foi
     uma ação que não podia ser feita. Quem trata a exceção precisa dessa diferença.
+
+    Duas subclasses porque são **duas precondições distintas**, e quem lê o log ou o
+    teste precisa saber qual falhou. A base existe para quem só quer dizer *"a
+    emissão foi barrada"* sem escolher entre elas.
+    """
+
+
+class EmissaoNaoAprovada(EmissaoBloqueada):
+    """Não existe decisão aprovada registrada para este pedido."""
+
+
+class EmissaoSemPagamento(EmissaoBloqueada):
+    """O pedido não foi pago, e nota de coisa não paga é o erro mais caro daqui.
+
+    Esta guarda existia **só como um `if` na rota do operador** (409), e a verificação
+    independente da S-05 mostrou o buraco: bastava existir linha aprovada em
+    `aprovacao_de_nf` para `emitir` emitir nota de um pedido em `aguardando_pagamento`.
+
+    Não era alcançável pelo produto — a rota barra antes de gravar a decisão. Mas é
+    exatamente a distinção que `docs/testes.md` §2 faz: um `if` numa rota produz
+    *correção*, não *garantia*, e *"uma segunda rota nasceria sem ele"* é o argumento
+    que esta mesma spec usou para pôr o motivo da rejeição no modelo em vez da rota.
+    A precondição de pagamento merecia o mesmo tratamento (ressalva M-1).
     """
 
 
@@ -435,10 +458,14 @@ async def emitir(
 ) -> NotaEmitida:
     """A **única** porta de emissão deste repositório — e a invariante da R3.
 
-    Toda a garantia do ADR-003 cabe nas quatro primeiras linhas: a decisão é lida do
-    **banco**, e sem uma decisão aprovada a função levanta antes de tocar no emissor.
-    Não há parâmetro que contorne isso, não há flag, e o estado do grafo não entra na
-    conta — de propósito, porque estado de grafo é escrito por quem retoma o grafo.
+    **Duas precondições, as duas lidas do banco.** A decisão tem que existir e ser
+    aprovação (`EmissaoNaoAprovada`), e o pedido tem que estar pago
+    (`EmissaoSemPagamento`). Não há parâmetro que contorne nenhuma das duas, não há
+    flag, e o estado do grafo não entra na conta — de propósito, porque estado de
+    grafo é escrito por quem retoma o grafo.
+
+    A segunda entrou depois da verificação independente (M-1): ela vivia só como um
+    `if` na rota do operador, e `if` de rota é correção, não garantia.
 
     **A tentativa recusada vira log de aviso.** É o "o incidente é registrado" do
     BDD da spec: uma emissão barrada não é ruído, é alguém ou alguma coisa tendo
@@ -462,14 +489,30 @@ async def emitir(
             f"decisão do operador na fila (ADR-003, RF-3.5)"
         )
 
+    pedido = await pedidos.por_id(pedido_id)
+    if pedido is None:
+        raise PedidoInexistente(pedido_id)
+
+    # **Segunda precondição, e ela é lida do pedido — não da rota.** Aprovar é
+    # necessário e não é suficiente: nota de pedido não pago é o erro mais caro que
+    # esta função poderia cometer, e antes da ressalva M-1 a única coisa que o
+    # impedia era um `if` em `_decidir_pela_fila`. A leitura do pedido subiu para
+    # cá por causa disso — ela ficava depois do atalho de idempotência.
+    if pedido.status is StatusDoPedido.AGUARDANDO_PAGAMENTO:
+        logger.warning(
+            "emissão de NF barrada: o pedido %s não foi pago (status: %s)",
+            pedido_id,
+            pedido.status.value,
+        )
+        raise EmissaoSemPagamento(
+            f"o pedido {pedido_id} ainda não foi pago; a nota só entra na fila depois "
+            f"da confirmação do pagamento (RF-3.1)"
+        )
+
     ja_emitida = await fiscal.nota_de(pedido_id)
     if ja_emitida is not None:
         await pedidos.registrar_emissao(pedido_id)
         return ja_emitida
-
-    pedido = await pedidos.por_id(pedido_id)
-    if pedido is None:
-        raise PedidoInexistente(pedido_id)
 
     numero = await fiscal.proximo_numero()
     emitida = await fiscal.registrar_nota(await emissor.emitir(pedido, numero, decisao.autoriza()))
@@ -674,7 +717,9 @@ __all__ = [
     "SCHEMA",
     "Aprovacao",
     "Decisao",
+    "EmissaoBloqueada",
     "EmissaoNaoAprovada",
+    "EmissaoSemPagamento",
     "EmissaoState",
     "Fiscal",
     "FiscalEmMemoria",

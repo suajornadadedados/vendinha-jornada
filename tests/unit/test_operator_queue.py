@@ -36,13 +36,14 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
+from vendinha import runtime
 from vendinha.app import create_app
 from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
 from vendinha.composicao import TipoDeEvento
 from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.documentos import formatar_cnpj
-from vendinha.fiscal import Decisao, FiscalEmMemoria
+from vendinha.fiscal import Decisao, FiscalEmMemoria, thread_da_nota
 from vendinha.graph import build_graph
 from vendinha.nota import ISENTO, TARJA, MockNFAdapter
 from vendinha.pedidos import (
@@ -578,3 +579,38 @@ def test_a_rejected_order_never_produces_a_document(client: TestClient) -> None:
 
     assert client.get(f"/pedidos/{PEDIDO_ID}/nota.pdf").status_code == 404
     assert client.get(f"/pedidos/{PEDIDO_ID}/nota.xml").status_code == 404
+
+
+# ------------------------------------- do pagamento até o interrupt (REQ-1, A-4)
+
+
+@pytest.mark.risco("R3")
+@pytest.mark.usefixtures("com_token")
+def test_confirming_the_payment_through_the_route_opens_the_persisted_interrupt(
+    client: TestClient, gravados: PedidosEmMemoria
+) -> None:
+    """R3, RF-3.1 — o elo *pagamento confirmado → interrupt persistido*, pela rota.
+
+    **Esta metade do REQ-1 estava prometida e não provada** (ressalva A-4). Havia dois
+    testes cobrindo as duas pontas e nenhum ligando as duas: um chamava
+    `abrir_fila_da_nota` **direto**, sem passar por rota nenhuma; o outro passava pela
+    rota mas só afirmava sobre a fila derivada do **status**. Trocar por `pass` a única
+    chamada de `abrir_fila_da_nota` em `app.py` deixava a suíte inteira verde.
+
+    O que este teste faz é perguntar ao checkpointer. `next` apontando para
+    `aguardar_aprovacao` é a pausa existindo; `values` com um identificador e nada
+    mais é o pointer-not-payload (RNF-6).
+
+    Vale registrar o atenuante que a arquitetura oferece e que este teste não anula:
+    pela D-2 a fila é derivada do banco, então perder esta chamada custaria um caminho
+    a mais — `conduzir_ate_o_fim` recupera a thread inexistente —, nunca um pedido.
+    """
+    gravados.gravados[PEDIDO_ID] = _pedido(StatusDoPedido.AGUARDANDO_PAGAMENTO)
+    emissao = client.app.state.emissao  # type: ignore[attr-defined]
+    assert not runtime.run(emissao.aget_state(thread_da_nota(PEDIDO_ID))).values
+
+    assert client.post(f"/pagamento/mock/{PEDIDO_ID}/confirmar").status_code == 200
+
+    estado = runtime.run(emissao.aget_state(thread_da_nota(PEDIDO_ID)))
+    assert estado.next == ("aguardar_aprovacao",), "a pausa do ADR-003 não foi aberta"
+    assert estado.values == {"pedido_id": PEDIDO_ID}

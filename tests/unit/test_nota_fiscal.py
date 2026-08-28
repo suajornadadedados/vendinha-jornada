@@ -21,6 +21,7 @@ não assina, e é exatamente essa a diferença que o adapter da S-09 vai preench
 """
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -45,9 +46,10 @@ from vendinha.nota import (
     formatar_chave,
 )
 from vendinha.nota.documento import (
+    CODIGO_DA_UF,
     IND_IE_CONTRIBUINTE,
     IND_IE_NAO_CONTRIBUINTE,
-    digito_da_chave,
+    chave_de_acesso,
 )
 from vendinha.nota.xml import NS
 from vendinha.pedidos import ComposicaoDoPedido, Empresa, ItemDoPedido, Pedido
@@ -66,6 +68,29 @@ LINHAS = (
 )
 TOTAL = Decimal("210.00")
 PESSOAS = 20
+
+# A chave de acesso esperada, escrita à mão — e o `EMITIDA_EM` pinado é o que a torna
+# escrevível: os quatro dígitos `AAMM` saem da data de emissão, então sem uma data
+# fixa o valor esperado mudaria de mês em mês.
+#
+#   31 | 2608 | 22333444000181 | 55 | 001 | 000004242 | 1 | 60219664 | 8
+#   UF   AAMM   CNPJ emitente   mod  série   nNF      tp    cNF       DV
+#
+# O DV foi conferido FORA do repositório, com o módulo 11 montado de outro jeito —
+# lista de pesos explícita em vez de contador incremental: soma 608, resto 3, DV 8.
+# É isso que `docs/testes.md` §4 chama de "valor esperado vem de fonte independente",
+# e é o que faltava aqui (ressalva A-3 da verificação da S-05).
+PEDIDO_DA_CHAVE = "pedido-da-nota"
+EMITIDA_EM = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+CHAVE_ESPERADA = "31260822333444000181550010000042421602196648"
+
+# As duas linhas do endereço, como a DANFE as imprime. Literais de propósito: são o
+# valor ESPERADO, e derivá-las do mesmo helper que o código usa seria recalcular a
+# conta do produto dentro do teste.
+ENDERECO_NA_DANFE = (
+    "Rua das Acacias, 240 - sala 12 - Savassi",
+    "Belo Horizonte/MG  CEP 30140-071",
+)
 
 
 def _itens() -> tuple[ItemDoPedido, ...]:
@@ -215,21 +240,48 @@ def test_a_company_with_state_registration_is_issued_as_a_taxpayer(
 
 
 @pytest.mark.risco("R8")
-def test_the_access_key_is_forty_four_digits_whose_check_digit_closes(
+def test_the_access_key_is_the_one_written_down_here_digit_by_digit() -> None:
+    """R8, RF-3.4 — a chave é calculada, e o esperado NÃO sai do código.
+
+    **Esta asserção era tautológica e a verificação independente da S-05 a derrubou**
+    (ressalva A-3): ela fazia `chave[-1] == digito_da_chave(chave[:43])`, chamando a
+    mesma função que gera o dígito. Fazer `digito_da_chave` devolver sempre `"0"`
+    deixava a suíte inteira verde — exatamente o defeito que `docs/testes.md` §4
+    nomeia com todas as letras: *a função do produto não pode ser a régua dela mesma*.
+
+    O que vale agora é `CHAVE_ESPERADA`, escrita à mão neste arquivo. O dígito `8`
+    foi conferido fora do repositório, com o módulo 11 montado de outro jeito (lista
+    de pesos explícita em vez de contador incremental): soma 608, resto 3, DV 8. Cada
+    fatia está comentada, então uma troca de ordem dos campos reprova aqui.
+
+    A data é **pinada** porque a chave carrega o `AAMM` da emissão — sem isso o valor
+    esperado mudaria de mês em mês, e um teste que muda sozinho não é uma régua.
+    """
+    chave = chave_de_acesso(pedido_id=PEDIDO_DA_CHAVE, numero=NUMERO, emitida_em=EMITIDA_EM)
+
+    assert chave == CHAVE_ESPERADA
+    assert len(chave) == 44
+    assert chave.isdigit()
+
+
+@pytest.mark.risco("R8")
+def test_the_slices_of_the_access_key_are_the_ones_the_norm_defines(
     emitida: NotaEmitida,
 ) -> None:
-    """R8, RF-3.4 — a chave é calculada, não sorteada.
+    """R8 — as posições, conferidas sobre a chave que o sistema realmente emitiu.
 
-    Quarenta e quatro dígitos aleatórios teriam a forma certa e o conteúdo errado, e
-    o dia em que alguém colasse a chave num validador seria o dia em que
-    descobriríamos que o "mock fiel" não era.
+    `chave_confere` continua aqui, e continua sendo tautológico sozinho — é por isso
+    que ele **não é a asserção principal de nenhum teste**. Ele vale como afirmação
+    de que a chave emitida em runtime tem a mesma forma da que o teste acima prendeu.
     """
     chave = emitida.nota.chave
 
-    assert len(chave) == 44
-    assert chave.isdigit()
-    assert chave[-1] == digito_da_chave(chave[:43])
     assert chave_confere(chave)
+    assert chave[:2] == f"{CODIGO_DA_UF:02d}"
+    assert chave[6:20] == EMITENTE.cnpj
+    assert chave[20:22] == str(MODELO)
+    assert chave[22:25] == f"{SERIE:03d}"
+    assert chave[25:34] == f"{NUMERO:09d}"
 
 
 @pytest.mark.risco("R8")
@@ -473,3 +525,103 @@ def test_the_endereco_of_the_recipient_survives_a_missing_complement(
     dest = _raiz(emitida).find(f"{{{NS}}}NFe/{{{NS}}}infNFe/{{{NS}}}dest")
     assert dest is not None
     assert dest.find(f"{{{NS}}}enderDest/{{{NS}}}xCpl") is None
+
+
+# ------------------------------------- a DANFE, provada como o XML já era (A-1, A-2)
+#
+# A verificação independente da S-05 trocou razão social, CNPJ e endereço do
+# destinatário na DANFE pelos do EMITENTE, e as 898 asserções ficaram verdes. O XML
+# tinha onze asserções campo a campo; o PDF não tinha nenhuma — a única cobertura era
+# acidental, porque a asserção de IE procurava uma string que por acaso mora naquele
+# quadro.
+#
+# É o mesmo defeito que a A-1 da S-04 nomeou — *projetar sete campos e afirmar sobre
+# um* — e ele voltou no outro artefato. O que segue fecha os dois lados: o documento
+# que a contabilidade da compradora recebe é conferido com o mesmo rigor dos dois
+# jeitos em que ele existe.
+#
+# Os `in` sobre bytes funcionam por causa da D-11 (`pageCompression=0`): o fluxo de
+# conteúdo do PDF sai legível. Foi para isto que aquela decisão foi tomada.
+
+
+@pytest.mark.risco("R8")
+def test_the_danfe_prints_the_buying_company_field_by_field(
+    emitida: NotaEmitida, pedido: Pedido
+) -> None:
+    """R8, RF-3.4, ADR-013 — o destinatário do PDF é a compradora, campo a campo.
+
+    A quebra que este teste existe para pegar é sutil e cara: a DANFE nomeando o
+    **emitente** no quadro do destinatário. O documento continua bonito, o XML
+    continua certo, e o operador aprova uma nota que diz que a Vendinha comprou de si
+    mesma. Procurar os dados **da compradora** é o que a pega — eles somem do arquivo
+    inteiro quando a troca acontece.
+    """
+    danfe = emitida.danfe
+
+    assert pedido.empresa.razao_social.encode() in danfe
+    assert formatar_cnpj(pedido.empresa.cnpj).encode() in danfe
+    assert pedido.empresa.contato_nome.encode() in danfe
+    assert pedido.empresa.contato_email.encode() in danfe
+    assert ISENTO.encode() in danfe, "sem IE informada, o quadro imprime ISENTO"
+
+    for linha in ENDERECO_NA_DANFE:
+        assert linha.encode() in danfe, f"o endereço de entrega não saiu na DANFE: {linha!r}"
+
+
+@pytest.mark.risco("R8")
+def test_the_danfe_carries_the_watermark_and_the_banner_and_not_only_a_footnote(
+    emitida: NotaEmitida,
+) -> None:
+    """R8, RF-3.4 — a tarja está nos dois lugares que o documento promete.
+
+    `danfe.py` argumenta que a tarja aparece duas vezes de propósito: uma **faixa
+    preta** no topo, que sobrevive a uma impressão em preto e branco, e uma **marca
+    d'água** diagonal, que sobrevive a alguém recortar a folha. A verificação
+    independente removeu as duas e a suíte ficou verde — o que segurava a asserção
+    antiga era uma menção lateral no quadro de protocolo, que existe para dizer outra
+    coisa (ressalva A-1).
+
+    A aritmética é a parte que precisa de explicação, e ela é o que dá precisão:
+
+    * `TARJA_LONGA` sai em **três** lugares — faixa preta, quadro de protocolo e
+      dados adicionais;
+    * `TARJA` sozinha (fora da longa) sai em **dois** — marca d'água e título do PDF.
+
+    Remover a faixa derruba a primeira contagem; remover a marca d'água ou o título
+    derruba a segunda. É isso que a asserção de contagem compra sobre um `in` simples,
+    e é por isso que ela vale a rigidez.
+    """
+    danfe = emitida.danfe
+    longas = danfe.count(TARJA_LONGA.encode())
+    sozinhas = danfe.count(TARJA.encode()) - longas
+
+    assert longas == 3, "faixa preta, quadro de protocolo e dados adicionais"
+    assert sozinhas == 2, "marca d'água diagonal e título do PDF"
+
+
+@pytest.mark.risco("R8")
+def test_the_danfe_prints_the_lines_of_the_order_with_their_numbers(
+    emitida: NotaEmitida,
+) -> None:
+    """R8, R1 — a tabela de produtos do PDF traz as mesmas linhas que o XML.
+
+    Os valores vêm de `LINHAS`, e o formato é o **brasileiro** que a DANFE imprime —
+    `78,00` e não `78.00`. Sem isto um erro de formatação de moeda no PDF passaria: o
+    XML usa ponto decimal, e nenhuma asserção olhava a vírgula.
+
+    **Não se afirma sobre o `produto_id`**, e a razão é uma limitação real de leiaute:
+    a coluna `CÓDIGO` tem 26 mm e `_encurtar` corta com reticências o que não cabe —
+    `cafe-moido-tradicional` sai truncado, `requeijao-de-corte` não. O código completo
+    está no `cProd` do XML, que é onde uma máquina o lê; no papel o que identifica a
+    linha para uma pessoa é o nome, e é sobre ele que este teste afirma.
+    """
+    danfe = emitida.danfe
+
+    for _, nome, _, preco, subtotal in LINHAS:
+        assert nome.encode() in danfe
+        assert preco.replace(".", ",").encode() in danfe
+        assert subtotal.replace(".", ",").encode() in danfe
+
+    # O total do pedido, no formato do papel. É o número que o operador confere
+    # contra a fila antes de aprovar.
+    assert f"{TOTAL:.2f}".replace(".", ",").encode() in danfe

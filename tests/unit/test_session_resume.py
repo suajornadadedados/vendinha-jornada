@@ -17,11 +17,12 @@ port (ADR-012), so it is exactly where a test is allowed to stand in.
 """
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.composicao import TipoDeEvento
@@ -289,3 +290,48 @@ def test_the_invoice_graph_state_carries_one_identifier_and_no_payload() -> None
     fiscal. Alargar este conjunto tem que ser um ato deliberado, com revisor olhando.
     """
     assert set(EmissaoState.__annotations__) == {"pedido_id"}
+
+
+@pytest.mark.risco("R9")
+async def test_a_conversation_and_an_invoice_with_the_same_id_do_not_share_a_thread() -> None:
+    """R9, RNF-6 — o namespace `nf:` separa as duas máquinas de estado.
+
+    `fiscal.py` defende em dois lugares que o prefixo impede a thread da nota de
+    colidir com um `session_id` no mesmo checkpointer. Era prosa: apagar o prefixo
+    deixava a suíte verde (ressalva B-1 da verificação da S-05).
+
+    O teste força a colisão que na prática é improvável — os dois são `uuid4` — usando
+    **o mesmo identificador** como sessão e como pedido. Sem o prefixo, o grafo da
+    conversa e o da emissão passariam a ler e escrever o mesmo histórico, e o segundo
+    encontraria `messages` onde espera `pedido_id`.
+    """
+    mesmo_id = "identificador-em-comum"
+    checkpointer = InMemorySaver()
+    pedidos, _ = _pedido_pago()
+    pedidos.gravados[mesmo_id] = pedidos.gravados.pop("pedido-em-espera").model_copy(
+        update={"id": mesmo_id}
+    )
+
+    conversa = build_graph(_model("oi"), checkpointer, _sem_catalogo())
+    await _say(conversa, mesmo_id, "uma mensagem qualquer")
+
+    nota = _grafo_da_nota(pedidos, FiscalEmMemoria(), checkpointer)
+    await abrir_fila_da_nota(nota, mesmo_id)
+
+    # A asserção é sobre o **checkpointer**, e não sobre o estado que cada grafo
+    # devolve. Uma primeira versão deste teste comparava `aget_state` dos dois e
+    # passava mesmo com o prefixo apagado: o LangGraph filtra os valores pelos canais
+    # do grafo que pergunta, então a colisão fica invisível de dentro. Perguntando
+    # direto ao checkpointer, ela aparece — com um prefixo vazio os dois `config`
+    # endereçam a MESMA thread, e os dois checkpoints passam a ser o mesmo.
+    da_conversa = await checkpointer.aget_tuple(session_config(mesmo_id))
+    da_nota = await checkpointer.aget_tuple(cast(RunnableConfig, thread_da_nota(mesmo_id)))
+    assert da_conversa is not None and da_nota is not None
+
+    assert (
+        da_conversa.config["configurable"]["thread_id"]
+        != (da_nota.config["configurable"]["thread_id"])
+    ), "a conversa e a nota do mesmo id caíram na mesma thread"
+    assert "messages" in da_conversa.checkpoint["channel_values"]
+    assert "pedido_id" in da_nota.checkpoint["channel_values"]
+    assert "messages" not in da_nota.checkpoint["channel_values"]

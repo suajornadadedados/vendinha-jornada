@@ -57,7 +57,9 @@ from vendinha.composicao import TipoDeEvento
 from vendinha.fiscal import (
     Aprovacao,
     Decisao,
+    EmissaoBloqueada,
     EmissaoNaoAprovada,
+    EmissaoSemPagamento,
     FiscalEmMemoria,
     abrir_fila_da_nota,
     build_emissao_graph,
@@ -514,3 +516,100 @@ def test_no_adversarial_case_can_name_an_issuing_tool_that_exists(
         "o corpus adversarial deixou de proibir uma ação de emissão; ela é o R3"
     )
     assert registradas.isdisjoint(proibidas_pelo_corpus & NUNCA_SAO_TOOLS)
+
+
+# --------------------------- 7. a segunda precondição: pago (M-1) e as transições
+
+
+@pytest.mark.risco("R3")
+async def test_an_approved_but_unpaid_order_still_cannot_be_issued(
+    fiscal: FiscalEmMemoria,
+) -> None:
+    """R3, RF-3.1 — aprovar é necessário e **não é suficiente**: tem que estar pago.
+
+    A verificação independente da S-05 provou o buraco (ressalva M-1): bastava existir
+    linha aprovada em `aprovacao_de_nf` para `emitir` emitir nota de um pedido em
+    `aguardando_pagamento`. A rota do operador barrava com 409 antes de gravar a
+    decisão, então **não era alcançável pelo produto** — e é exatamente essa a
+    distinção que `docs/testes.md` §2 faz: um `if` numa rota produz *correção*, não
+    *garantia*. *"Uma segunda rota nasceria sem ele"* é o argumento que esta mesma
+    spec usou para pôr o motivo da rejeição no modelo em vez da rota.
+
+    O estado que a falha deixava para trás era pior do que a falha: existia
+    `nota_fiscal`, `/pedidos/{id}/nota.pdf` respondia 200, e `status_da_nota` dizia
+    `nao_aplicavel` ao cliente — porque `_desfecho_da_nota` corretamente se recusa a
+    mover um pedido que não estava aguardando aprovação.
+    """
+    nao_pago = PedidosEmMemoria()
+    nao_pago.gravados[PEDIDO_ID] = _pedido(StatusDoPedido.AGUARDANDO_PAGAMENTO)
+    await fiscal.registrar_decisao(
+        Aprovacao(pedido_id=PEDIDO_ID, decisao=Decisao.APROVADA, operador=OPERADOR)
+    )
+
+    with pytest.raises(EmissaoSemPagamento):
+        await emitir(PEDIDO_ID, pedidos=nao_pago, fiscal=fiscal, emissor=MockNFAdapter())
+
+    assert fiscal.notas == {}
+    assert nao_pago.gravados[PEDIDO_ID].status is StatusDoPedido.AGUARDANDO_PAGAMENTO
+
+
+@pytest.mark.risco("R3")
+async def test_both_refusals_are_the_same_kind_of_refusal(
+    pedidos: PedidosEmMemoria, fiscal: FiscalEmMemoria
+) -> None:
+    """R3 — as duas precondições recusam sob a mesma base, e são distinguíveis.
+
+    A base existe para quem só quer dizer *"a emissão foi barrada"* sem escolher
+    entre elas — é o que uma rota ou um log de auditoria querem. As subclasses
+    existem para quem precisa saber **qual** falhou, que é o caso de um teste e de
+    quem lê o incidente.
+    """
+    assert issubclass(EmissaoNaoAprovada, EmissaoBloqueada)
+    assert issubclass(EmissaoSemPagamento, EmissaoBloqueada)
+    assert issubclass(EmissaoBloqueada, PermissionError)
+
+    with pytest.raises(EmissaoBloqueada):
+        await emitir(PEDIDO_ID, pedidos=pedidos, fiscal=fiscal, emissor=MockNFAdapter())
+
+
+@pytest.mark.risco("R3")
+async def test_a_decided_order_never_slides_into_the_other_outcome(
+    pedidos: PedidosEmMemoria,
+) -> None:
+    """R3, `golden-011` — a guarda de transição, que não tinha teste (ressalva M-2).
+
+    `PedidosEmMemoria._desfecho_da_nota` só move um pedido que está **aguardando
+    aprovação**. Trocar essa guarda por `if True` deixava a suíte inteira verde, e o
+    que ela impede é caro nos dois sentidos: um pedido rejeitado virando emitido, e um
+    emitido virando rejeitado.
+
+    O docstring da guarda diz *"a guarda é reproduzida e não simplificada: as duas
+    implementações da porta têm que se comportar igual"* — e é contra a implementação
+    em memória que as **duas camadas de teste** rodam. Sem isto aqui, a afirmação
+    valia para o Postgres (conferido à mão) e para nada mais.
+    """
+    await pedidos.registrar_emissao(PEDIDO_ID)
+    assert pedidos.gravados[PEDIDO_ID].status is StatusDoPedido.NOTA_EMITIDA
+
+    await pedidos.registrar_rejeicao(PEDIDO_ID)
+    assert pedidos.gravados[PEDIDO_ID].status is StatusDoPedido.NOTA_EMITIDA, (
+        "um pedido já emitido não pode ser 'rejeitado' depois"
+    )
+
+
+@pytest.mark.risco("R3")
+async def test_an_unpaid_order_is_not_moved_by_an_outcome_either(
+    pedidos: PedidosEmMemoria,
+) -> None:
+    """R3 — a mesma guarda, do outro lado: só se sai da fila estando nela.
+
+    Um pedido em `aguardando_pagamento` não está aguardando aprovação, então nenhum
+    desfecho o move. É a metade que impede o status de mentir sobre um pedido cujo
+    dinheiro ainda não entrou.
+    """
+    pedidos.gravados[PEDIDO_ID] = _pedido(StatusDoPedido.AGUARDANDO_PAGAMENTO)
+
+    await pedidos.registrar_emissao(PEDIDO_ID)
+    await pedidos.registrar_rejeicao(PEDIDO_ID)
+
+    assert pedidos.gravados[PEDIDO_ID].status is StatusDoPedido.AGUARDANDO_PAGAMENTO
