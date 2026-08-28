@@ -17,6 +17,7 @@ implementation of the same protocol Postgres implements.
 """
 
 import json
+import re
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -31,7 +32,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.app import create_app
 from vendinha.catalogo import CatalogoEmMemoria, carregar_seed
-from vendinha.config import get_settings
+from vendinha.config import Settings, get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
 from vendinha.graph import build_graph
@@ -423,3 +424,43 @@ def test_the_model_cache_expires(
     client.get("/models")
 
     assert contador_de_chamadas[0] > antes, "a lista nunca expira: so um restart a atualiza"
+
+
+@pytest.mark.risco("R7")
+def test_an_empty_judge_variable_means_absent_so_the_self_judge_warning_still_fires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7 — `EVALS_JUDGE_MODEL=` em branco é ausência, e o runner precisa vê-la assim.
+
+    `.env.example` sempre disse que vazio significa *"o juiz é o próprio
+    `LLM_MODEL`"*, e o runner grita quando isso acontece: um modelo avaliando a
+    própria saída é viés conhecido (ADR-006, S-04 DESC-7). Mas a linha em branco
+    chega como `""`, que cai no auto-juiz e **não** dispara o aviso, porque ele
+    testa `is None`.
+
+    Era latente enquanto o default era `None`. Deixou de ser quando o default passou
+    a nomear um juiz de outro provedor: agora quem copia o `.env.example` e apaga o
+    valor recebe em silêncio exatamente o viés contra o qual o aviso existe.
+    """
+    monkeypatch.setenv("EVALS_JUDGE_MODEL", "")
+
+    assert Settings().evals_judge_model is None
+
+
+@pytest.mark.risco("R7")
+def test_the_agent_model_is_a_dated_snapshot_and_not_a_floating_alias() -> None:
+    """R7 — a régua não pode trocar de modelo sem que uma linha do repositório mude.
+
+    `claude-haiku-4-5` é alias: o modelo por trás dele muda sozinho. Uma régua que
+    anda produz vermelho aleatório, e vermelho aleatório treina a ignorar o CI —
+    que é o custo que a DESC-8 da S-05 mediu.
+
+    Afirma sobre o **default declarado no repositório**, não sobre o valor que o
+    `.env` da máquina resolve: um teste que lê o ambiente passa ou reprova conforme
+    quem o roda, que é o oposto de uma régua. O sufixo de data é a asserção
+    inteira; o nome do modelo não é.
+    """
+    declarado = Settings.model_fields["llm_model"].default
+    _, modelo = str(declarado).split(":", 1)
+
+    assert re.search(r"-\d{8}$", modelo), f"{modelo!r} é alias, não snapshot datado"

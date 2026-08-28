@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +64,18 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://vendinha:vendinha@127.0.0.1:5432/vendinha"
 
     # `provedor:modelo`. The code never branches on the provider — see ADR-012.
-    llm_model: str = "anthropic:claude-haiku-4-5"
+    #
+    # **Pinned to a dated snapshot, and that is the R7 line itself.** The plain
+    # `claude-haiku-4-5` is an alias: the model behind it can change without a line
+    # of this repository changing. A ruler that moves on its own does not detect
+    # regression — it produces red at random, and random red is training to ignore
+    # the CI. S-05's DESC-8 is what that costs: three eval suites red, and an A/B on
+    # a clean `main` showing `golden-013` failing with no line of that branch in it.
+    #
+    # The offered-model list is fetched from the provider (`providers.py`), not
+    # hardcoded, so pinning here does not narrow what an operator may choose — it
+    # fixes what the suite measures against by default.
+    llm_model: str = "anthropic:claude-haiku-4-5-20251001"
 
     # Qdrant: where the catalogue is ranked. No fact lives there — the index
     # returns ids by similarity and Postgres asserts the rest (S-03, `catalogo.py`).
@@ -82,7 +93,16 @@ class Settings(BaseSettings):
     # judge is the agent's own model, and the runner says so out loud: a model
     # grading its own output is a known bias, and a ruler must not hide it from
     # whoever reads the report (S-03, ADR-006).
-    evals_judge_model: str | None = None
+    #
+    # **Defaults to another provider now, and S-04's DESC-7 is why.** Measured
+    # both ways: with the self-judge the suite oscillated at 5 of 7 and *the failing
+    # cases changed between runs*; with `openai:gpt-4.1` it was stable. That DESC
+    # said the default was S-06's call to make, and this is it. Instability is not
+    # merely noise — it is paying for the same run three times.
+    #
+    # This asks for no credential the project did not already require: embedding is
+    # OpenAI's even on an Anthropic-only instance (S-03 D-1, `embedding_model`).
+    evals_judge_model: str | None = "openai:gpt-4.1"
 
     # `LANGFUSE_HOST` is the v3 name and `LANGFUSE_BASE_URL` is the current one.
     # Both are accepted so an existing `.env` keeps working; see D-1 in the spec.
@@ -197,6 +217,25 @@ class Settings(BaseSettings):
     # signature verifies — the safe side. "No secret, accept anything" would turn
     # a forgotten environment variable into an open endpoint that moves money.
     mercadopago_webhook_secret: str | None = None
+
+    @field_validator("evals_judge_model", mode="after")
+    @classmethod
+    def _vazio_e_ausente(cls, valor: str | None) -> str | None:
+        """`EVALS_JUDGE_MODEL=` significa ausente, e o runner precisa vê-lo assim.
+
+        `.env.example` sempre disse que **vazio** quer dizer *"o juiz é o próprio
+        `LLM_MODEL`"*, e o runner avisa em voz alta quando isso acontece — porque um
+        modelo avaliando a própria saída é viés conhecido e uma régua não pode
+        escondê-lo de quem lê o relatório.
+
+        Só que a linha em branco chega como `""`, não como `None`: ela cai no
+        auto-juiz (`"" or modelo_do_agente`) e **não** dispara o aviso, que testa
+        `is None`. Era latente enquanto o default era `None` — o caminho comum
+        avisava. Deixou de ser no momento em que o default passou a nomear um juiz:
+        agora quem copia o `.env.example` e apaga o valor recebe exatamente o viés
+        contra o qual o aviso existe, em silêncio.
+        """
+        return valor or None
 
 
 @lru_cache(maxsize=1)
