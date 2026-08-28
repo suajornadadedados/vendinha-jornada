@@ -77,6 +77,28 @@ class Settings(BaseSettings):
     # fixes what the suite measures against by default.
     llm_model: str = "anthropic:claude-haiku-4-5-20251001"
 
+    # How much the model is allowed to wander. **Product configuration, and the
+    # eval inherits it** — never the other way around: *"an eval that runs with a
+    # different configuration measures a different system"* (`_monta_o_grafo`).
+    #
+    # **Nothing in this project fixed it until S-06, and it cost a moving ruler.**
+    # Pinning `llm_model` to a dated snapshot was necessary and not sufficient: two
+    # runs of the S-03 suite with byte-identical code disagreed — `golden-005` went
+    # from 5 failing criteria to 2 (`docs/harness/medicao-de-evals.md` §2). The
+    # variance is the agent's, because `init_chat_model` was using the provider
+    # default. A gate where a case flips between runs produces intermittent red,
+    # and intermittent red is training to ignore the CI.
+    #
+    # ADR-006 closes the easy way out: running *n* times and requiring *k* passes
+    # is the threshold rubric coming in through the back door. So ADR-014 decided
+    # the variance is attacked in the configuration, and this is where.
+    #
+    # `None` means *the provider's default*, and it stays representable because a
+    # reasoning model refuses `temperature` outright while `resolve_model` is
+    # provider-agnostic by design (ADR-012). Absent is not the same as zero, and a
+    # config that could not say so would force a branch on the vendor.
+    llm_temperature: float | None = 0.0
+
     # Qdrant: where the catalogue is ranked. No fact lives there — the index
     # returns ids by similarity and Postgres asserts the rest (S-03, `catalogo.py`).
     qdrant_url: str = "http://127.0.0.1:6333"

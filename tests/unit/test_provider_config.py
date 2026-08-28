@@ -36,7 +36,7 @@ from vendinha.config import Settings, get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.credentials import CredentialsCorrupted, CredentialsUnavailable, Vault
 from vendinha.graph import build_graph
-from vendinha.providers import PROVIDERS, Provider, effective_credentials
+from vendinha.providers import PROVIDERS, Provider, effective_credentials, resolve_model
 from vendinha.subagents import (
     PROMPT_RECOMENDACAO,
     RECOMENDACAO,
@@ -272,6 +272,82 @@ def test_the_stored_key_is_the_one_the_model_actually_gets(
     resolvidas = effective_credentials({"anthropic": FAKE_KEY})
     assert resolvidas["anthropic"] == FAKE_KEY
     assert resolvidas["openai"].startswith("sk-openai-")
+
+
+@pytest.mark.risco("R7")
+def test_the_temperature_is_part_of_the_client_cache_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7, ADR-014 — dois valores de temperatura não podem compartilhar um cliente.
+
+    `resolve_model` é cacheada porque o cliente carrega um pool de conexões. Com a
+    temperatura fora da chave, o primeiro chamador fixaria o valor para todos os
+    seguintes, em silêncio — e a medição da S-06, que compara duas configurações,
+    estaria comparando uma configuração com ela mesma. O modo de falha não levanta
+    nada e não aparece em log nenhum: os dois relatórios sairiam plausíveis.
+
+    Afirmado sobre o argumento que chega ao `init_chat_model`, e não sobre um
+    atributo do cliente devolvido: cada provedor guarda a temperatura num nome
+    próprio, e conferir pelo atributo amarraria o teste a um fornecedor.
+    """
+    construidos: list[dict[str, Any]] = []
+
+    def espiao(model: str, **kwargs: Any) -> Any:
+        construidos.append({"model": model, **kwargs})
+        return GenericFakeChatModel(messages=iter([AIMessage(content="ok")]))
+
+    monkeypatch.setattr("vendinha.providers.init_chat_model", espiao)
+    resolve_model.cache_clear()
+
+    resolve_model("anthropic:um-modelo", FAKE_KEY, 0.0)
+    resolve_model("anthropic:um-modelo", FAKE_KEY, 0.7)
+    resolve_model("anthropic:um-modelo", FAKE_KEY, 0.0)
+
+    assert [c["temperature"] for c in construidos] == [0.0, 0.7], (
+        "o terceiro veio do cache, e os dois primeiros são clientes distintos"
+    )
+
+
+@pytest.mark.risco("R7")
+def test_no_temperature_means_the_provider_default_and_not_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7, ADR-014 — ausente e zero são coisas diferentes, e a diferença é operacional.
+
+    Um modelo de raciocínio recusa `temperature` de saída. Traduzir `None` para
+    `0.0` aqui faria a escolha de modelo do operador quebrar num erro do provedor,
+    e `providers.py` não ramifica por fornecedor de propósito (ADR-012). `None`
+    significa "não mande o parâmetro", e isso tem de ser observável no que sai.
+    """
+    construidos: list[dict[str, Any]] = []
+
+    def espiao(model: str, **kwargs: Any) -> Any:
+        construidos.append({"model": model, **kwargs})
+        return GenericFakeChatModel(messages=iter([AIMessage(content="ok")]))
+
+    monkeypatch.setattr("vendinha.providers.init_chat_model", espiao)
+    resolve_model.cache_clear()
+
+    resolve_model("anthropic:um-modelo", FAKE_KEY, None)
+
+    assert "temperature" not in construidos[0]
+    assert construidos[0]["api_key"] == FAKE_KEY
+
+
+@pytest.mark.risco("R7")
+def test_the_default_configuration_pins_the_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R7, ADR-014 — quem clona o repositório recebe a régua parada, não a do provedor.
+
+    O valor default importa porque é o que vale para toda instância que não
+    configurou nada — inclusive o CI. Deixá-lo `None` faria o portão nascer com a
+    variância que a Fase 0 mediu, e ninguém veria: a configuração estaria lá,
+    escrita, e sem efeito.
+    """
+    monkeypatch.delenv("LLM_TEMPERATURE", raising=False)
+
+    assert Settings(_env_file=None).llm_temperature == 0.0  # type: ignore[call-arg]
 
 
 def test_an_unknown_provider_and_a_malformed_model_are_refused(client: TestClient) -> None:

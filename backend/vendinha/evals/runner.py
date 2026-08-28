@@ -711,7 +711,14 @@ async def rodar(
     nome_do_juiz = settings.evals_judge_model or modelo_do_agente
     provider_do_juiz, _ = split_model(nome_do_juiz)
     if provider_do_juiz in credenciais:
-        juiz_modelo = resolve_model(nome_do_juiz, credenciais[provider_do_juiz])
+        # O juiz herda a mesma `temperature` do agente, e nao uma propria. Ele e
+        # metade da regua: um juiz que varia entre execucoes produz o mesmo
+        # vermelho intermitente que a variancia do agente produzia, uma camada
+        # acima — e foi exatamente essa instabilidade que a DESC-7 da S-04 mediu
+        # com o auto-juiz.
+        juiz_modelo = resolve_model(
+            nome_do_juiz, credenciais[provider_do_juiz], settings.llm_temperature
+        )
     if settings.evals_judge_model is None:
         print(
             f"AVISO: EVALS_JUDGE_MODEL não está definida, então o juiz é o próprio "
@@ -726,7 +733,15 @@ async def rodar(
         try:
             return await rodar_caso(
                 caso,
-                resolve_model(modelo_do_agente, credenciais.get(provider_do_agente)),
+                # A `temperature` vem do `Settings`, que e a configuracao do
+                # produto — o eval a HERDA, nao a escolhe (ADR-014). Um flag de
+                # linha de comando aqui faria a regua medir um sistema que nao e
+                # o que atende o cliente.
+                resolve_model(
+                    modelo_do_agente,
+                    credenciais.get(provider_do_agente),
+                    settings.llm_temperature,
+                ),
                 busca,
                 catalogo,
                 settings.tool_timeout_seconds,
