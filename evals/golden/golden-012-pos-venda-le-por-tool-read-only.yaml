@@ -9,6 +9,8 @@ produtos_validos:
   - pao-de-queijo-congelado
   - doce-de-leite-cremoso
 
+cenario: nota_emitida
+
 conversa:
   - de: cliente
     texto: >-

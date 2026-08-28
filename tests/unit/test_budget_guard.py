@@ -41,6 +41,7 @@ from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, Produto, carreg
 from vendinha.config import Settings
 from vendinha.evals.caso import carregar_casos
 from vendinha.evals.runner import EVALS, _monta_o_grafo
+from vendinha.fiscal import FiscalEmMemoria
 from vendinha.graph import DEFAULT_BUDGET_TOKENS, build_graph, session_config
 from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria
@@ -382,6 +383,7 @@ async def test_the_eval_runner_hands_the_configured_ceiling_to_the_graph_it_buil
         MockPaymentAdapter("http://localhost:8000"),
         30.0,
         budget_tokens=0,
+        fiscal=FiscalEmMemoria(),
     )
     gastou = AIMessage(
         content="ok",

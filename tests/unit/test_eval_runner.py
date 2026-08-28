@@ -37,13 +37,16 @@ from vendinha.evals.groundedness import Transcricao, Veredito, precos_citados, t
 from vendinha.evals.judge import VeredictoDeCriterio, VeredictoDoJuiz, formatar_transcricao, julgar
 from vendinha.evals.runner import (
     CatalogoEnvenenado,
+    CenarioNaoMontou,
     Resultado,
     _abertura_da_composicao,
     _abertura_do_cenario,
+    _decisao_do_turno,
     em_paralelo,
     relatorio,
     rodar_caso,
 )
+from vendinha.fiscal import Decisao
 
 pytestmark = pytest.mark.requires_backend
 
@@ -743,6 +746,87 @@ def test_the_case_scenario_is_a_declared_field_not_a_guess_about_a_system_turn()
     # Os dois têm turno `de: sistema`, e o campo é o que os separa.
     assert any(fala.de == "sistema" for fala in envenenado.conversa)
     assert any(fala.de == "sistema" for fala in pago.conversa)
+
+
+@pytest.mark.risco("R3")
+def test_every_case_with_an_operator_turn_declares_the_order_it_decides_about() -> None:
+    """R3 — decisão de nota precisa de um pedido, e ele vem do cenário declarado.
+
+    Um turno `de: operador` diz "aprovado" sobre alguma coisa, e essa coisa é um
+    pedido pago. Um caso que trouxesse a decisão sem declarar o cenário faria o
+    runner falhar em tempo de execução — depois de já ter gasto a conversa —, e o
+    relatório diria "o cenário não montou" sobre um caso cujo YAML nunca poderia
+    ter funcionado.
+
+    Afirmado sobre o corpus inteiro e não sobre os dois casos de hoje: é a forma que
+    pega o terceiro caso, escrito daqui a seis meses por quem não leu isto.
+    """
+    com_operador = [
+        caso for caso in carregar_casos(EVALS) if any(f.de == "operador" for f in caso.conversa)
+    ]
+
+    assert com_operador, "o corpus perdeu os casos de decisão do operador"
+    for caso in com_operador:
+        assert caso.cenario in {"pedido_pago", "nota_emitida"}, (
+            f"{caso.id} decide sobre uma nota sem declarar de que pedido ela é"
+        )
+
+
+@pytest.mark.risco("R3")
+def test_the_operator_turn_becomes_a_decision_with_its_reason() -> None:
+    """R3, RF-4.2 — o turno vira `Decisao`, e a rejeição carrega o motivo.
+
+    O texto é traduzido genericamente, sem ramo por id de caso. O motivo sai da
+    linha **original** e não da normalizada — ele vai para o cliente e para o
+    registro de auditoria, e entregá-lo sem acento seria degradar o dado no meio do
+    caminho por causa de uma comparação interna.
+    """
+    assert _decisao_do_turno("aprovado") == (Decisao.APROVADA, None)
+
+    decisao, motivo = _decisao_do_turno(
+        "rejeitado - inscrição estadual da empresa não confere com o CNPJ informado"
+    )
+
+    assert decisao is Decisao.REJEITADA
+    assert motivo == "inscrição estadual da empresa não confere com o CNPJ informado"
+
+
+@pytest.mark.risco("R3")
+def test_a_rejection_without_a_reason_fails_loudly_instead_of_inventing_one() -> None:
+    """R3, RF-4.2 — o parser não pode ser onde "rejeição exige motivo" afrouxa.
+
+    `Aprovacao` valida, a tabela tem `CHECK`, e o `golden-011` mede que o motivo
+    chega ao cliente. Um default aqui — "motivo não informado" — desligaria as três
+    de uma vez e deixaria o caso rodando, verde, sobre um estado que o produto não
+    consegue produzir.
+    """
+    with pytest.raises(CenarioNaoMontou, match="sem motivo"):
+        _decisao_do_turno("rejeitado")
+
+    with pytest.raises(CenarioNaoMontou, match="nao diz o que foi decidido"):
+        _decisao_do_turno("talvez depois a gente veja")
+
+
+@pytest.mark.risco("R3")
+def test_the_conversation_is_walked_in_order_so_the_operator_precedes_the_customer() -> None:
+    """R3 — no `golden-011` a rejeição vem ANTES da pergunta do cliente.
+
+    Até a S-06 o runner filtrava `de == "cliente"` e rodava as falas em bloco, o que
+    estava certo enquanto só existiam falas de cliente. Com o turno do operador a
+    ordem virou semântica: "e a nossa nota?" só tem a resposta que o caso mede se a
+    rejeição já estiver registrada quando ela é feita. Rodar fora de ordem mediria
+    uma conversa diferente da que o caso escreveu — e passaria, pelo motivo errado.
+
+    Afirmado sobre o YAML, que é o contrato: se alguém reordenar o caso, este teste
+    é que diz que a premissa mudou.
+    """
+    caso = next(
+        c for c in carregar_casos(EVALS) if c.id == "golden-011-rejeicao-do-operador-para-a-emissao"
+    )
+
+    papeis = [fala.de for fala in caso.conversa]
+
+    assert papeis.index("operador") < papeis.index("cliente")
 
 
 @pytest.mark.risco("R1")

@@ -24,7 +24,12 @@ FalhaDura = Literal["fato_inventado", "acao_fora_da_allowlist"]
 # de um turno `de: sistema` — regra que funcionava porque só um caso a usava, e que
 # quebraria em silêncio no segundo (`golden-010`, cujo turno de sistema descreve um
 # webhook e seria lido como envenenamento).
-Cenario = Literal["catalogo_envenenado", "composicao_aprovada", "pedido_pago"]
+#
+# `nota_emitida` chegou na S-06, e e o unico que atravessa o HITL inteiro: pedido
+# pago, decisao do operador registrada, nota emitida por `fiscal.emitir` — que rele
+# as duas precondicoes do banco. Fabricar a `NotaEmitida` a mao encurtaria o
+# cenario e testaria o cenario, nao o produto.
+Cenario = Literal["catalogo_envenenado", "composicao_aprovada", "pedido_pago", "nota_emitida"]
 
 
 class Fala(BaseModel):
@@ -35,6 +40,11 @@ class Fala(BaseModel):
     continua ali porque é o que faz o YAML se explicar a quem lê, mas nada é
     inferido dele. Um turno de sistema sem `cenario` declarado é texto, e o runner
     o ignora.
+
+    `de: operador` **é** uma mensagem, mas não para o agente: é a decisão de quem
+    aprova ou rejeita a nota, e o runner a entrega ao port `fiscal` em vez de ao
+    grafo da conversa. Foi recusada até a S-06 — *"a fila do operador é entregável
+    da S-05"* —, o que deixou quatro casos sem execução (DESC-5 da S-05).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
