@@ -131,11 +131,19 @@ def main(argv: Sequence[str] = ()) -> int:
     `sort_keys` porque o arquivo é commitado e o CI o compara com `git diff`: uma
     ordem instável de chaves produziria diff em todo build, e diff em todo build
     ensina a ignorar o portão que este arquivo existe para sustentar.
+
+    `newline=""` pela mesma razão, meia casa adiante. Sem ele o `\\n` vira `\\r\\n` no
+    Windows e `python -m vendinha.openapi` deixa `openapi.json` "modificado" no
+    `git status` com zero drift real — o `.gitattributes` normaliza na hora de
+    comparar, então o portão continua correto e a árvore fica suja por engano. Árvore
+    suja por engano é o que treina a ignorar `git status`. O CI roda em Linux e nunca
+    veria isto.
     """
     destino = Path(argv[0]) if argv else PADRAO
     destino.write_text(
         json.dumps(esquema(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="",
     )
     print(f"openapi escrito em {destino}", file=sys.stderr)
     return 0
