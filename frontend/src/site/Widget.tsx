@@ -57,8 +57,22 @@ export function Widget() {
 
   return (
     <>
+      {/* O botão do canto abre um atendimento NOVO, e o "retomar conversa" logo
+          abaixo é o que continua o que já estava em pé. As duas portas existiam e
+          faziam a mesma coisa; agora cada uma faz o que o rótulo diz.
+
+          Por que o clique reinicia em vez de a montagem cuidar disso: a landing
+          monta o widget uma vez só, então sem isto duas conversas seguidas na mesma
+          carga de página caíam no mesmo atendimento (DESC-10). */}
       {!aberto && (
-        <button className="fab" onClick={() => setAberto(true)} aria-label="Abrir o atendimento">
+        <button
+          className="fab"
+          onClick={() => {
+            conversa.reiniciar();
+            setAberto(true);
+          }}
+          aria-label="Iniciar um atendimento"
+        >
           <WhatsappLogo size={30} weight="fill" aria-hidden="true" />
           <span className="fab__pulso" aria-hidden="true" />
         </button>

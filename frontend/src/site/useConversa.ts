@@ -127,26 +127,28 @@ export interface EstadoDaNota {
   readonly xml: string;
 }
 
-const CHAVE_DA_SESSAO = "vendinha:conversa";
-
-function sessaoGuardada(): string | null {
-  try {
-    return localStorage.getItem(CHAVE_DA_SESSAO);
-  } catch {
-    return null;
-  }
-}
-
-function guardarSessao(id: string): void {
-  try {
-    localStorage.setItem(CHAVE_DA_SESSAO, id);
-  } catch {
-    /* sem armazenamento: a conversa vale só para esta aba */
-  }
-}
+// **A sessão não é persistida, e isso é a correção de um defeito, não uma falta.**
+//
+// Até aqui o id vivia em `localStorage["vendinha:conversa"]`, semeado na montagem e
+// nunca limpo. A consequência: a partir da primeira conversa, TODO `POST /chat`
+// daquele navegador reenviava o mesmo `session_id` — reload, aba nova, dia seguinte.
+// O backend faz `session_id = payload.session_id or uuid.uuid4().hex`: sessão nova
+// nasce de OMITIR o campo, e ele nunca era omitido. No painel isso aparecia como uma
+// sessão só, gorda, em vez de um atendimento por cliente (DESC-10).
+//
+// O agravante era a assimetria: `itens` nunca foi persistido, só o id. Depois de um
+// F5 o cliente via uma janela em branco enquanto o servidor continuava costurando
+// tudo no mesmo atendimento — os dois lados discordando sobre o que era "esta
+// conversa".
+//
+// O que se perde, declarado: um pedido em voo não sobrevive a um reload, e o cartão
+// de espera da nota promete "você recebe aqui assim que sair". Retomar de verdade
+// exigiria rota nova — `/eventos/sessao/{id}` é pub/sub ao vivo, sem histórico, e não
+// há rota que devolva o estado de uma sessão. Decisão do PO: o buraco fica aberto e
+// registrado, em vez de fechado com uma persistência que produz o defeito acima.
 
 export function useConversa() {
-  const [sessionId, setSessionId] = useState<string | null>(() => sessaoGuardada());
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [itens, setItens] = useState<ItemDaConversa[]>([]);
   const [esperando, setEsperando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -158,6 +160,14 @@ export function useConversa() {
   // de anunciar no MESMO stream — antes de qualquer re-render acontecer.
   const sessaoAtual = useRef<string | null>(sessionId);
   sessaoAtual.current = sessionId;
+
+  // Qual atendimento está no ar. `reiniciar` incrementa, e o `enviar` que estava no
+  // meio de um stream para de escrever assim que percebe que o número mudou.
+  //
+  // Sem isto, fechar a janela com o agente ainda respondendo e abrir uma conversa
+  // nova fazia os tokens do atendimento ANTERIOR caírem nos balões do novo — o
+  // stream não morre junto com a janela, e o `for await` continua rodando.
+  const geracao = useRef(0);
 
   // A assinatura dos eventos do servidor. Só existe depois que há sessão: antes
   // disso não há o que ouvir, e assinar `/eventos/sessao/null` seria um stream
@@ -209,18 +219,29 @@ export function useConversa() {
     const limpo = texto.trim();
     if (!limpo) return;
 
+    // O atendimento a que este envio pertence. Toda escrita de estado abaixo é
+    // conferida contra ele: se `reiniciar` correu no meio, este stream é de uma
+    // conversa que a tela já não mostra, e escrever seria contaminar a nova.
+    const minha = geracao.current;
+    const atual = () => geracao.current === minha;
+
     setErro(null);
     setEsperando(true);
     setItens((atuais) => [...atuais, { tipo: "fala", de: "cliente", texto: limpo }]);
 
     try {
       const corpo: Record<string, unknown> = { message: limpo };
+      // Omitir o campo é o que faz o backend abrir sessão nova (`app.py`,
+      // `payload.session_id or uuid.uuid4().hex`). Só mandamos quando esta conversa
+      // já tem um id anunciado pelo servidor.
       if (sessaoAtual.current) corpo["session_id"] = sessaoAtual.current;
 
       for await (const bruto of lerStream(`${BASE_URL}/chat`, {
         metodo: "POST",
         corpo,
       })) {
+        if (!atual()) return;
+
         const evento = lerEventoDoChat(bruto);
         if (!evento) continue;
 
@@ -228,7 +249,6 @@ export function useConversa() {
           const id = String(evento.corpo["session_id"] ?? "");
           if (id && id !== sessaoAtual.current) {
             sessaoAtual.current = id;
-            guardarSessao(id);
             setSessionId(id);
           }
           continue;
@@ -293,16 +313,43 @@ export function useConversa() {
         }
       }
     } catch {
+      if (!atual()) return;
       // Falha ANTES do primeiro byte: a API está fora do ar, e a frase precisa
       // dizer isso — e não repetir o "tente de novo" de um erro do modelo.
       setErro("não consegui falar com a loja agora. verifique a conexão e tente de novo.");
     } finally {
-      setEsperando(false);
-      // Fecha toda fala ainda aberta: sem isto o cursor de digitação ficaria
-      // piscando para sempre no fim de uma resposta que já terminou. Toda, e não
-      // só a última, porque um turno com tool no meio abre mais de uma.
-      setItens((atuais) => (atuais.some((i) => ehFala(i) && i.escrevendo) ? fechar(atuais) : atuais));
+      if (atual()) {
+        setEsperando(false);
+        // Fecha toda fala ainda aberta: sem isto o cursor de digitação ficaria
+        // piscando para sempre no fim de uma resposta que já terminou. Toda, e não
+        // só a última, porque um turno com tool no meio abre mais de uma.
+        setItens((atuais) =>
+          atuais.some((i) => ehFala(i) && i.escrevendo) ? fechar(atuais) : atuais,
+        );
+      }
     }
+  }, []);
+
+  /**
+   * Começa um atendimento novo — o que o botão do canto passa a significar.
+   *
+   * Zera o id: o próximo `enviar` sai sem `session_id`, e é ISSO que faz o backend
+   * abrir sessão nova. Zerar só a tela deixaria o cliente vendo uma conversa em
+   * branco que o servidor continua tratando como a anterior, que era exatamente o
+   * defeito (DESC-10).
+   *
+   * A geração sobe junto para calar um stream que ainda esteja correndo.
+   */
+  const reiniciar = useCallback(() => {
+    geracao.current += 1;
+    sessaoAtual.current = null;
+    setSessionId(null);
+    setItens([]);
+    setPedido(null);
+    setNota(null);
+    setErro(null);
+    setEsperando(false);
+    setConexao("desconectado");
   }, []);
 
   /** O estado honesto do atendimento, para a tela não ter que deduzi-lo. */
@@ -324,5 +371,6 @@ export function useConversa() {
     conexao,
     etapa,
     enviar,
+    reiniciar,
   };
 }

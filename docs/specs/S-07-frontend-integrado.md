@@ -207,6 +207,39 @@ Cenário: a conexão cai e a tela não mente
 
 ## Descobertas (preenchido durante a execução)
 
+- **DESC-10 — Todo atendimento daquele navegador era a MESMA sessão, e o painel
+  estava certo ao mostrar uma só.** O `useConversa` semeava o `sessionId` de
+  `localStorage["vendinha:conversa"]` na montagem e nunca o limpava: a partir da
+  primeira conversa, todo `POST /chat` reenviava o mesmo `session_id` — reload, aba
+  nova, dia seguinte, clique novo no botão do canto. **O backend nunca teve o
+  defeito**: `app.py` faz `session_id = payload.session_id or uuid.uuid4().hex`, e
+  sessão nova nasce de *omitir* o campo. O cliente simplesmente nunca o omitia.
+
+  O agravante era a assimetria: `itens` nunca foi persistido, só o id. Depois de um
+  F5 o cliente via a janela em branco enquanto o servidor continuava costurando tudo
+  no mesmo atendimento — os dois lados discordando sobre o que era "esta conversa".
+  Sintoma na demonstração: conversão, duração e custo do painel somando atendimentos
+  de dias diferentes num registro só.
+
+  O conserto tem três partes, e a terceira só apareceu ao escrever a segunda:
+  1. **A persistência saiu.** Ela não sustentava nenhuma retomada de verdade — só
+     produzia o bug.
+  2. **O botão do canto passou a significar "atendimento novo"** (`reiniciar()` antes
+     de abrir), e o "retomar conversa" logo abaixo ficou sendo o que continua o que
+     está em pé. As duas portas já existiam e faziam a mesma coisa; agora cada uma faz
+     o que o rótulo diz.
+  3. **Um contador de geração cala o stream anterior.** Fechar a janela com o agente
+     ainda respondendo e abrir uma conversa nova fazia os tokens do atendimento
+     ANTERIOR caírem nos balões do novo: o `for await` não morre junto com a janela.
+
+  > **O que se perde, e é decisão do PO tomada por escrito:** um pedido em voo não
+  > sobrevive a um reload, e o cartão de espera promete *"você recebe aqui assim que
+  > sair"*. Retomar de verdade exigiria **rota nova** — `/eventos/sessao/{id}` é
+  > pub/sub ao vivo, sem histórico, e não há rota que devolva o estado de uma sessão.
+  > O PO escolheu deixar o buraco aberto e registrado em vez de fechá-lo com a
+  > persistência que produzia o defeito acima. **Vira spec própria** se a retomada
+  > passar a valer a rota (RF-3.6 depende dela para quem recarrega).
+
 - **DESC-9 — A primeira conversa longa de verdade mostrou dois defeitos da janela do
   chat, e um terceiro que não é desta spec.** Um atendimento real — café da manhã, 30
   pessoas, R$ 50 por cabeça, três variações por restrição alimentar — expôs:

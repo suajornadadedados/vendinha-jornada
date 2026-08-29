@@ -9,6 +9,7 @@ Nada aqui abre rede: `create_trace_id` é uma função pura de hash, e o caminho
 credencial é exercitado trocando `client` por um duplo.
 """
 
+import logging
 from typing import Any
 
 import pytest
@@ -71,3 +72,77 @@ def test_sem_langfuse_configurado_nao_ha_handler(
     monkeypatch.setattr(observability, "client", sem_cliente)
 
     assert callback_handler(session_id=sessao) is None
+
+
+def _linha_de_acesso(caminho: str, status: int) -> logging.LogRecord:
+    """Um registro com a forma exata que o uvicorn produz no log de acesso.
+
+    Cinco args posicionais e nenhum `extra` — conferido em
+    `uvicorn/protocols/http/h11_impl.py`. Montar o registro à mão em vez de subir o
+    servidor é o que mantém isto na camada `unit` (ADR-011).
+    """
+    return logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=0,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=("127.0.0.1:54895", "GET", caminho, "1.1", status),
+        exc_info=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("caminho", "status", "aparece"),
+    [
+        # O ruído que motivou o filtro: agente de monitoramento varrendo a porta.
+        ("/metrics", 404, False),
+        ("/metrics?format=prometheus", 404, False),
+        # 404 que significa alguma coisa continua aparecendo. É a razão de o filtro
+        # ser por caminho e não por status: silenciar todo 404 esconderia uma rota
+        # que mudou de lugar ou um webhook apontado errado.
+        ("/admin/metricas", 404, True),
+        ("/metricas", 404, True),
+        ("/chat", 404, True),
+        # E o dia em que /metrics existir de verdade, ele volta a ser logado.
+        ("/metrics", 200, True),
+    ],
+)
+def test_so_o_404_de_rota_que_nao_servimos_some_do_log(
+    caminho: str, status: int, aparece: bool
+) -> None:
+    filtro = observability._DropUnservedProbes()
+    assert filtro.filter(_linha_de_acesso(caminho, status)) is aparece
+
+
+def test_forma_inesperada_de_registro_e_logada_em_vez_de_quebrar() -> None:
+    """Uma atualização do uvicorn que mude os args degrada para "loga tudo".
+
+    O contrário — deixar a exceção subir — seria um erro dentro da chamada de log,
+    no caminho de toda requisição.
+    """
+    registro = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=0,
+        msg="algo de outro formato",
+        args=None,
+        exc_info=None,
+    )
+
+    assert observability._DropUnservedProbes().filter(registro) is True
+
+
+def test_o_filtro_e_instalado_no_logger_de_acesso() -> None:
+    """Testar a função que filtra nunca prova que alguém a ligou no caminho.
+
+    É a mesma lição de `redaction_is_installed` — rodada 2 da verificação da S-02.
+    """
+    acesso = logging.getLogger("uvicorn.access")
+    antes = list(acesso.filters)
+    try:
+        observability.silence_unserved_probes()
+        assert any(isinstance(f, observability._DropUnservedProbes) for f in acesso.filters)
+    finally:
+        acesso.filters = antes

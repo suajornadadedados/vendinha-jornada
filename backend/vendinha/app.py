@@ -64,7 +64,11 @@ from vendinha.fiscal import (
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
 from vendinha.nota.documento import numero_da_nota
-from vendinha.observability import callback_handler, install_log_redaction
+from vendinha.observability import (
+    callback_handler,
+    install_log_redaction,
+    silence_unserved_probes,
+)
 from vendinha.observador import ObservadorDoTurno
 from vendinha.pagamento import (
     MOCK,
@@ -215,6 +219,7 @@ def create_app(
         # After uvicorn has configured logging, never before: the filter attaches to
         # the root handlers, and there are none until the server sets them up.
         install_log_redaction()
+        silence_unserved_probes()
         app.state.langfuse = callback_handler()
         app.state.graphs = {}
         app.state.models_cache = None

@@ -149,6 +149,46 @@ class RedactingFormatter(logging.Formatter):
         return redactor().text(self._inner.format(record))
 
 
+# Paths this application deliberately does not serve, probed by tooling that
+# assumes a convention. `/metrics` is the Prometheus exporter path: monitoring
+# agents, IDE plugins and container tooling sweep it on every local port, and each
+# sweep prints a 404 nobody can act on.
+#
+# Adding the route to quiet the log would be the wrong fix — it would mean claiming
+# to export Prometheus metrics we do not have. The observability of this project is
+# Langfuse plus `/admin/metricas` (ADR-007, ADR-010).
+_UNSERVED_PROBES = frozenset({"/metrics"})
+
+
+class _DropUnservedProbes(logging.Filter):
+    """Drops the access-log line for a 404 on a path we never claimed to serve.
+
+    Narrow on purpose: only these paths, and only on 404. Dropping *every* 404 would
+    also hide the ones that mean something — a frontend calling a route that moved, a
+    webhook pointed at the wrong path — and those are the 404s worth seeing.
+
+    uvicorn logs access with five positional args and no `extra`:
+    `(client_addr, method, path_with_query, http_version, status)`. Reading
+    `record.args` is therefore the only source; the shape is checked before use so a
+    uvicorn upgrade that changes it degrades to "log everything", never to a crash
+    inside the logging call.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if not isinstance(args, tuple) or len(args) != 5:
+            return True
+        path, status = args[2], args[4]
+        if not isinstance(path, str) or not isinstance(status, int):
+            return True
+        return not (status == 404 and path.split("?", 1)[0] in _UNSERVED_PROBES)
+
+
+def silence_unserved_probes() -> None:
+    """Stop the access log from reporting 404s for paths nothing here serves."""
+    logging.getLogger("uvicorn.access").addFilter(_DropUnservedProbes())
+
+
 def _every_handler() -> list[logging.Handler]:
     """Every handler currently configured, on the root and on every named logger."""
     handlers = list(logging.getLogger().handlers)
