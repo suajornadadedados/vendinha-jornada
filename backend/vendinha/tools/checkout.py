@@ -64,6 +64,7 @@ from vendinha.pedidos import (
     novo_id,
     total_de,
 )
+from vendinha.tools import ReaisNaEntrada
 from vendinha.tools.catalogo import ItemDeResultado, Resultado
 from vendinha.tools.composicao import LIMITE_DE_ITENS, ComposicaoValidada
 
@@ -153,7 +154,7 @@ class ComposicaoProposta(BaseModel):
     tipo_de_evento: TipoDeEvento
     pessoas: int = Field(ge=1, description="Quantas pessoas — ou quantas cestas/kits.")
     produto_ids: list[str] = Field(min_length=1, max_length=LIMITE_DE_ITENS)
-    orcamento_por_pessoa: Decimal | None = Field(
+    orcamento_por_pessoa: ReaisNaEntrada | None = Field(
         default=None, description="O teto por pessoa (ou por cesta), em reais."
     )
     restricoes: list[Alergeno] = Field(

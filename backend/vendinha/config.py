@@ -210,7 +210,30 @@ class Settings(BaseSettings):
     # which is the room the run-to-run spread demands — and stays a hard bound on the
     # loop `adversarial-006` builds. `tests/unit/test_budget_guard.py` pins this number to
     # `graph.DEFAULT_BUDGET_TOKENS`, so the two cannot drift apart again (M-2).
-    session_budget_tokens: int = 250_000
+    #
+    # **Raised a third time, and this time by a HUMAN conversation rather than an
+    # eval.** Session `5ac8c0a9`, read off the `turno` table: 12 turns, 266_991
+    # tokens, and the soft line at 200k crossed on turn 8 — the turn that handed over
+    # the company data. Turns 9 through 12 ran with no tools at all, which is why no
+    # order, no approval queue and no invoice exist for it.
+    #
+    #     turno 5   44_504    recompose after a refusal, several tool rounds
+    #     turno 8   37_151    company data — crosses the soft line at 206_452
+    #     turno 9   30_888    already toolless: the answer is improvised
+    #
+    # The eval maximum was 152k because an eval case is scripted and a person is not:
+    # they greet, they ask what you have, they change their mind about quantities.
+    # 500_000 puts the soft line at 400k, which is above this measurement by the same
+    # margin the previous raise used.
+    #
+    # **And the instrument is still wrong, which is why this is a stopgap and not a
+    # fix.** `budget.tokens_spent` sums `total_tokens` of every `AIMessage`, and every
+    # call carries the whole history — so the counter grows quadratically with the
+    # number of turns and measures conversation LENGTH, not money. Any fixed number
+    # loses to a customer who chats. The counter only becomes a cost ceiling again
+    # once prompt caching exists and it can charge what was actually billed instead
+    # of what was re-sent for free (S-12).
+    session_budget_tokens: int = 500_000
 
     # Ceiling for one external call: a tool when they arrive in S-03, and today
     # the wait for the model's first token.

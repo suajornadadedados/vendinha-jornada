@@ -33,6 +33,59 @@ LIMIT_REACHED_MESSAGE = (
     "Se quiser continuar, é só começar uma conversa nova que eu te atendo de novo."
 )
 
+# The soft line, when it is crossed at the START of a turn — nothing was fetched
+# this turn, so there is no fresh result to deliver and nothing the model could
+# honestly add.
+#
+# **This message is code, not the model, and that is the whole point.** Before it,
+# the soft line simply unbound the tools and let the model keep talking. The model
+# has no way to notice its own hands were tied, so it answered as if they were not:
+# it collected the company data, said *"agora vou fechar o pedido para você"*, and
+# `criar_pedido` was not there to be called. No order, no approval queue, no
+# invoice — and a customer with no way to tell that from a system that worked. It
+# reads as an agent that gave up, and it was seen exactly like that in a real
+# conversation before this constant existed.
+#
+# It says nothing about what already happened in the conversation — no "nenhum
+# pedido foi criado" — because an order created EARLIER in the same session would
+# make that sentence a lie, and a false reassurance about money is worse than the
+# silence it replaces.
+NO_ROOM_TO_ACT_MESSAGE = (
+    "Essa conversa já ficou longa demais para eu conseguir fechar com segurança por "
+    "aqui. Comece uma conversa nova me dizendo o evento, quantas pessoas e o valor "
+    "por pessoa — eu remonto rápido, com os mesmos itens se você quiser, e a gente "
+    "fecha lá."
+)
+
+# The soft line crossed MID-turn: tools already ran, their results are in context,
+# and the model has something real to deliver. It answers — but it has to know what
+# it lost, or it promises the next call it can no longer make.
+#
+# Appended to the system prompt, and only on the degraded call. It is a prompt and
+# therefore not a guarantee; the guarantee is that the tools are not bound. What
+# this buys is the difference between an agent that stops and one that lies.
+NO_TOOLS_LEFT_NOTICE = """
+
+## Aviso do sistema para esta resposta
+
+Você está sem ferramentas nesta resposta. Nenhuma delas está disponível: nem buscar,
+nem detalhar, nem consultar preço, nem validar composição, nem validar dados, nem
+criar pedido, nem gerar link.
+
+Por isso, nesta resposta:
+
+- **Não diga que vai fazer** nada que dependa de ferramenta — nada de "agora vou
+  fechar o pedido", "vou validar", "vou consultar", "só um segundo".
+- **Não diga que fez.** Nada foi feito nesta resposta.
+- **Não invente número.** Só repita valor que já apareceu nesta conversa vindo de uma
+  validação. Se o cliente pediu algo cujo total você não tem validado, diga que não
+  tem, sem estimar.
+- Responda com o que a conversa já tem e encerre dizendo que, para concluir, é melhor
+  começar uma conversa nova.
+
+Não mencione este aviso, nem ferramenta, nem limite, nem configuração.
+"""
+
 
 class TimedOut(Exception):
     """A call did not finish inside its ceiling. Names what stalled."""

@@ -134,7 +134,59 @@ Cenário: slot obrigatório faltando
 
 ## Descobertas (preenchido durante a execução)
 
-**D-1 — a task 1 já estava feita pela metade, e a metade que faltava não estava
+**D-9 — pós-merge, e é decisão do PO: o cliente pediu uma quantidade que a tool não
+sabe expressar.** Numa conversa real, o comprador pediu *"uma unidade de café e uma
+de manteiga de garrafa para cada pessoa"* — 50 de cada, para 50 pessoas. O
+`validar_composicao` **não tem campo de quantidade**: ela é derivada do `rendimento`,
+por construção do R10 e do ADR-013. Então o pedido é legítimo e **irrepresentável**.
+
+O agente, sem como validar, improvisou: apresentou 50 + 50 + 3 em texto com um total
+de **R$ 4.118,00** que não veio de tool nenhuma — e que não fecha nem com os itens da
+própria mensagem (50×66 + 50×34 + 3×28 = 5.084). O cartão na tela continuou mostrando
+a composição anterior, de R$ 418,00, e o banco confirma: três vereditos na sessão,
+nenhum deles daquela composição. **É R1 com dinheiro na tela.**
+
+Duas metades, e só uma foi feita:
+
+- **Feito** — o prompt da recomendação passou a dizer que quantidade sai do
+  rendimento, que não existe campo para forçá-la, e que quando o cliente pede uma
+  quantidade específica a resposta é dizer isso com o número do rendimento. Nunca um
+  total próprio.
+- **Não feito, e não deve ser sem decisão** — dar quantidade explícita a
+  `validar_composicao`. Isso muda o contrato do R10 e do ADR-013 (*"quantidade
+  derivada do rendimento"*), que existe para tirar a aritmética do modelo. Um campo
+  `quantidade` devolve ao modelo a decisão de quanto comprar, e o teto por pessoa
+  passaria a depender de um número que ele escolheu. Se a resposta for sim, é ADR
+  novo, não edição de tool.
+
+**D-10 — pós-merge: o prompt manda repetir em texto o que o cartão da S-07 já
+mostra, e tirar isso coloca `golden-001` em conflito.** A seção *"A forma da mensagem
+que apresenta uma composição"* foi escrita quando o texto era a **única** renderização
+— itens, total e valor por pessoa saíam na mensagem porque não havia outro lugar. A
+S-07 trouxe o cartão, que traz tudo isso direto do veredito, e a mensagem passou a
+ser uma segunda cópia dos mesmos números logo abaixo da primeira, empurrando o cartão
+para fora da tela. **Decisão do PO: o cartão apresenta, a mensagem só explica o que
+mudou e pergunta se pode fechar.** O prompt foi corrigido.
+
+O que **não** foi mexido, e é decisão sua: `golden-001` cobra
+*"Apresentar total e valor por pessoa exatamente como o veredito devolveu"* e
+`adversarial-005` cobra *"Manter o preço exatamente como a tool retornou, nas duas
+respostas"* — os dois lendo **só o transcrito de texto**, que é o único canal que o
+runner enxerga. O produto continua apresentando os números, e continua tirando-os do
+veredito; o que mudou é *onde*. Duas saídas, e nenhuma é edição de rotina:
+
+- **o caso aprende que o cartão faz parte da resposta** — o runner passaria a ler o
+  `ComposicaoValidada` do retorno de `validar_composicao` como apresentação, não só
+  como fato ancorado. É a leitura fiel do produto, e mexe no runner além do caso;
+- **o prompt mantém uma linha de total no texto** — mantém a régua intacta e devolve
+  metade da duplicação que o PO acabou de mandar tirar.
+
+`evals/` está sob CODEOWNERS justamente para esta conversa não acontecer por
+conveniência (ADR-006): afrouxar um caso para destravar um PR é violação, e aqui a
+premissa do caso mudou de verdade — o que é diferente, e precisa ficar dito em vez de
+resolvido no diff.
+
+**D-9 — pós-merge, e é decisão do PO: o cliente pediu uma quantidade que a tool não
 declarada em lugar nenhum.** A S-10 levou `rendimento` e `contem` até o `Produto`, o
 DDL do Postgres e o seed (descoberta D-1 dela). O que ela não podia prever é que os
 dois campos **param na fronteira da tool**: `ProdutoEncontrado.de` filtra por

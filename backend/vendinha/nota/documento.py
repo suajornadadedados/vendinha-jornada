@@ -137,6 +137,22 @@ class NotaEmitida(BaseModel):
     danfe: bytes
 
 
+def numero_da_nota(emitida: NotaEmitida | None) -> int | None:
+    """O número da nota, ou `None` quando ela não existe.
+
+    Existe como função porque a travessia estava escrita à mão em dois lugares do
+    painel, e nos dois **errada**: `NotaEmitida` embrulha a nota, então o número é
+    `.nota.numero` e `.numero` nela é `AttributeError`.
+
+    Ninguém viu porque o caminho só é percorrido quando existe nota emitida de
+    verdade — nenhum teste do painel tinha uma. Em produção, `GET /admin/pedidos`
+    respondia **500** no primeiro pedido com nota, e a tela de pedidos ficava vazia:
+    parecia que o pedido tinha sumido, e o que tinha acontecido é que a rota inteira
+    quebrava por causa dele.
+    """
+    return None if emitida is None else emitida.nota.numero
+
+
 def codigo_numerico(pedido_id: str) -> str:
     """O `cNF` — oito dígitos que distinguem duas notas do mesmo número.
 

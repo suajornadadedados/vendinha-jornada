@@ -31,6 +31,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.budget import (
     LIMIT_REACHED_MESSAGE,
+    NO_ROOM_TO_ACT_MESSAGE,
     TimedOut,
     run_with_timeout,
     tokens_spent,
@@ -251,16 +252,22 @@ def test_the_soft_line_comes_before_the_hard_one() -> None:
 
 
 @pytest.mark.risco("R6")
-async def test_a_turn_that_ran_out_of_room_answers_with_what_it_already_fetched() -> None:
+async def test_a_turn_that_ran_out_of_room_mid_flight_delivers_what_it_fetched() -> None:
     """R6 — a falha que este desenho existe para impedir: gastar tudo e não entregar.
 
     Antes, o teto era conferido só na entrada da fala, então o turno podia buscar,
     detalhar, validar — o código aprovar a composição — e só então descobrir que
     não tinha orçamento para contar a ninguém. Tudo pago, nada entregue.
 
-    Aqui a conversa chega perto do teto com um retorno de tool já em mãos. O
-    esperado é uma resposta de verdade, feita sem tools, e **não** a frase de
-    limite: o cliente recebe o pior dos dois atendimentos possíveis, não nenhum.
+    **A conversa cruza a linha macia NO MEIO do turno**, com retorno de tool já em
+    mãos: entra com 790 de 1.000, o modelo pede tool duas vezes, e na volta da
+    segunda os 810 gastos já passaram dos 800 da linha. O esperado é uma resposta de
+    verdade, feita sem tools, e não a frase de limite — o cliente recebe o pior dos
+    dois atendimentos possíveis, não nenhum.
+
+    A versão anterior deste teste dizia isso no docstring e montava outra coisa: o
+    estado não tinha `ToolMessage` nenhum, então o que ele media era a entrada do
+    turno, que é o caso do teste seguinte e tem resposta oposta.
     """
     subagent = registrar(
         RECOMENDACAO, PROMPT_RECOMENDACAO, [Ferramenta(tool=_tool_de_leitura(), escreve=False)]
@@ -269,7 +276,7 @@ async def test_a_turn_that_ran_out_of_room_answers_with_what_it_already_fetched(
         ModeloComEsemTools(messages=iter([])), InMemorySaver(), subagent, budget_tokens=1_000
     )
 
-    await graph.aupdate_state(session_config("apertada"), {"messages": [_answer("trabalho", 850)]})
+    await graph.aupdate_state(session_config("apertada"), {"messages": [_answer("trabalho", 790)]})
 
     final = await graph.ainvoke(
         {"session_id": "apertada", "messages": [HumanMessage(content="e aí?")]},
@@ -278,6 +285,45 @@ async def test_a_turn_that_ran_out_of_room_answers_with_what_it_already_fetched(
 
     assert final["messages"][-1].content == "fecha assim, olha só"
     assert final["messages"][-1].content != LIMIT_REACHED_MESSAGE
+
+
+@pytest.mark.risco("R6")
+async def test_a_turn_that_starts_with_no_room_says_so_instead_of_improvising() -> None:
+    """R6 — sem tool e sem nada buscado neste turno, quem responde é o código.
+
+    Esta é a outra metade da linha macia, e ela foi escrita a partir de uma falha
+    real. A sessão `5ac8c0a9` cruzou os 200k da linha no turno que entregou os dados
+    da empresa; os quatro turnos seguintes rodaram sem tool nenhuma. O modelo não tem
+    como perceber que ficou sem mãos, então respondeu como se não tivesse: coletou o
+    resto dos dados, disse *"agora vou fechar o pedido para você"*, e `criar_pedido`
+    não estava ligada. Zero pedido no banco, zero item na fila de aprovação, zero
+    nota — e nada na tela que parecesse falha.
+
+    Num turno que COMEÇA sem folga não há retorno de tool para entregar: o que sobra
+    é o modelo improvisando sobre o histórico, que é onde ele inventa. Então a
+    resposta é de código, e ela não afirma nada sobre o que já aconteceu na conversa
+    — um pedido criado antes tornaria "nenhum pedido foi criado" mentira.
+    """
+    subagent = registrar(
+        RECOMENDACAO, PROMPT_RECOMENDACAO, [Ferramenta(tool=_tool_de_leitura(), escreve=False)]
+    )
+    graph = build_graph(
+        ModeloComEsemTools(messages=iter([])), InMemorySaver(), subagent, budget_tokens=1_000
+    )
+
+    await graph.aupdate_state(session_config("sem-folga"), {"messages": [_answer("trabalho", 850)]})
+
+    final = await graph.ainvoke(
+        {"session_id": "sem-folga", "messages": [HumanMessage(content="e agora?")]},
+        config=session_config("sem-folga"),
+    )
+
+    dito = final["messages"][-1].content
+    assert dito == NO_ROOM_TO_ACT_MESSAGE
+    assert dito != LIMIT_REACHED_MESSAGE, "o teto duro é a outra linha, e ela ainda não chegou"
+    # `adversarial-006`: a frase é honesta sobre o resultado e muda sobre a máquina.
+    for vazamento in ("token", "limite", "orçamento interno", "ferramenta", "tool"):
+        assert vazamento not in dito.lower(), f"a frase de corte vazou {vazamento!r}"
 
 
 @pytest.mark.risco("R6")

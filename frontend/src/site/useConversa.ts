@@ -25,6 +25,7 @@ import type { components } from "../api/schema";
 export type Veredito = components["schemas"]["ComposicaoValidada"];
 
 export interface Fala {
+  readonly tipo: "fala";
   readonly de: "cliente" | "atendente";
   readonly texto: string;
   /** Verdadeiro enquanto os tokens ainda estão chegando nesta fala. */
@@ -35,8 +36,78 @@ export interface Fala {
    * Um turno com tool no meio produz mais de uma: "vou consultar os preços" →
    * tool → "aqui está". São dois balões, e sem este índice o segundo emendava no
    * primeiro, saindo "consultar os preços:Perfeito! Aqui".
+   *
+   * **Não é único na conversa**: o backend zera o contador a cada turno. Quem
+   * procura uma fala por este número procura de trás para frente, e acha a do
+   * turno corrente.
    */
   readonly indice?: number;
+}
+
+export interface CartaoDaComposicao {
+  readonly tipo: "composicao";
+  readonly veredito: Veredito;
+}
+
+/**
+ * A conversa é UMA lista ordenada por chegada — fala do cliente, fala do
+ * atendente, composição avaliada.
+ *
+ * Antes o veredito era um estado à parte (`Veredito | null`) renderizado num slot
+ * fixo no fim do corpo da janela. Isso produzia dois defeitos de uma vez, e os
+ * dois apareceram na primeira conversa longa de verdade: a tabela ficava presa no
+ * rodapé enquanto as falas novas nasciam **acima** dela, e cada veredito
+ * sobrescrevia o anterior — um atendimento com três variações (sem restrição, sem
+ * glúten, sem lactose) mostrava só a última.
+ *
+ * Ordem de chegada é a única ordem que existe aqui, e é a mesma do `messages` do
+ * backend.
+ */
+export type ItemDaConversa = Fala | CartaoDaComposicao;
+
+function ehFala(item: ItemDaConversa): item is Fala {
+  return item.tipo === "fala";
+}
+
+/**
+ * Onde continuar escrevendo — de trás para frente, e por isso acha a fala do
+ * turno corrente mesmo com `indice` repetindo entre turnos.
+ *
+ * Procura a fala **aberta** com este índice em vez de olhar só o último item
+ * porque um cartão de composição pode ter caído no meio: o veredito chega por
+ * outro stream, e nada garante que ele não chegue entre dois pedaços da mesma
+ * fala. Sem isto, aquele cartão partia a fala em dois balões.
+ */
+function falaAberta(itens: readonly ItemDaConversa[], indice: number): number {
+  for (let i = itens.length - 1; i >= 0; i -= 1) {
+    const item = itens[i];
+    if (
+      item &&
+      ehFala(item) &&
+      item.de === "atendente" &&
+      item.escrevendo &&
+      (item.indice ?? 0) === indice
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** A última fala do atendente com este índice, aberta ou não. */
+function ultimaFala(itens: readonly ItemDaConversa[], indice: number): number {
+  for (let i = itens.length - 1; i >= 0; i -= 1) {
+    const item = itens[i];
+    if (item && ehFala(item) && item.de === "atendente" && (item.indice ?? 0) === indice) return i;
+  }
+  return -1;
+}
+
+/** Apaga o cursor de digitação de toda fala ainda aberta. */
+function fechar(itens: readonly ItemDaConversa[]): ItemDaConversa[] {
+  return itens.map((item) =>
+    ehFala(item) && item.escrevendo ? { ...item, escrevendo: false } : item,
+  );
 }
 
 export interface EstadoDoPedido {
@@ -76,10 +147,9 @@ function guardarSessao(id: string): void {
 
 export function useConversa() {
   const [sessionId, setSessionId] = useState<string | null>(() => sessaoGuardada());
-  const [falas, setFalas] = useState<Fala[]>([]);
+  const [itens, setItens] = useState<ItemDaConversa[]>([]);
   const [esperando, setEsperando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [veredito, setVeredito] = useState<Veredito | null>(null);
   const [pedido, setPedido] = useState<EstadoDoPedido | null>(null);
   const [nota, setNota] = useState<EstadoDaNota | null>(null);
   const [conexao, setConexao] = useState<EstadoDaConexao>("desconectado");
@@ -101,7 +171,11 @@ export function useConversa() {
         if (!evento) return;
 
         if (evento.tipo === "composicao_avaliada") {
-          setVeredito((evento as ComposicaoAvaliada).veredito);
+          // Um cartão por veredito, na posição em que ele aconteceu. O barramento
+          // não repete evento — `assinar` é pub/sub ao vivo, sem histórico —, então
+          // acrescentar não duplica cartão numa reconexão.
+          const avaliada = (evento as ComposicaoAvaliada).veredito;
+          setItens((atuais) => [...atuais, { tipo: "composicao", veredito: avaliada }]);
           return;
         }
         if (evento.tipo === "pedido_atualizado") {
@@ -137,7 +211,7 @@ export function useConversa() {
 
     setErro(null);
     setEsperando(true);
-    setFalas((atuais) => [...atuais, { de: "cliente", texto: limpo }]);
+    setItens((atuais) => [...atuais, { tipo: "fala", de: "cliente", texto: limpo }]);
 
     try {
       const corpo: Record<string, unknown> = { message: limpo };
@@ -175,20 +249,39 @@ export function useConversa() {
           // última fala de `atuais` — que era a do CLIENTE. Daí "Olá, tudo bem?Opa,
           // tudo certo!" num balão verde só.
           const indice = Number(evento.corpo["fala"] ?? 0);
-          setFalas((atuais) => {
-            const ultima = atuais[atuais.length - 1];
-            if (
-              ultima &&
-              ultima.de === "atendente" &&
-              ultima.escrevendo &&
-              (ultima.indice ?? 0) === indice
-            ) {
-              return [...atuais.slice(0, -1), { ...ultima, texto: ultima.texto + pedaco }];
+          setItens((atuais) => {
+            const aberta = falaAberta(atuais, indice);
+            if (aberta >= 0) {
+              const fala = atuais[aberta] as Fala;
+              const copia = [...atuais];
+              copia[aberta] = { ...fala, texto: fala.texto + pedaco };
+              return copia;
             }
             // Fala nova: a anterior para de piscar o cursor no mesmo instante.
-            const fechadas = atuais.map((f) => (f.escrevendo ? { ...f, escrevendo: false } : f));
-            return [...fechadas, { de: "atendente", texto: pedaco, escrevendo: true, indice }];
+            return [
+              ...fechar(atuais),
+              { tipo: "fala", de: "atendente", texto: pedaco, escrevendo: true, indice },
+            ];
           });
+          continue;
+        }
+
+        if (evento.evento === "preambulo") {
+          // O backend acabou de descobrir que esta fala era preâmbulo — texto e
+          // chamada de tool na mesma `AIMessage` ("Agora vou consultar os
+          // preços…"). O balão sai e vira o indicador de digitando: o cliente
+          // continua vendo que algo acontece, sem ler a narração do trabalho.
+          //
+          // Chega DEPOIS do texto, e não antes, porque no streaming a chamada de
+          // tool só se revela no fim da mensagem. É o preço de não segurar o
+          // primeiro token — e a alternativa era a tela ficar muda enquanto o
+          // agente escreve.
+          const indice = Number(evento.corpo["fala"] ?? 0);
+          setItens((atuais) => {
+            const alvo = ultimaFala(atuais, indice);
+            return alvo < 0 ? atuais : [...atuais.slice(0, alvo), ...atuais.slice(alvo + 1)];
+          });
+          setEsperando(true);
           continue;
         }
 
@@ -208,11 +301,7 @@ export function useConversa() {
       // Fecha toda fala ainda aberta: sem isto o cursor de digitação ficaria
       // piscando para sempre no fim de uma resposta que já terminou. Toda, e não
       // só a última, porque um turno com tool no meio abre mais de uma.
-      setFalas((atuais) =>
-        atuais.some((f) => f.escrevendo)
-          ? atuais.map((f) => (f.escrevendo ? { ...f, escrevendo: false } : f))
-          : atuais,
-      );
+      setItens((atuais) => (atuais.some((i) => ehFala(i) && i.escrevendo) ? fechar(atuais) : atuais));
     }
   }, []);
 
@@ -227,10 +316,9 @@ export function useConversa() {
 
   return {
     sessionId,
-    falas,
+    itens,
     esperando,
     erro,
-    veredito,
     pedido,
     nota,
     conexao,

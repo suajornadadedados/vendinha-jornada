@@ -38,6 +38,7 @@ from vendinha.config import Settings
 from vendinha.documentos import formatar_cnpj
 from vendinha.graph import session_config
 from vendinha.metricas import apurar, apurar_metricas, status_fiscal
+from vendinha.nota.documento import numero_da_nota
 from vendinha.pedidos import Pedido
 from vendinha.precos import TabelaDePrecos, tabela
 from vendinha.schemas import (
@@ -311,7 +312,7 @@ def montar(
                 no_painel(
                     pedido,
                     base_url=settings.public_base_url,
-                    numero_nota=None if notas[pedido.id] is None else notas[pedido.id].numero,
+                    numero_nota=numero_da_nota(notas[pedido.id]),
                 )
                 for pedido in encontrados
             )
@@ -327,11 +328,10 @@ def montar(
         pedido = await request.app.state.pedidos.por_id(pedido_id)
         if pedido is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "pedido desconhecido")
-        nota = await request.app.state.fiscal.nota_de(pedido_id)
         return no_painel(
             pedido,
             base_url=settings.public_base_url,
-            numero_nota=None if nota is None else nota.numero,
+            numero_nota=numero_da_nota(await request.app.state.fiscal.nota_de(pedido_id)),
         )
 
     @app.get("/admin/metricas", response_model=Metricas, tags=["painel"])

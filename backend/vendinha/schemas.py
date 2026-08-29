@@ -77,6 +77,26 @@ class TokenEvent(BaseModel):
     )
 
 
+class PreambuloEvent(BaseModel):
+    """A fala que acabou de ser transmitida era preâmbulo — retire-a da tela.
+
+    Uma `AIMessage` pode trazer texto **e** chamada de tool: "Agora vou consultar
+    os preços…" seguido de `consultar_preco`. Um turno com quatro tools produzia
+    quatro balões desses, e a conversa virava a narração do próprio trabalho.
+
+    O aviso chega **depois** do texto porque no streaming a chamada de tool só se
+    revela no fim da mensagem. Segurar o texto até saber teria custado o primeiro
+    token de toda fala, inclusive das que são resposta de verdade — e o silêncio
+    enquanto o agente escreve é o defeito que o indicador de digitando existe para
+    não ter.
+
+    É `fala` e não "a última": um evento perdido no meio não pode apagar o balão
+    errado.
+    """
+
+    fala: int
+
+
 class DoneEvent(BaseModel):
     """End of stream. A client that never sees this one is still waiting."""
 
@@ -209,11 +229,38 @@ class PedidoNaFila(BaseModel):
     destinatario: DestinatarioDaNota
     composicoes: tuple[ComposicaoDoPedido, ...]
 
+    # A decisão, quando já existe. Os quatro juntos são a rastreabilidade que o
+    # RF-4.2 pede — quem, quando e, na rejeição, por quê — e eles ficam no MESMO
+    # modelo do pendente de propósito: o operador que abre um pedido já decidido
+    # precisa ver a composição item a item que foi aprovada, não um resumo dela.
+    # Um modelo próprio para o decidido seria uma segunda projeção do mesmo dado, e
+    # a segunda é a que fica velha.
+    status: str = Field(description="O status do pedido, para a tela não deduzi-lo.")
+    decisao: Literal["aprovada", "rejeitada"] | None = None
+    operador: str | None = Field(
+        default=None,
+        description=(
+            "Quem decidiu, como se declarou. Este projeto ainda não tem "
+            "autenticação: é declaração, não identidade provada (S-08)."
+        ),
+    )
+    decidido_em: datetime | None = None
+    motivo: str | None = None
+    numero_nota: int | None = None
+
 
 class FilaDoOperador(BaseModel):
-    """A fila inteira, do mais antigo para o mais novo."""
+    """A fila e o que já saiu dela.
+
+    **Duas listas, e não uma ordenada.** O que espera decisão vem em `pendentes`,
+    sempre, e o histórico em `decididos`. Uma lista só com um campo de ordenação
+    deixaria "pendente primeiro" nas mãos de quem renderiza — e o dia em que alguém
+    ordenasse por data para ver o mais recente, um pedido esperando aprovação
+    afundaria no meio do histórico sem nada acusar.
+    """
 
     pendentes: tuple[PedidoNaFila, ...]
+    decididos: tuple[PedidoNaFila, ...] = ()
 
 
 class DecisaoDoOperador(BaseModel):

@@ -1017,10 +1017,16 @@ async def rodar(
                 # produto — o eval a HERDA, nao a escolhe (ADR-014). Um flag de
                 # linha de comando aqui faria a regua medir um sistema que nao e
                 # o que atende o cliente.
+                #
+                # `com_ferramentas=True` pela mesma razao, uma casa adiante: e o
+                # que decide o endpoint da OpenAI, e a regua tem que falar com o
+                # mesmo endpoint que o atendimento. O juiz, logo acima, NAO passa
+                # a flag — ele nao binda tool nenhuma.
                 resolve_model(
                     modelo_do_agente,
                     credenciais.get(provider_do_agente),
                     settings.llm_temperature,
+                    com_ferramentas=True,
                 ),
                 busca,
                 catalogo,

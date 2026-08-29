@@ -63,6 +63,7 @@ from vendinha.fiscal import (
 )
 from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_config
 from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
+from vendinha.nota.documento import numero_da_nota
 from vendinha.observability import callback_handler, install_log_redaction
 from vendinha.observador import ObservadorDoTurno
 from vendinha.pagamento import (
@@ -104,6 +105,7 @@ from vendinha.schemas import (
     NotificacaoDePagamento,
     PedidoAtualizado,
     PedidoNaFila,
+    PreambuloEvent,
     ProviderStatus,
     SessionEvent,
     TokenEvent,
@@ -157,6 +159,18 @@ async def _bounded_first_token(chunks: AsyncIterator[Any], seconds: float) -> As
     yield first
     async for chunk in iterator:
         yield chunk
+
+
+def _pede_tool(chunk: Any) -> bool:
+    """Se esta mensagem do atendente também chama uma tool.
+
+    Duas chaves porque o streaming e o não-streaming falam diferente: um
+    `AIMessageChunk` traz `tool_call_chunks` (o JSON dos argumentos chegando aos
+    pedaços) e uma `AIMessage` inteira traz `tool_calls`. Um `ainvoke` sem stream
+    — o caminho dos testes e de qualquer provedor que não emita chunk — só tem a
+    segunda.
+    """
+    return bool(getattr(chunk, "tool_call_chunks", None) or getattr(chunk, "tool_calls", None))
 
 
 def create_app(
@@ -419,7 +433,9 @@ def create_app(
 
         provider, _ = split_model(model_name)
         api_key = (await _credentials(app)).get(provider)
-        model = resolve_model(model_name, api_key, settings.llm_temperature)
+        # `com_ferramentas=True`: as duas lanes bindam tool, e é isso que decide o
+        # endpoint na OpenAI. Ver `providers.resolve_model`.
+        model = resolve_model(model_name, api_key, settings.llm_temperature, com_ferramentas=True)
         busca = await _busca(app)
         timeout = settings.tool_timeout_seconds
         # O mesmo modelo atende as duas lanes e o roteador. Um modelo barato só
@@ -568,10 +584,16 @@ def create_app(
 
         graph_to_run = await _graph_for(request.app, model_name)
         timeout = settings.tool_timeout_seconds
+        # O handler da subida é a sonda: ele diz se há Langfuse configurado, e é o
+        # que já logou uma vez se não houver. O que vai no `config` é um handler
+        # POR SESSÃO, com o trace id derivado dela — é o que faz os turnos de um
+        # atendimento caírem num trace só em vez de um trace por turno. Se construí-lo
+        # falhar, cai no da subida: pior um trace por turno do que atendimento sem
+        # trace (ADR-010).
         handler = getattr(request.app.state, "langfuse", None)
         config = session_config(session_id)
         if handler is not None:
-            config = {**config, "callbacks": [handler]}
+            config = {**config, "callbacks": [callback_handler(session_id=session_id) or handler]}
 
         # O painel observa o mesmo stream com outra pergunta: a rota filtra o que o
         # cliente pode ler, o observador mede o que o turno custou e conta ao
@@ -610,6 +632,12 @@ def create_app(
                     # LangChain mantém o mesmo id por mensagem e troca na seguinte.
                     fala = 0
                     id_da_fala: str | None = None
+                    # Se a fala corrente já pôs texto na tela, e se já avisamos que
+                    # ela era preâmbulo. Os dois juntos são a guarda: sem o
+                    # primeiro, uma mensagem só de tool (nenhum texto, id novo)
+                    # mandaria apagar o balão da fala ANTERIOR, que era a resposta.
+                    falou = False
+                    avisado = False
                     async for chunk, meta in _bounded_first_token(token_stream, timeout):
                         # Antes de qualquer filtro: o observador precisa do que o
                         # cliente NÃO vê — o veredito da composição, o id do pedido
@@ -632,6 +660,7 @@ def create_app(
                         # roteador também produz `AIMessage`.
                         if not fala_com_o_cliente((meta or {}).get("langgraph_node")):
                             continue
+                        atual = getattr(chunk, "id", None)
                         # `.text` flattens content blocks: a provider answering
                         # with a list of typed blocks and one answering with a
                         # plain string have to look the same to the client.
@@ -640,20 +669,48 @@ def create_app(
                             # mudou. Provedor que não manda id nenhum cai no caso de
                             # uma fala só, que é o comportamento anterior — pior
                             # partir a resposta em balões aleatórios do que emendar.
-                            atual = getattr(chunk, "id", None)
                             if atual is not None and atual != id_da_fala:
                                 if id_da_fala is not None:
                                     fala += 1
                                 id_da_fala = atual
+                                falou = False
+                                avisado = False
+                            falou = True
                             yield {
                                 "event": "token",
                                 "data": TokenEvent(text=chunk.text, fala=fala).model_dump_json(),
                             }
+
+                        # Texto E chamada de tool na mesma mensagem: o texto era
+                        # preâmbulo do trabalho ("Agora vou consultar os preços…"),
+                        # não resposta ao cliente. O balão sai e volta a ser o
+                        # indicador de digitando.
+                        #
+                        # `atual == id_da_fala` é o que amarra o aviso à fala que
+                        # de fato falou: sem essa igualdade, uma mensagem seguinte
+                        # que só chama tool apagaria a resposta anterior.
+                        if atual is not None and atual == id_da_fala and falou and not avisado:
+                            if _pede_tool(chunk):
+                                avisado = True
+                                yield {
+                                    "event": "preambulo",
+                                    "data": PreambuloEvent(fala=fala).model_dump_json(),
+                                }
             except Exception:
                 # Loud on our side, vague on the customer's. The exception carries
                 # DSNs, model names and limits; `adversarial-006` fails a run that
                 # leaks internal configuration or tool names into an answer.
-                logger.exception("failed to generate an answer for session %s", session_id)
+                # O nome do modelo vai no log porque ele é escolhido em runtime
+                # (ADR-012) e é a primeira coisa que se quer saber aqui. Sem ele,
+                # um modelo que o servidor oferece mas não sabe chamar tool produz
+                # o mesmo "não consegui responder agora" de uma queda de rede, e
+                # quem trocou o modelo no painel não tem como ligar uma coisa à
+                # outra. Aconteceu com `openai:gpt-5.6-luna`.
+                logger.exception(
+                    "failed to generate an answer for session %s with model %s",
+                    session_id,
+                    model_name,
+                )
                 falhou = True
                 yield {
                     "event": "error",
@@ -796,13 +853,24 @@ def create_app(
         if not esperado or not token or not hmac.compare_digest(esperado, token):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "credencial de operador invalida")
 
-    def _na_fila(pedido: Pedido) -> PedidoNaFila:
+    def _na_fila(
+        pedido: Pedido,
+        *,
+        decisao: Aprovacao | None = None,
+        numero_nota: int | None = None,
+    ) -> PedidoNaFila:
         """O pedido como o operador o ve: dados da nota, e a composicao item a item.
 
         As composicoes vao como estao gravadas, sem reprojecao. E o que o RF-3.2
         pede — *"dados completos da nota, incluindo destinatario PJ e a composicao
         item a item"* — e e tambem o que garante que o que ele aprova e o que o
         emissor vai ler.
+
+        **Um pedido decidido passa por aqui pelo mesmo caminho**, com a decisao
+        anexada. Quem abre um pedido ja aprovado precisa ver a mesma composicao item
+        a item que foi aprovada; montar um modelo enxuto so para o historico seria
+        uma segunda projecao do mesmo dado, e o historico da nota fiscal e
+        exatamente o lugar onde a projecao velha custa caro.
         """
         return PedidoNaFila(
             pedido_id=pedido.id,
@@ -817,23 +885,59 @@ def create_app(
                 endereco=pedido.empresa.endereco,
             ),
             composicoes=pedido.composicoes,
+            status=pedido.status.value,
+            decisao=None if decisao is None else decisao.decisao.value,
+            operador=None if decisao is None else decisao.operador,
+            decidido_em=None if decisao is None else decisao.decidido_em,
+            motivo=None if decisao is None else decisao.motivo,
+            numero_nota=numero_nota,
         )
 
     @app.get("/operador/fila", response_model=FilaDoOperador)
     async def fila_do_operador(
         request: Request,
+        limite: int = 50,
         x_operador_token: Annotated[str | None, Header()] = None,
     ) -> FilaDoOperador:
-        """Os pedidos pagos esperando decisao (RF-3.2, REQ-2).
+        """Os pedidos pagos esperando decisao, e os que ja foram decididos (RF-3.2, RF-4.2).
 
         A fila e a consulta pelo **status do pedido**, nao pelo grafo: um pedido cuja
         pausa nao chegou a abrir continua aparecendo aqui, e a aprovacao conduz o
         grafo do comeco. Fila que depende de um `ainvoke` ter dado certo e fila que
         perde pedido em silencio.
+
+        **O historico sai da tabela de decisoes, nao do status do pedido.** Sao coisas
+        diferentes: `nota_emitida` diz o que aconteceu com a nota, e `aprovacao_de_nf`
+        diz quem decidiu e quando. Um pedido rejeitado nao vira nota nenhuma e
+        precisa aparecer no historico do mesmo jeito — e um dia em que a emissao
+        falhar depois de uma aprovacao valida, a aprovacao continua sendo um fato
+        registrado.
         """
         _operador_autenticado(x_operador_token)
-        na_fila = await pendentes(request.app.state.pedidos)
-        return FilaDoOperador(pendentes=tuple(_na_fila(pedido) for pedido in na_fila))
+        pedidos_do_painel = request.app.state.pedidos
+        fiscal = request.app.state.fiscal
+
+        na_fila = await pendentes(pedidos_do_painel)
+        recentes = await pedidos_do_painel.listar(limite=min(max(limite, 1), 200), offset=0)
+        decisoes = await fiscal.decisoes_de([pedido.id for pedido in recentes])
+
+        decididos = []
+        for pedido in recentes:
+            decisao = decisoes.get(pedido.id)
+            if decisao is None:
+                continue
+            decididos.append(
+                _na_fila(
+                    pedido,
+                    decisao=decisao,
+                    numero_nota=numero_da_nota(await fiscal.nota_de(pedido.id)),
+                )
+            )
+
+        return FilaDoOperador(
+            pendentes=tuple(_na_fila(pedido) for pedido in na_fila),
+            decididos=tuple(decididos),
+        )
 
     async def _decidir_pela_fila(
         request: Request, pedido_id: str, decisao: Decisao, corpo: DecisaoDoOperador

@@ -18,6 +18,7 @@ existirem, a camada `security` afirma sobre elas.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +26,13 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.checkpoint.memory import InMemorySaver
 
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, Produto, carregar_seed
+from vendinha.fiscal import FiscalEmMemoria
 from vendinha.graph import ConversationState, build_graph, session_config
+from vendinha.pagamento import MockPaymentAdapter
 from vendinha.pedidos import PedidosEmMemoria
 from vendinha.subagents import (
     PROMPT_RECOMENDACAO,
@@ -36,6 +40,7 @@ from vendinha.subagents import (
     SOMENTE_LEITURA,
     Ferramenta,
     FronteiraDePermissaoViolada,
+    checkout,
     recomendacao,
     registrar,
 )
@@ -115,6 +120,61 @@ def test_the_recommendation_subagent_is_registered_with_read_only_tools_only(
     }
     assert subagent.escritoras == ()
     assert all(not ferramenta.escreve for ferramenta in subagent.ferramentas)
+
+
+def _com_lookaround(no: Any, caminho: str = "$") -> list[tuple[str, str]]:
+    """Todo `pattern` do schema que usa lookahead ou lookbehind, com onde ele está."""
+    achados: list[tuple[str, str]] = []
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            if chave == "pattern" and isinstance(valor, str) and re.search(r"\(\?[=!<]", valor):
+                achados.append((caminho, valor))
+            achados.extend(_com_lookaround(valor, f"{caminho}.{chave}"))
+    elif isinstance(no, list):
+        for indice, item in enumerate(no):
+            achados.extend(_com_lookaround(item, f"{caminho}[{indice}]"))
+    return achados
+
+
+def test_no_tool_argument_schema_uses_regex_lookaround(seed: tuple[Produto, ...]) -> None:
+    """ADR-012 — um schema de tool que só um fornecedor aceita não é agnóstico.
+
+    O Pydantic descreve `Decimal` como `anyOf: [number, string]` e põe um `pattern`
+    com lookahead na variante string. A OpenAI recusa lookaround no schema de tool e
+    responde 400 nomeando o campo — `preco_minimo`, na primeira vez —, e o
+    atendimento morre no primeiro turno com uma tool perfeitamente correta.
+
+    Este teste varre as tools **como elas são registradas**, e não uma lista de
+    modelos escrita à mão, porque o modo de falha é o campo `Decimal` que alguém
+    acrescenta numa tool nova daqui a seis meses. Um teste que nomeasse os três
+    schemas de hoje passaria alegremente naquele dia.
+
+    Não é sobre validação: `pattern` é orientação para o modelo, e quem valida
+    continua sendo o Pydantic quando o argumento chega — ver `tools.ReaisNaEntrada`.
+    """
+    lanes = (
+        recomendacao(
+            BuscaEmMemoria(seed), CatalogoEmMemoria(seed), PedidosEmMemoria(), SEM_TIMEOUT
+        ),
+        checkout(
+            BuscaEmMemoria(seed),
+            CatalogoEmMemoria(seed),
+            PedidosEmMemoria(),
+            MockPaymentAdapter("http://localhost:8000"),
+            SEM_TIMEOUT,
+            FiscalEmMemoria(),
+        ),
+    )
+
+    for subagent in lanes:
+        for tool in subagent.tools:
+            # `convert_to_openai_tool` é a conversão que o `bind_tools` faz: o que
+            # se afirma aqui é o payload que sai, e não um schema parecido com ele.
+            achados = _com_lookaround(convert_to_openai_tool(tool))
+            assert not achados, (
+                f"{tool.name} manda lookaround para o fornecedor em {achados} — "
+                "use `tools.ReaisNaEntrada` no campo Decimal"
+            )
 
 
 @pytest.mark.risco("R1")
