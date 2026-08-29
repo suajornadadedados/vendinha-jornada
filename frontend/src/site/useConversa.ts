@@ -15,7 +15,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { BASE_URL } from "../api/client";
+// `api/base` e não `api/client`: importar do cliente traz o módulo inteiro para o
+// chunk da landing, inclusive o token do operador (REQ-7, alvo 0 — NC-8).
+import { BASE_URL } from "../api/base";
 import type { ComposicaoAvaliada, NotaDecidida, PedidoAtualizado } from "../api/eventos";
 import { lerEventoDoChat, lerEventoDoPainel } from "../api/eventos";
 import type { EstadoDaConexao } from "../api/sse";
