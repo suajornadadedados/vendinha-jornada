@@ -184,9 +184,32 @@ class _DropUnservedProbes(logging.Filter):
         return not (status == 404 and path.split("?", 1)[0] in _UNSERVED_PROBES)
 
 
-def silence_unserved_probes() -> None:
-    """Stop the access log from reporting 404s for paths nothing here serves."""
+def unserved_probes_are_silenced() -> bool:
+    """Whether the access logger is currently dropping those 404s.
+
+    Exists so a test can ask about the *application*, not about the function — the
+    same two-level question `redaction_is_installed` answers, and for the same reason:
+    proving the installer works never proves the app calls it.
+    """
+    return any(
+        isinstance(existing, _DropUnservedProbes)
+        for existing in logging.getLogger("uvicorn.access").filters
+    )
+
+
+def silence_unserved_probes() -> bool:
+    """Stop the access log from reporting 404s for paths nothing here serves.
+
+    Idempotent, and the return says which happened: `True` installed a filter, `False`
+    found one already there. `Logger.addFilter` de-duplicates by identity only, so
+    calling this twice would otherwise stack a second instance — harmless in
+    production, where `create_app` runs once, but the suite builds an app per test and
+    would pile them onto the process-wide `uvicorn.access` logger.
+    """
+    if unserved_probes_are_silenced():
+        return False
     logging.getLogger("uvicorn.access").addFilter(_DropUnservedProbes())
+    return True
 
 
 def _every_handler() -> list[logging.Handler]:

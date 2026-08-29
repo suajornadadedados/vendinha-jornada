@@ -135,14 +135,41 @@ def test_forma_inesperada_de_registro_e_logada_em_vez_de_quebrar() -> None:
 
 
 def test_o_filtro_e_instalado_no_logger_de_acesso() -> None:
-    """Testar a função que filtra nunca prova que alguém a ligou no caminho.
+    """Metade de baixo da fiação: a função liga o filtro no logger certo.
 
-    É a mesma lição de `redaction_is_installed` — rodada 2 da verificação da S-02.
+    A de cima — a aplicação chama a função — é
+    `test_the_application_silences_the_unserved_probes_when_it_starts`, em
+    `test_boot.py`. Este arquivo citava a lição de `redaction_is_installed` (rodada 2
+    da verificação da S-02) e cobria só esta metade, o que deixava apagar a chamada do
+    `lifespan` sem nenhum teste vermelho.
     """
     acesso = logging.getLogger("uvicorn.access")
     antes = list(acesso.filters)
+    acesso.filters = []
     try:
-        observability.silence_unserved_probes()
-        assert any(isinstance(f, observability._DropUnservedProbes) for f in acesso.filters)
+        assert observability.silence_unserved_probes() is True
+        assert observability.unserved_probes_are_silenced()
+    finally:
+        acesso.filters = antes
+
+
+def test_ligar_o_filtro_duas_vezes_nao_empilha_dois() -> None:
+    """A suíte monta uma aplicação por teste, e o `uvicorn.access` é do processo.
+
+    Sem idempotência cada `TestClient(create_app(...))` deixava mais uma instância
+    pendurada no logger global. Nenhuma consequência observável — todas devolvem o
+    mesmo veredito —, mas o `install_log_redaction` vizinho foi escrito com o cuidado
+    oposto, e o valor de retorno existe para que isto possa ser afirmado.
+    """
+    acesso = logging.getLogger("uvicorn.access")
+    antes = list(acesso.filters)
+    acesso.filters = []
+    try:
+        assert observability.silence_unserved_probes() is True
+        for _ in range(4):
+            assert observability.silence_unserved_probes() is False
+
+        instalados = [f for f in acesso.filters if isinstance(f, observability._DropUnservedProbes)]
+        assert len(instalados) == 1
     finally:
         acesso.filters = antes
