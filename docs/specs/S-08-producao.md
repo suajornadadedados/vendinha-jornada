@@ -35,23 +35,27 @@ governa tudo abaixo.
 
 ## Requisitos
 
-- [ ] REQ-1 `Dockerfile` do backend e do frontend, multi-stage. O do frontend produz os
+- [x] REQ-1 `Dockerfile` do backend e do frontend, multi-stage. O do frontend produz os
       estáticos com as **duas entradas** que a S-07 criou (`index.html` e `admin.html`) —
       um build que esqueça a segunda entrega um painel que responde 404 só em produção.
       Containers **non-root** (RNF-9), e a versão do `qdrant-client` casando com a imagem
       do Qdrant (RS-6 da verificação da S-03, que apontava justamente para cá).
-- [ ] REQ-2 `deploy/docker-compose.yml` com `api`, `nginx`, `postgres` e `qdrant`: rede
+- [x] REQ-2 `deploy/docker-compose.yml` com `api`, `nginx`, `postgres` e `qdrant`: rede
       própria, volumes próprios, `restart: unless-stopped`, healthchecks, e as portas de
       Postgres e Qdrant **não publicadas** — só o nginx expõe porta no host.
-- [ ] REQ-3 Configuração do nginx: serve os estáticos, faz proxy da API, e roteia
+- [x] REQ-3 Configuração do nginx: serve os estáticos, faz proxy da API, e roteia
       `/admin*` para `admin.html`. **`proxy_buffering off` na rota do chat** — sem isso o
       SSE do atendimento chega em bloco no fim e o streaming morre silenciosamente, com
       todos os testes verdes. É a falha mais provável desta spec inteira.
-- [ ] REQ-4 `deploy/.env.example` próprio, com o que muda em relação ao local: `APP_ENV`,
+      > Entregue com o buffer desligado no bloco `/api/` **inteiro**, e não só no chat: são
+      > três streams (`/chat`, `/eventos/sessao/{id}`, `/admin/eventos`) e o do chat é o
+      > único sem heartbeat. Acertar a rota difícil e deixar as outras duas a uma
+      > refatoração de distância não era o que o requisito queria dizer.
+- [x] REQ-4 `deploy/.env.example` próprio, com o que muda em relação ao local: `APP_ENV`,
       `API_HOST=0.0.0.0` (é aqui que `0.0.0.0` é a resposta certa — ver S-02 D-8),
       `PUBLIC_BASE_URL`, `CORS_ORIGINS`, `OPERADOR_API_TOKEN` e as chaves do Langfuse.
       Nenhum secret versionado; o gitleaks do CI continua sendo o portão.
-- [ ] REQ-5 `deploy/RUNBOOK.md`: subir do zero, hardening mínimo (ufw, SSH por chave,
+- [x] REQ-5 `deploy/RUNBOOK.md`: subir do zero, hardening mínimo (ufw, SSH por chave,
       containers non-root), backup e restore do Postgres, rollback, e a **região do
       projeto Langfuse (EU/US)** — pendência que o ADR-010 endereça explicitamente ao
       runbook e que só tem onde morar aqui.
@@ -116,11 +120,52 @@ Cenário: o banco não está exposto
   reetiquetadas aqui, e **não** implementadas.
 
 ## Descobertas (preenchido durante a execução)
+
 - **DESC-0 (herdada do replanejamento).** `backend/vendinha/schemas.py` descreve o campo
   `Operador` como *"autenticação: é declaração, não identidade provada (S-08)"*. A frase
   ficou imprecisa com o corte de escopo, e corrigi-la exige regerar `openapi.json` e
   `frontend/src/api/schema.d.ts` — o CI compara e drift de contrato quebra o build. Esta
   spec já toca contrato; corrigir aqui, junto.
+
+- **DESC-1 — `/admin/*` existe duas vezes, e ninguém tinha percebido.** São rotas do painel
+  (`/admin/conversas`, `/admin/pedidos`, `/admin/metricas`, roteadas no navegador pelo
+  react-router com `basename="/admin"`) **e** rotas da API (`admin.py`, os mesmos caminhos,
+  literalmente). Em desenvolvimento nunca colidiu porque são duas origens: o Vite serve a
+  página em `:5173` e o front chama `:8000`. Numa origem só — que é o que o nginx cria — um
+  `location /admin` com fallback engole a API, e um com proxy engole a SPA.
+
+  **Resolvido sem tocar no backend:** a API é servida sob `/api/`, e o `rewrite` do nginx
+  remove o prefixo antes do proxy. O FastAPI continua vendo `/admin/conversas`, e o
+  `openapi.json` não muda. O frontend é buildado com `VITE_API_BASE_URL=/api`.
+
+  Foi decisão do PO nesta sessão, e é **desenho novo que a spec aprovada não previa** —
+  registrado aqui, e não implementado em silêncio. A alternativa recusada (publicar a API
+  numa segunda porta) contrariava o REQ-2 e mantinha o CORS como portão.
+
+- **DESC-2 — `PUBLIC_BASE_URL` passa a ter que terminar em `/api`.** Consequência direta da
+  DESC-1, e vale registrar porque a falha é silenciosa: é dessa variável que saem o link de
+  pagamento entregue ao cliente, o `notification_url` do gateway e os links de DANFE e XML do
+  painel. Sem o prefixo, o cliente clica no link de pagamento e recebe a landing — com status
+  200, sem erro em log nenhum.
+
+- **DESC-3 — o ambiente inteiro depende da chave de embedding para SUBIR, e não só para
+  semear.** O `bootstrap` roda `db.py` e `ingest.py`; o segundo exige `OPENAI_API_KEY`
+  (S-03, D-1). Como a `api` depende de `service_completed_successfully`, uma chave ausente ou
+  expirada impede a subida — mesmo que o Qdrant já esteja indexado de uma subida anterior.
+
+  Medido, não presumido: o bootstrap gravou os 65 produtos no Postgres e saiu com **código 1**
+  na embedagem. A ordem do `ingest` (Postgres antes do Qdrant) funcionou como projetada — o
+  banco ficou correto com a segunda metade falhando.
+
+  **Não consertado, e está no runbook §7.** O conserto seria o seed detectar que a coleção já
+  está indexada e pular a embedagem, e isso é mudança de comportamento em `ingest.py` —
+  código de produto, fora do escopo desta spec. Decisão do PO.
+
+- **DESC-4 — o `.dockerignore` não pode excluir `deploy/`.** Tentativa registrada porque o
+  erro é instrutivo: excluir o diretório inteiro parecia higiene, e quebrou o build da imagem
+  do frontend, que copia `deploy/nginx.conf`. Reincluir um arquivo de um diretório excluído
+  funcionaria hoje e quebraria quando aparecesse o segundo. O segredo continua protegido pelo
+  `**/.env`, que é onde essa proteção de fato mora.
 
 ## Definition of Done
 - [ ] Todos os requisitos CONFORMES no relatório de verificação
