@@ -17,6 +17,7 @@ made, because returning `None` from it means *export this batch unchanged*.
 """
 
 import logging
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -92,6 +93,44 @@ def trace_id_da_sessao(session_id: str) -> str:
     `localStorage`, então a conversa inteira tem uma chave só, de ponta a ponta.
     """
     return Langfuse.create_trace_id(seed=session_id)
+
+
+# A regra do Langfuse para nome de ambiente, copiada da documentação dele:
+# minúsculas, dígitos, hífen e sublinhado, no máximo 40, e nunca começando com
+# "langfuse" — esse prefixo é reservado.
+_AMBIENTE_ACEITO = re.compile(r"^(?!langfuse)[a-z0-9_-]{1,40}$")
+
+
+def ambiente_do_trace(app_env: str) -> str | None:
+    """O `APP_ENV` na forma que o Langfuse aceita, ou `None` quando não há forma.
+
+    **Por que declarar ambiente.** Sem ele todo trace cai em `default`, que é onde
+    o Langfuse põe quem não disse nada — e onde caíam, juntos e indistinguíveis, o
+    atendimento de verdade e as centenas de traces que a suíte de testes exportava.
+    Os evals já se separam assim desde o ADR-014 (`visor.AMBIENTE`); esta função é
+    a metade que faltava, do lado do atendimento.
+
+    **Derivado de `APP_ENV` e não de uma constante.** Essa variável já é a que
+    decide comportamento sensível a ambiente — é ela que gateia o `PUT /config` —,
+    então derivar daqui garante que o rótulo do trace não possa divergir da
+    identidade do deploy. Quando a S-08 subir DEV e PROD na mesma conta, os dois se
+    separam sozinhos, sem uma segunda variável para alguém esquecer de trocar.
+
+    **`None` quando o valor não serve, e em voz alta.** O SDK recusa um ambiente
+    fora do padrão, e recusa em silêncio: o trace iria para `default` sem nada
+    avisando, que é exatamente a confusão que esta função existe para desfazer.
+    Melhor um aviso no log dizendo qual valor foi recusado.
+    """
+    normalizado = app_env.strip().lower()
+    if _AMBIENTE_ACEITO.match(normalizado):
+        return normalizado
+    logger.warning(
+        "APP_ENV=%r nao serve como ambiente de trace (o Langfuse aceita %s); os traces "
+        "desta instancia vao para `default` e nao se separam dos de outra",
+        app_env,
+        _AMBIENTE_ACEITO.pattern,
+    )
+    return None
 
 
 def callback_handler(session_id: str | None = None) -> CallbackHandler | None:

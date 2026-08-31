@@ -65,6 +65,7 @@ from vendinha.graph import build_supervised_graph, fala_com_o_cliente, session_c
 from vendinha.nota import NFEmitter, emissor_de, inscricao_do_destinatario
 from vendinha.nota.documento import numero_da_nota
 from vendinha.observability import (
+    ambiente_do_trace,
     callback_handler,
     install_log_redaction,
     silence_unserved_probes,
@@ -622,7 +623,16 @@ def create_app(
                 # turn carry the session id, so the trace is findable by the same
                 # string the customer's client holds — and the same one the
                 # checkpointer uses as thread_id.
-                with propagate_attributes(session_id=session_id, trace_name="conversa"):
+                #
+                # `environment` separa este atendimento do resto que a mesma conta
+                # do Langfuse recebe — os evals já se declaram `evals` desde o
+                # ADR-014, e sem esta linha a conversa de verdade caía em `default`
+                # junto com tudo que não se identificou. Ver `ambiente_do_trace`.
+                with propagate_attributes(
+                    session_id=session_id,
+                    trace_name="conversa",
+                    environment=ambiente_do_trace(settings.app_env),
+                ):
                     token_stream = graph_to_run.astream(
                         {
                             "session_id": session_id,

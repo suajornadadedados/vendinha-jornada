@@ -12,6 +12,7 @@ those needs Postgres or a real model to be provable.
 
 import json
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -23,10 +24,13 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.checkpoint.memory import InMemorySaver
 
+from vendinha import app as modulo_da_app
 from vendinha.app import create_app
 from vendinha.catalogo import BuscaEmMemoria, CatalogoEmMemoria, carregar_seed
+from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph, session_config
+from vendinha.observability import ambiente_do_trace
 from vendinha.pedidos import PedidosEmMemoria
 from vendinha.providers import PROVIDERS, Provider
 from vendinha.subagents import (
@@ -139,6 +143,46 @@ def test_chat_streams_the_answer_as_server_sent_events(client: TestClient) -> No
 
     text = "".join(data["text"] for name, data in events if name == "token")
     assert text == "bom dia, tudo joia"
+
+
+def test_o_trace_da_conversa_declara_o_ambiente_da_instancia(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A metade de cima da fiação: a ROTA declara o ambiente, não só a função existe.
+
+    `ambiente_do_trace` tem tabela de teste própria em `test_observabilidade.py`, e
+    ela não prova nada sobre esta rota — é a lição que este repositório já pagou
+    três vezes (`redaction_is_installed`, `export_masking_is_installed`): a função
+    pode estar perfeita e ninguém a chamar no caminho de produção.
+
+    Sem esta asserção, apagar o `environment=` do `propagate_attributes` deixa a
+    suíte verde e devolve o atendimento de verdade para o balde `default` — junto
+    com tudo que não se identificou, que é exatamente a confusão que a linha existe
+    para desfazer.
+
+    O ambiente esperado é derivado, não escrito à mão: fixar `"local"` aqui faria o
+    teste medir o `.env` da máquina em vez da fiação.
+    """
+    recebidos: dict[str, Any] = {}
+
+    @contextmanager
+    def espiao(**atributos: Any) -> Iterator[None]:
+        recebidos.update(atributos)
+        yield
+
+    monkeypatch.setattr(modulo_da_app, "propagate_attributes", espiao)
+
+    client.post("/chat", json={"message": "oi"})
+
+    assert "environment" in recebidos, (
+        "a rota nao declarou ambiente: este atendimento cai em `default`, "
+        "indistinguivel dos traces de qualquer outra instancia"
+    )
+    assert recebidos["environment"] == ambiente_do_trace(get_settings().app_env)
+    # Os outros dois atributos do mesmo `with`, para que trocar um pelo outro não
+    # passe: sem `session_id` a conversa deixa de ser um trace só.
+    assert recebidos["trace_name"] == "conversa"
+    assert recebidos["session_id"]
 
 
 def test_a_request_without_a_session_id_gets_one_back(client: TestClient) -> None:

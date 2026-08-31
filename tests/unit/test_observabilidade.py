@@ -74,6 +74,60 @@ def test_sem_langfuse_configurado_nao_ha_handler(
     assert callback_handler(session_id=sessao) is None
 
 
+def test_a_suite_nao_exporta_trace_nenhum() -> None:
+    """O tripwire da fixture `_o_langfuse_fica_fora_da_suite`.
+
+    Este repositório já aprendeu três vezes que testar a função nunca prova que
+    alguém a chamou — é por isso que existem `redaction_is_installed` e
+    `export_masking_is_installed`. Esta é a mesma pergunta uma casa adiante: a
+    fixture do `conftest` está de fato valendo enquanto a suíte roda?
+
+    Sem esta asserção, apagar a fixture num refactor deixa tudo verde e faz a suíte
+    voltar a mandar centenas de traces de modelo dublê para o projeto de produção —
+    sem erro, sem log, e só perceptível para quem for abrir o Langfuse à procura de
+    um atendimento e encontrar 97 conversas de 4 ms na frente dele.
+    """
+    assert observability.client() is None, (
+        "a suite construiu um cliente Langfuse de verdade: ela esta exportando trace "
+        "para o projeto de producao com a credencial do .env"
+    )
+
+
+@pytest.mark.parametrize(
+    ("app_env", "esperado"),
+    [
+        ("local", "local"),
+        ("prod", "prod"),
+        ("dev-vps", "dev-vps"),
+        ("com_sublinhado", "com_sublinhado"),
+        # Normalizado em vez de recusado: `APP_ENV=PROD` é a mesma intenção escrita
+        # com a mão pesada, e recusá-la mandaria o trace para `default` por causa de
+        # duas teclas.
+        ("PROD", "prod"),
+        ("  Local  ", "local"),
+        # Fora do padrão do Langfuse: vira `None`, e o log diz por quê.
+        ("prod!", None),
+        ("com espaco", None),
+        ("acentuação", None),
+        ("", None),
+        ("x" * 41, None),
+        # O prefixo é reservado pelo Langfuse.
+        ("langfuse", None),
+        ("langfuse-prod", None),
+    ],
+)
+def test_o_ambiente_do_trace_respeita_a_regra_do_langfuse(
+    app_env: str, esperado: str | None
+) -> None:
+    """O SDK recusa um ambiente fora do padrão **em silêncio**.
+
+    Um `APP_ENV` inválido não quebra nada e não avisa nada: o trace simplesmente
+    volta para `default`, que é o balde indistinguível que declarar ambiente existe
+    para evitar. Esta tabela é o que impede a regressão de ser invisível.
+    """
+    assert observability.ambiente_do_trace(app_env) == esperado
+
+
 def _linha_de_acesso(caminho: str, status: int) -> logging.LogRecord:
     """Um registro com a forma exata que o uvicorn produz no log de acesso.
 
