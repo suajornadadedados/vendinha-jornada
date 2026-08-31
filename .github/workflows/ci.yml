@@ -23,6 +23,23 @@ name: CI
 # da virada. O `detect` continua como está: se alguém apagar o script, o job volta
 # a pular em vez de ficar vermelho para sempre.
 #
+# **O gatilho ganhou uma segunda metade: a credencial do provedor.** O script sobe
+# Postgres, semeia o catálogo e só então descobre que `EMBEDDING_MODEL` precisa de
+# uma chave da OpenAI que este repositório não tem configurada como secret —
+# reprovando TODO PR que toque `backend/`, por falta de infraestrutura e não por
+# eval vermelho. Um check que não pode passar treina a ignorar check vermelho, que
+# é a mesma doença que o parágrafo acima trata.
+#
+# Então a régua **pula, em voz alta**, enquanto a chave não existir: o `detect`
+# emite um `::warning::` no PR dizendo por que não rodou, e o dia em que o secret
+# for cadastrado o job liga sozinho, sem ninguém editar este arquivo. É o mesmo
+# desenho de sempre — gatilho que descreve o que falta de verdade.
+#
+# **É uma decisão do PO, e é dívida.** O portão do ADR-014 fica desligado até o
+# secret entrar; a camada 0 (schema do corpus e `tests/security`, no job `test`)
+# continua valendo para todo PR. Cadastre `OPENAI_API_KEY` e `ANTHROPIC_API_KEY`
+# nos secrets do repositório para reativar.
+#
 # O gatilho é calculado pelo job `detect`, e NÃO por `if: hashFiles(...)` no
 # nível do job: `hashFiles` só é permitido em contexto de step. Usá-la em
 # `jobs.<id>.if` não dá erro de job — quebra o parse do arquivo inteiro, e o
@@ -45,9 +62,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: files
+        env:
+          # O secret chega como variável de step porque o contexto `secrets` não
+          # existe em `jobs.<id>.if` — a mesma limitação do `hashFiles` explicada
+          # no cabeçalho. O valor nunca é impresso: só se pergunta se está vazio,
+          # e o GitHub mascararia a saída de qualquer forma.
+          CHAVE_DO_EMBEDDING: ${{ secrets.OPENAI_API_KEY }}
         run: |
           test -f backend/pyproject.toml && echo "backend=true" >> "$GITHUB_OUTPUT" || echo "backend=false" >> "$GITHUB_OUTPUT"
-          test -f scripts/evals-ci.sh && echo "evals=true"   >> "$GITHUB_OUTPUT" || echo "evals=false"   >> "$GITHUB_OUTPUT"
+          if [ ! -f scripts/evals-ci.sh ]; then
+            echo "evals=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$CHAVE_DO_EMBEDDING" ]; then
+            # Em voz alta e no PR, nunca só no log: um portão desligado que ninguém
+            # vê é indistinguível de um portão que passou.
+            echo "::warning title=Evals desligado::O secret OPENAI_API_KEY nao esta configurado neste repositorio. A regua do ADR-014 nao rodou neste PR - o job pula em vez de reprovar por falta de infraestrutura. Cadastre o secret para reativar; o job volta sozinho."
+            echo "evals=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "evals=true" >> "$GITHUB_OUTPUT"
+          fi
 
   commitlint:
     runs-on: ubuntu-latest
