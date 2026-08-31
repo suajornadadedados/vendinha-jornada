@@ -155,6 +155,31 @@ não editáveis**, uma de cada vez por um seletor, com sha e caminho do arquivo.
 > ADR-014, e o campo `editavel` é o literal `false` no contrato — um botão de salvar prompt
 > nem chega a compilar (ADR-015).
 
+## 11. Um atendimento por cliente, e o que um F5 custa
+
+Os dois passos que a DESC-10 criou. São a **única** prova possível daquele conserto: ele é
+inteiramente client-side, e as duas camadas de teste do projeto são ambas Python (ADR-011).
+
+**(a) O botão do canto abre um atendimento NOVO.** Feche a janela do chat pelo `X`, clique no
+FAB verde e mande uma mensagem qualquer.
+
+- Na aba do painel, **Conversas** passa a listar **duas** sessões, não uma. Antes da DESC-10
+  todo clique caía na mesma — e a conversão, a duração e o custo somavam atendimentos de dias
+  diferentes num registro só.
+- A pílula **retomar conversa**, à esquerda do FAB, é a porta que continua o atendimento que
+  já estava em pé. As duas existiam e faziam a mesma coisa; agora cada uma faz o que o rótulo
+  diz.
+
+**(b) O FAB avisa antes de descartar um pedido em voo.** Com o link do Mercado Pago na tela
+(passo 4) ou a nota em emissão (passo 5), feche a janela e clique no FAB: aparece uma
+confirmação nomeando o que se perde. Cancele — o atendimento continua lá pelo *retomar*.
+
+**(c) Recarregue a página no meio de um pedido (`F5`) e mostre a perda.** A conversa some, e é
+para somer: a sessão não é mais persistida. O cartão de espera da NF **diz** essa condição
+("mantenha esta janela aberta"), em vez de prometer uma entrega que o reload quebra. Retomar de
+verdade depende de rota nova e vira spec própria — está escrito na DESC-10, e este passo é o
+que torna a dívida visível em vez de teórica.
+
 ---
 
 ## O que conferir no fim
@@ -162,6 +187,8 @@ não editáveis**, uma de cada vez por um seletor, com sha e caminho do arquivo.
 | | |
 |---|---|
 | A jornada inteira aconteceu sem recarregar a página? | |
+| Dois cliques no FAB produziram **duas** sessões no painel? | deve produzir |
+| O FAB pediu confirmação com um pedido em andamento? | deve pedir |
 | Alguma requisição de polling na aba Network com o painel parado? | deve ser 0 |
 | Algum total, custo ou KPI somado no navegador? | deve ser 0 — confira o diff |
 | Algum valor ausente exibido como zero? | deve ser 0 |

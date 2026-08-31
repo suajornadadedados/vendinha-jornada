@@ -12,10 +12,12 @@
 
 import createClient from "openapi-fetch";
 
+import { BASE_URL } from "./base";
 import type { paths } from "./schema";
 
-export const BASE_URL =
-  (import.meta.env["VITE_API_BASE_URL"] as string | undefined) ?? "http://localhost:8000";
+// `BASE_URL` mudou de casa para `api/base.ts` e NÃO é reexportada daqui de propósito:
+// reexportar deixaria a landing importá-la deste módulo de novo, e o chunk público
+// voltaria a carregar o token do operador junto (NC-8).
 
 export const api = createClient<paths>({ baseUrl: BASE_URL });
 

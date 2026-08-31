@@ -2,7 +2,7 @@
 id: S-07
 titulo: Frontend integrado e API de observação
 status: em-revisao
-branch: spec/s-07-frontend
+branch: fix/s-07-sessao-por-atendimento
 issue: #8
 adrs: [ADR-004, ADR-013, ADR-015]
 riscos_cobertos: []
@@ -65,8 +65,13 @@ de dinheiro no navegador.
 - [x] REQ-8 **Widget de atendimento**: streaming SSE token a token, indicador de digitando, e
       estados honestos com cara própria — montando composição, aguardando pagamento (com o link),
       aguardando aprovação da NF (sem prometer prazo), NF emitida (com DANFE e XML, que **chega
-      sozinho**). Erro de stream oferece reenviar e não mostra stack trace. `session_id` em
-      `localStorage`: F5 não perde a conversa.
+      sozinho**). Erro de stream oferece reenviar e não mostra stack trace. ~~`session_id` em
+      `localStorage`: F5 não perde a conversa.~~
+      > **Emenda de 2026-08-29 — esta cláusula foi retirada, não esquecida.** A persistência do
+      > `session_id` era o que fazia *todo* atendimento daquele navegador cair na mesma sessão;
+      > o F5 já não devolvia a conversa (as mensagens nunca foram persistidas, só o id). Ver a
+      > **DESC-10** para o defeito, o conserto e o que se perde. O resto da REQ-8 continua
+      > entregue; retomar de verdade depende de rota nova e vira spec própria.
 - [x] REQ-9 **A composição é visível enquanto é montada**: itens, quantidades, total e valor por
       pessoa, atualizados a cada veredito, **exatamente como o validador devolveu**. Reprovação
       aparece com o motivo real — orçamento, slot, restrição ou disponibilidade —, nunca genérica.
@@ -206,6 +211,81 @@ Cenário: a conexão cai e a tela não mente
 8. Conferir que a tela de configurações não oferece edição de prompt em nenhum ambiente.
 
 ## Descobertas (preenchido durante a execução)
+
+- **DESC-11 — O log de acesso reportava um 404 de `/metrics` que ninguém pode
+  resolver, e o filtro que o cala entrou fora do escopo desta spec.** `/metrics` é o
+  caminho do exporter Prometheus; agentes de monitoramento, plugins de IDE e
+  ferramentas de container varrem essa rota em toda porta local, e cada varredura
+  imprimia um 404 no log durante a demonstração. O conserto foi um filtro em
+  `uvicorn.access` que descarta **só** esses caminhos e **só** em 404 — silenciar todo
+  404 esconderia a rota que mudou de lugar e o webhook apontado errado, que são os 404
+  que valem.
+
+  **Registrada porque nenhum requisito a pede.** Ela viajou no commit do DESC-10 e
+  existia só na mensagem de commit; a verificação independente (rodada 2, NC-5) apontou
+  que entrou pela porta que o `CLAUDE.md` fecha. Fica registrada aqui em vez de virar PR
+  próprio porque altera uma linha de log e nada mais — mas **a decisão de mantê-la neste
+  PR é do PO**, e o caminho alternativo (tirar do commit) continua aberto.
+
+  > **Consequência para a S-08, anotada aqui para não se perder:** uma varredura de
+  > `/metrics` numa porta local é ruído; no host público da S-08 ela é a assinatura mais
+  > barata de scanner não autenticado, e este filtro a torna invisível. Quando a S-08
+  > abrir a porta, o descarte precisa virar contador, não silêncio.
+
+- **DESC-10 — Todo atendimento daquele navegador era a MESMA sessão, e o painel
+  estava certo ao mostrar uma só.** O `useConversa` semeava o `sessionId` de
+  `localStorage["vendinha:conversa"]` na montagem e nunca o limpava: a partir da
+  primeira conversa, todo `POST /chat` reenviava o mesmo `session_id` — reload, aba
+  nova, dia seguinte, clique novo no botão do canto. **O backend nunca teve o
+  defeito**: `app.py` faz `session_id = payload.session_id or uuid.uuid4().hex`, e
+  sessão nova nasce de *omitir* o campo. O cliente simplesmente nunca o omitia.
+
+  O agravante era a assimetria: `itens` nunca foi persistido, só o id. Depois de um
+  F5 o cliente via a janela em branco enquanto o servidor continuava costurando tudo
+  no mesmo atendimento — os dois lados discordando sobre o que era "esta conversa".
+  Sintoma na demonstração: conversão, duração e custo do painel somando atendimentos
+  de dias diferentes num registro só.
+
+  O conserto tem três partes, e a terceira só apareceu ao escrever a segunda:
+  1. **A persistência saiu.** Ela não sustentava nenhuma retomada de verdade — só
+     produzia o bug.
+  2. **O botão do canto passou a significar "atendimento novo"** (`reiniciar()` antes
+     de abrir), e o "retomar conversa" **à esquerda dele** (`.retomar` está em
+     `right: 96px`, praticamente na mesma linha do FAB — não abaixo) ficou sendo o que
+     continua o que está em pé. As duas portas já existiam e faziam a mesma coisa;
+     agora cada uma faz o que o rótulo diz.
+  3. **Um contador de geração cala o stream anterior.** Fechar a janela com o agente
+     ainda respondendo e abrir uma conversa nova fazia os tokens do atendimento
+     ANTERIOR caírem nos balões do novo: o `for await` não morre junto com a janela.
+
+  A verificação independente (rodada 2) acrescentou mais duas, e ambas são a mesma
+  coisa: registrar a perda num documento não torna a tela honesta.
+
+  4. **A frase do cartão de espera da NF passou a dizer a verdade.** Ela prometia
+     *"você recebe aqui assim que sair — não precisa perguntar"*, e depois da parte 1
+     um F5 faz o cartão nunca chegar. A frase agora pede a janela aberta e diz o que
+     fazer se ela fechar.
+  5. **O FAB confirma antes de descartar um atendimento em andamento.** Ele é o
+     controle visualmente dominante (60 px, verde, anel pulsando) e a parte 1 tornou a
+     destruição irreversível: um cliente com link de pagamento na tela perdia o pedido
+     sem aviso. A confirmação só aparece quando `etapa !== "conversando"` — não em todo
+     clique, para não pedir permissão para abrir uma conversa em branco.
+
+  > **O que se perde, e é decisão do PO tomada por escrito:** um pedido em voo não
+  > sobrevive a um reload. Retomar de verdade exigiria **rota nova** —
+  > `/eventos/sessao/{id}` é pub/sub ao vivo, sem histórico, e não há rota que devolva
+  > o estado de uma sessão. O PO escolheu deixar o buraco aberto e registrado em vez de
+  > fechá-lo com a persistência que produzia o defeito acima. **Vira spec própria** se
+  > a retomada passar a valer a rota (RF-3.6 depende dela para quem recarrega).
+
+  > **O seam que não existe, registrado por exigência do `docs/testes.md` §3.6.** Este
+  > conserto é inteiramente client-side e chegou **sem um único teste**: o
+  > `frontend/package.json` não tem vitest, jest nem runner algum, e as duas camadas de
+  > teste declaradas no ADR-011 são ambas Python. Não é defeito deste commit — o
+  > frontend nunca teve camada —, mas é o que faz a jornada em navegador
+  > (`S-07-roteiro-de-demo.md`) ser a **única** prova possível daqui, e por isso ela é
+  > condição de fechamento e não higiene. **Parado para decisão do PO:** montar a
+  > camada de teste do frontend é spec própria, não emenda desta.
 
 - **DESC-9 — A primeira conversa longa de verdade mostrou dois defeitos da janela do
   chat, e um terceiro que não é desta spec.** Um atendimento real — café da manhã, 30

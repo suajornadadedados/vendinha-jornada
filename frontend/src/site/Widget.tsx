@@ -23,6 +23,40 @@ import {
 import { Composicao } from "./Composicao";
 import { useConversa } from "./useConversa";
 
+type Etapa = ReturnType<typeof useConversa>["etapa"];
+
+/**
+ * O que o cliente perde ao clicar no botão do canto — `null` quando não perde nada.
+ *
+ * O FAB é o controle visualmente dominante da tela (60 px, verde, anel pulsando) e
+ * desde a DESC-10 ele **descarta** o atendimento em vez de só abrir a janela. Com um
+ * link de pagamento na tela ou uma nota em emissão isso é irreversível: não existe
+ * rota que devolva o estado de uma sessão, e a própria DESC-10 estabelece que criá-la
+ * é spec própria.
+ *
+ * Condicionado à etapa, e não em todo clique: pedir confirmação para abrir uma
+ * conversa em branco treina a pessoa a clicar em "ok" sem ler — e aí o aviso deixa de
+ * proteger justamente no clique que importa.
+ *
+ * `window.confirm` e não um diálogo próprio: ele bloqueia de verdade, não fecha com um
+ * clique fora, e não custa mais um estado a uma tela que já tem seis. Não dá para
+ * estilizar — troca barata perto de um pedido perdido em silêncio.
+ */
+function oQueSePerde(etapa: Etapa): string | null {
+  switch (etapa) {
+    case "aguardando-pagamento":
+      return "Você tem um pedido aguardando pagamento, e o link sai da tela com esta conversa.";
+    case "aguardando-nf":
+      return "Sua nota fiscal está sendo emitida, e o aviso chega nesta janela.";
+    case "nota-emitida":
+      return "A DANFE e o XML desta conversa estão nesta janela. Salve os arquivos antes.";
+    case "nota-rejeitada":
+      return "Esta conversa tem o motivo da recusa da nota na tela.";
+    case "conversando":
+      return null;
+  }
+}
+
 export function Widget() {
   const [aberto, setAberto] = useState(false);
   const conversa = useConversa();
@@ -57,8 +91,24 @@ export function Widget() {
 
   return (
     <>
+      {/* O botão do canto abre um atendimento NOVO, e o "retomar conversa" à
+          esquerda dele é o que continua o que já estava em pé. As duas portas
+          existiam e faziam a mesma coisa; agora cada uma faz o que o rótulo diz.
+
+          Por que o clique reinicia em vez de a montagem cuidar disso: a landing
+          monta o widget uma vez só, então sem isto duas conversas seguidas na mesma
+          carga de página caíam no mesmo atendimento (DESC-10). */}
       {!aberto && (
-        <button className="fab" onClick={() => setAberto(true)} aria-label="Abrir o atendimento">
+        <button
+          className="fab"
+          onClick={() => {
+            const perda = oQueSePerde(conversa.etapa);
+            if (perda && !window.confirm(`${perda}\n\nComeçar um atendimento novo?`)) return;
+            conversa.reiniciar();
+            setAberto(true);
+          }}
+          aria-label="Iniciar um atendimento"
+        >
           <WhatsappLogo size={30} weight="fill" aria-hidden="true" />
           <span className="fab__pulso" aria-hidden="true" />
         </button>
@@ -158,10 +208,18 @@ export function Widget() {
                   Pagamento confirmado. A nota fiscal está com a nossa equipe.
                 </p>
                 {/* Sem prazo: ninguém prometeu um, e inventá-lo aqui seria a tela
-                    afirmando algo que o sistema não garante. */}
+                    afirmando algo que o sistema não garante.
+
+                    E sem prometer entrega que um reload quebra. A frase anterior dizia
+                    "você recebe aqui assim que sair — não precisa perguntar", e depois
+                    da DESC-10 isso deixou de ser verdade: sem `session_id` persistido,
+                    recarregar a página encerra a assinatura e o cartão nunca chega. A
+                    spec escolheu como frase de governo "a UI não é lugar de garantia, é
+                    lugar de honestidade" — então a tela diz a condição em vez de a
+                    esconder. */}
                 <p className="cartao-estado__nota">
-                  Uma pessoa confere os dados antes de emitir. Você recebe aqui assim que sair —
-                  não precisa perguntar.
+                  Uma pessoa confere os dados antes de emitir. Mantenha esta janela aberta e a nota
+                  aparece aqui sozinha; se você recarregar a página, fale com a gente pelo pedido.
                 </p>
               </section>
             )}

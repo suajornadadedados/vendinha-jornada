@@ -1,6 +1,6 @@
 """Shared configuration for the whole test suite.
 
-Two things live here because every subfolder needs them:
+Three things live here because every subfolder needs them:
 
 1. **The `risco` marker.** Every test declares which risk of `docs/riscos.md` it
    closes. That is what lets `/verificar-spec` answer "which risks does this spec
@@ -8,11 +8,13 @@ Two things live here because every subfolder needs them:
 2. **Graceful skipping while `backend/` does not exist.** The convention is
    written before the code it governs (see `docs/testes.md`), so a test that
    imports the agent must skip, not error, until the spec that creates it lands.
+3. **O Langfuse desligado.** A suíte não fala com o projeto de produção — ver
+   `_o_langfuse_fica_fora_da_suite` no fim do arquivo.
 """
 
 import json
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -108,3 +110,52 @@ def chamar() -> Callable[..., Awaitable[dict[str, Any]]]:
         return resposta
 
     return _chamar
+
+
+@pytest.fixture(autouse=True)
+def _o_langfuse_fica_fora_da_suite(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """A suíte não exporta trace nenhum para o projeto de produção.
+
+    Sem isto ela exporta, e exportava: `config.py` faz `load_dotenv` no import, o
+    `.env` da máquina do desenvolvedor tem credencial de verdade, e todo teste que
+    monta a aplicação constrói um `CallbackHandler` real no `lifespan`. O resultado
+    medido foi **97 dos 100 traces mais recentes** sendo lixo de `pytest` — custo
+    zero, latência de 4 ms — enterrando as conversas de verdade sob uma pilha de
+    conversas com um modelo dublê. Quem abria o Langfuse para ver o custo de um
+    atendimento clicava em traces vazios e concluía que o custo não era coletado.
+
+    **String vazia, e não `delenv`.** `Settings` lê o `.env` como segunda fonte
+    (`env_file=ENV_FILE`), então tirar a variável do ambiente do processo não a
+    torna ausente: faz o arquivo vencer. A mesma pegadinha já está documentada em
+    `test_provider_config.py`, e é o tipo de detalhe que faz uma fixture parecer
+    funcionar e não funcionar.
+
+    **Os dois caches, nas duas pontas.** `get_settings` e `observability.client`
+    são `lru_cache`; sem limpá-los, o cliente já construído por um teste anterior
+    continua sendo devolvido, com credencial e tudo.
+
+    Não quebra nenhum teste que precise do caminho COM credencial:
+    `test_the_langfuse_client_is_built_with_the_masking_hook` monta a própria chave
+    falsa apontando para uma porta inalcançável e limpa estes mesmos dois caches —
+    o `setenv` dele vence este, porque o ambiente do processo tem precedência sobre
+    o arquivo e o dele é aplicado depois.
+    """
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "")
+
+    if not BACKEND.is_dir():
+        # Mesma razão do `requires_backend`: este arquivo tem que continuar
+        # importável antes de a S-00 existir.
+        yield
+        return
+
+    from vendinha.config import get_settings
+    from vendinha.observability import client
+
+    get_settings.cache_clear()
+    client.cache_clear()
+    try:
+        yield
+    finally:
+        client.cache_clear()
+        get_settings.cache_clear()

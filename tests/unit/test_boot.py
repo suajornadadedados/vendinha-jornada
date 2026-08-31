@@ -37,7 +37,7 @@ from vendinha.catalogo import Catalogo, CatalogoEmMemoria, Produto, carregar_see
 from vendinha.config import get_settings
 from vendinha.config_store import InMemoryConfigStore
 from vendinha.graph import build_graph
-from vendinha.observability import install_log_redaction
+from vendinha.observability import install_log_redaction, unserved_probes_are_silenced
 from vendinha.subagents import PROMPT_RECOMENDACAO, RECOMENDACAO, registrar
 
 pytestmark = pytest.mark.requires_backend
@@ -175,3 +175,39 @@ def test_a_nonsense_log_level_leaves_the_current_one_alone(
     install_log_redaction()
 
     assert logging.getLogger().level == logging.WARNING
+
+
+# ------------------------------------------------------- filtro do log de acesso
+
+
+@pytest.fixture
+def acesso_sem_filtro() -> Iterator[logging.Logger]:
+    """`uvicorn.access` sem nenhum filtro, devolvido como estava.
+
+    O logger é global ao processo, e quem o suja quebra o vizinho — inclusive o
+    próprio assert de partida deste teste, que precisa começar cru para significar
+    alguma coisa.
+    """
+    acesso = logging.getLogger("uvicorn.access")
+    antes = list(acesso.filters)
+    acesso.filters = []
+    try:
+        yield acesso
+    finally:
+        acesso.filters = antes
+
+
+@pytest.mark.usefixtures("acesso_sem_filtro")
+def test_the_application_silences_the_unserved_probes_when_it_starts() -> None:
+    """Testar a função que filtra não é testar que alguém a chama.
+
+    A lição é a da S-02 — `redaction_is_installed`, rodada 2 —, e o commit que trouxe
+    este filtro a citou no docstring e implementou mesmo assim só a metade de baixo:
+    havia teste de `silence_unserved_probes()` → logger, e nenhum de aplicação →
+    função. Apagar a chamada do `lifespan` deixava os 1029 testes verdes (verificação
+    independente da S-07, rodada 2, NC-4).
+    """
+    assert not unserved_probes_are_silenced(), "a fixture deveria ter deixado o logger cru"
+
+    with TestClient(_app(CatalogoEmMemoria(carregar_seed(CATALOGO_DO_SEED)))):
+        assert unserved_probes_are_silenced(), "a aplicação subiu sem ligar o filtro de acesso"

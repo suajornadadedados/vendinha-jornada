@@ -11,7 +11,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { BASE_URL, cabecalhoDoOperador, esquecerToken } from "../api/client";
+import { BASE_URL } from "../api/base";
+import { cabecalhoDoOperador, esquecerToken } from "../api/client";
 import { lerEventoDoPainel } from "../api/eventos";
 import type { EventoDoPainel } from "../api/eventos";
 import type { components } from "../api/schema";
