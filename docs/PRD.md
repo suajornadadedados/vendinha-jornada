@@ -48,7 +48,7 @@ Ao mesmo tempo, a operação de venda tem etapas onde erro é inaceitável: pre�
 
 ## 3. Não-objetivos (fora de escopo deste release)
 
-- Emissão de NF com **validade fiscal real** (apenas mock fiel + ambiente de homologação SEFAZ opcional). *Motivo: risco e fricção de certificado/CNPJ para um produto de demonstração.*
+- Emissão de NF com **validade fiscal real** (apenas mock fiel; não há adapter de homologação SEFAZ, e não haverá). *Motivo: risco e fricção de certificado/CNPJ para um produto de demonstração. A spec opcional que entregaria esse adapter foi descartada em 2026-08-31 — a emenda no ADR-004 registra o que isso custa à R8.*
 - Pagamento com dinheiro real (apenas sandbox). 
 - Autenticação de clientes finais, contas, histórico entre sessões.
 - Gestão de estoque, frete, logística, trocas e devoluções.
@@ -126,7 +126,7 @@ Consequências diretas: preço e total nunca são gerados pelo modelo (sempre li
 | RNF-5 | Contratos Pydantic em todas as fronteiras (rotas, tools, webhooks); cliente TypeScript gerado do OpenAPI |
 | RNF-6 | Estado do grafo carrega identificadores, não payloads (pointer-not-payload); checkpointer em Postgres |
 | RNF-7 | Nenhum dado real no repositório: CNPJs/e-mails de teste gerados; razão social e endereço fictícios; certificado e CNPJ reais jamais versionados |
-| RNF-8 | Deploy: Docker; VPS com stacks DEV e PROD isoladas; TLS automático; imagens buildadas em CI e publicadas em registry (zero build na VPS) |
+| RNF-8 | Deploy: Docker, num **ambiente único e sem denominação**. Um `compose` de deploy sobe api, frontend, nginx, Postgres e Qdrant; o nginx serve os estáticos e faz proxy da API. Sem TLS, sem DNS, sem registry de imagens e sem CD — o entregável é um ambiente empacotado e reprodutível, não uma URL pública (ADR-008) |
 | RNF-9 | Segurança mínima de host documentada: firewall, SSH por chave, containers non-root, backup do Postgres |
 | RNF-10 | README em PT-BR; código e comentários em inglês |
 
@@ -135,7 +135,7 @@ Consequências diretas: preço e total nunca são gerados pelo modelo (sempre li
 A matriz completa (R1-R10), com mitigação, spec responsável e verificação automatizada, vive em `docs/riscos.md` e é requisito normativo. Riscos de projeto adicionais:
 
 - **Dependência de sandbox de terceiros na demo** → mocks de primeira classe e checkpoints gravados como plano B.
-- **Fricção do adapter de homologação (certificado/CNPJ)** → mantido opcional (S-09), nunca no caminho do quickstart.
+- **Fricção de certificado/CNPJ para emitir NF de verdade** → não se paga: o `NFEmitter` tem um adapter só, o mock, e a lacuna que isso deixa na R8 está declarada (ADR-004, `docs/testes.md` §2).
 
 ## 9. Dependências e premissas
 
@@ -155,17 +155,18 @@ As fases seguem a ordem desta tabela, e não a ordem dos ids: **S-10 e S-11 roda
 | F3 Documento fiscal | HITL + emissão de NF | S-05 |
 | F4 Qualidade contínua | Evals como gate | S-06 |
 | F5 Produto usável | Frontend integrado | S-07 |
-| F6 Produção | Deploy DEV/PROD | S-08 |
-| F7 Extra | Homologação real | S-09 (opcional) |
+| F6 Deploy | Ambiente empacotado (compose com api, frontend e nginx) | S-08 |
 
 ## 11. Questões abertas
 
 | # | Questão | Dono | Prazo |
 |---|---|---|---|
-| Q1 | Emissor de NF para o adapter de homologação (Focus NFe / NFE.io / eNotas) | Eng | spike antes da S-05 |
 | Q2 | Tamanho final do golden dataset (proposta: 12-16 golden + 6-8 adversariais) | PO | antes da S-06 |
 | Q4 | Faixas de `rendimento` conferidas contra evento real (quantas pessoas um pacote de café atende de fato) | PO | antes da S-11 |
-| Q3 | Domínio DNS definitivo para DEV/PROD | PO | antes da S-08 |
+
+> **Q1 e Q3 foram encerradas em 2026-08-31, e por perda de objeto — não por resposta.** A Q1
+> escolhia o emissor de NF para o adapter de homologação, que deixou de existir (ADR-004). A Q3
+> pedia o domínio DNS definitivo para DEV/PROD, e não há mais DEV, PROD nem DNS (ADR-008).
 
 ## 12. Glossário
 

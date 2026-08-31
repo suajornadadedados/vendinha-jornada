@@ -24,7 +24,7 @@ de produto:
 | **1 · Discovery** | `requisitos.md` → `jornada.md` → `riscos.md` → `PRD.md` → `decisoes.md` + `adr/` → `specs/` | cada documento consome o anterior; risco sem verificação é desejo |
 | **2 · Harness** | `CLAUDE.md`, `.claude/commands/`, `.claude/skills/` | **P1** — contexto volátil: o que eu expliquei uma vez vira artefato versionado |
 | **3 · Portões** | `.github/`, `commitlint.config.cjs`, CODEOWNERS, `main` protegida | **P2** — sem portão: o `CLAUDE.md` pede, o CI impõe |
-| **4 · Execução** | S-00 → S-09, uma spec por branch e por sessão | **P3** — processo invisível: o histórico vira o argumento |
+| **4 · Execução** | S-00 → S-08, uma spec por branch e por sessão | **P3** — processo invisível: o histórico vira o argumento |
 
 ---
 
@@ -40,7 +40,7 @@ de produto:
 | Frontend | **React + Vite** | Dois consumidores da mesma API: chat do cliente e fila do operador (RF-4) | Next/SSR: nada aqui precisa de SEO |
 | Empacotamento | **Docker + compose** | *"sistema que sua equipe consiga colocar para rodar"*: um comando, tudo mockado (RNF-1) | Instruções de instalação num README |
 | Pagamento | **Mercado Pago sandbox** | Requisito do enunciado: só ambiente de teste. Port + adapter (ADR-004) | Gateway real: dinheiro de verdade num projeto de demonstração |
-| Documento fiscal | **NFEmitter: Mock (default) / Homologação (opcional)** | ADR-004 — mock fiel ao layout NF-e modelo 55, com tarja SEM VALOR FISCAL | Emissão real: certificado e CNPJ no caminho do quickstart |
+| Documento fiscal | **NFEmitter: Mock, e só ele** | ADR-004 — mock fiel ao layout NF-e modelo 55, com tarja SEM VALOR FISCAL. O port continua sendo port: `NF_EMITTER=homologacao` é um nome válido que **recusa alto** por não ter adapter, em vez de cair no mock em silêncio | Emissão real: certificado e CNPJ no caminho do quickstart |
 
 ---
 

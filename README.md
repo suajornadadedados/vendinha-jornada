@@ -346,8 +346,7 @@ relatório aprovado.
 | [S-05](docs/specs/S-05-hitl-nf.md) | HITL + emissão de NF | ✅ entregue |
 | [S-06](docs/specs/S-06-qualidade-como-gate.md) | Qualidade como gate (EDD) | ✅ entregue |
 | [S-07](docs/specs/S-07-frontend-integrado.md) | Frontend integrado e API de observação | ✅ entregue |
-| [S-08](docs/specs/S-08-producao.md) | Produção (DEV/PROD na VPS) | ⏳ aprovada, não iniciada |
-| [S-09](docs/specs/S-09-homologacao-real.md) | (Opcional) Homologação real de NF-e | 📋 rascunho |
+| [S-08](docs/specs/S-08-producao.md) | Deploy — ambiente empacotado (api, frontend e nginx) | ⏳ aprovada, não iniciada |
 
 > **Ordem de execução ≠ ordem dos ids.** S-10 e S-11 (o pivô B2B) rodaram **entre a S-03 e a
 > S-04**. Renumerar sairia mais caro que um id fora de ordem — a nota no topo da S-10 explica.
@@ -398,8 +397,9 @@ edite `.claude/skills/vendinha-harness/SKILL.md`.
 Nada aqui é omissão silenciosa; cada linha tem motivo registrado em
 [`docs/PRD.md` §3](docs/PRD.md).
 
-- **NF com validade fiscal real** — apenas mock fiel + homologação SEFAZ opcional (S-09).
-  *Certificado e CNPJ no caminho do quickstart custam mais do que entregam numa demonstração.*
+- **NF com validade fiscal real** — apenas o mock fiel; não há adapter de homologação SEFAZ.
+  *Certificado e CNPJ reais custam mais do que entregam numa demonstração, e a lacuna que isso
+  deixa na R8 está declarada em `docs/testes.md` §2 em vez de coberta por um teste vazio.*
 - **Dinheiro real** — apenas sandbox do Mercado Pago.
 - **Gestão de estoque, frete e logística** — o cliente pede a *informação* correta, não um sistema
   de gestão. `disponivel` e `prazo_estimado` são campos lidos, e o eval reprova se o agente

@@ -108,8 +108,7 @@ se o Langfuse estiver indisponivel.
 | S-05 HITL e NF | `langgraph-human-in-the-loop`, `langgraph-persistence` | ADR-003; R3, R8 |
 | S-06 Qualidade como gate | `eval-engineering`, `langfuse` | ADR-006; R7; RF-5.4 |
 | S-07 Frontend integrado | `shadcn` + plugin `ui-ux-pro-max` | ADR-004 (OpenAPI -> cliente TS) |
-| S-08 Producao | — | ADR-008; RNF-8, RNF-9 |
-| S-09 Homologacao real (opcional) | `research` | ADR-004; RNF-7 |
+| S-08 Deploy (ambiente empacotado) | — | ADR-008; RNF-8, RNF-9 |
 
 Transversais, em qualquer spec: `diagnosing-bugs` (bug nao-deterministico),
 `resolving-merge-conflicts` (specs paralelas tocam docs comuns), `handoff` (trocar de

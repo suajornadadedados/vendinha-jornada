@@ -12,8 +12,8 @@ precisa saber qual adapter está configurado.
 **O número da nota NÃO é do adapter.** Ele chega de fora, alocado por `fiscal.py` a
 partir de uma sequência do Postgres. Numeração de nota é fato de negócio e sequência
 é a coisa que bancos fazem certo e processos concorrentes fazem errado — deixá-la no
-adapter faria dois adapters numerarem de dois jeitos, e o `HomologacaoAdapter` da
-S-09 herdaria uma responsabilidade que não é dele (ADR-001).
+adapter faria dois adapters numerarem de dois jeitos, e um adapter que emitisse contra
+a SEFAZ herdaria uma responsabilidade que não é dele (ADR-001).
 
 **Como se troca.** `NF_EMITTER=mock` (default) ou `homologacao`. Aqui existe a
 variável explícita que o `gateway_de` do pagamento recusou ter, e a assimetria é
@@ -23,10 +23,12 @@ estado equivalente — `homologacao` sem certificado — **também** é inválid
 diferença é que aqui ele é recusado na subida, com uma frase que diz o que falta.
 A variável já estava no `.env.example` desde a S-02 sem ninguém a ler; agora é lida.
 
-**`HomologacaoAdapter` é da S-09** e está fora do escopo desta spec. `emissor_de`
-recusa `homologacao` dizendo isso, em vez de devolver silenciosamente o mock: um
-ambiente configurado para emitir contra a SEFAZ e servido pelo mock é a pior falha
-possível — ele parece funcionar.
+**Não existe adapter de homologação, e não vai existir** (ADR-004, emenda de
+2026-08-31): emitir contra a SEFAZ exige certificado digital e CNPJ reais, que este
+repositório não versiona. `homologacao` continua sendo um nome **aceito e sem
+adapter**, de propósito — `emissor_de` recusa alto em vez de devolver silenciosamente
+o mock. Um ambiente configurado para emitir contra a SEFAZ e servido pelo mock é a
+pior falha possível: ele parece funcionar.
 """
 
 import logging
@@ -94,7 +96,8 @@ class MockNFAdapter:
 
     **Ele não assina e não protocola**, porque assinar exige certificado digital e
     nenhum certificado real entra neste repositório (RNF-7). É exatamente essa a
-    diferença que o `HomologacaoAdapter` da S-09 acrescenta.
+    diferença entre este adapter e um que emitisse de verdade — e é por ela que não
+    existe o segundo (ADR-004).
     """
 
     nome = MOCK
@@ -143,9 +146,12 @@ def emissor_de(nome: str | None, api_key: str | None, base_url: str | None) -> N
         # SEFAZ e servida pelo mock emitiria documentos de demonstração achando que
         # emitiu notas — e ninguém descobriria até alguém procurar a nota na SEFAZ.
         #
-        # A mensagem diz TUDO que falta de uma vez, e não só a primeira coisa. Quem
-        # está configurando homologação vai precisar das três, e descobri-las uma
-        # por reinício é a forma mais cara possível de ler um erro.
+        # A mensagem diz TUDO que falta de uma vez, e não só a primeira coisa —
+        # descobrir pendência uma por reinício é a forma mais cara possível de ler
+        # um erro. Aqui ela serve a um propósito menor do que servia: desde a
+        # emenda do ADR-004 não existe adapter para destravar, então o que estas
+        # linhas fazem é mostrar que a configuração estava incompleta de qualquer
+        # jeito, e não sugerir que preenchê-las resolveria.
         pendentes = [
             variavel
             for variavel, valor in (
@@ -158,9 +164,10 @@ def emissor_de(nome: str | None, api_key: str | None, base_url: str | None) -> N
             f" Além disso, {' e '.join(pendentes)} não está definida." if pendentes else ""
         )
         raise EmissorIndisponivel(
-            "NF_EMITTER=homologacao ainda não tem adapter: ele é entregável da S-09 "
-            "(docs/specs/S-09-homologacao-real.md), e exige certificado digital e CNPJ "
-            f"reais, que não entram neste repositório.{ainda_falta} Use NF_EMITTER=mock."
+            "NF_EMITTER=homologacao não tem adapter neste repositório, e não vai ter: "
+            "emitir contra a SEFAZ exige certificado digital e CNPJ reais, que não são "
+            f"versionados aqui (ADR-004).{ainda_falta} Use NF_EMITTER=mock — o mock "
+            "produz DANFE e XML fiéis ao leiaute, com tarja SEM VALOR FISCAL."
         )
 
     raise EmissorIndisponivel(

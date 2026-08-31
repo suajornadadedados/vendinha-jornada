@@ -17,10 +17,13 @@ navegador, e o resultado registrado no relatório. Está declarado para ninguém
 que está automatizado.
 
 **A S-05 trouxe a segunda porta, e com ela uma assimetria que vale nomear.** O
-`NFEmitter` tem hoje **um** adapter só: o `HomologacaoAdapter` é entregável da S-09.
-Então a metade "os dois adapters satisfazem o mesmo contrato" da R8 **não fecha
-nesta spec** para esta porta — parametrizar uma fixture com um elemento e chamar
-aquilo de teste de contrato seria a vacuidade que `docs/testes.md` §3.3 recusa. O
+`NFEmitter` tem **um** adapter só, e vai continuar tendo: o adapter de homologação
+saiu do escopo do projeto (ADR-004, emenda de 2026-08-31), porque emitir contra a
+SEFAZ exige certificado digital e CNPJ reais. Então a metade "os dois adapters
+satisfazem o mesmo contrato" da R8 **não fecha** para esta porta, e a lacuna é
+permanente e declarada, não uma dívida esperando spec — parametrizar uma fixture
+com um elemento e chamar aquilo de teste de contrato seria a vacuidade que
+`docs/testes.md` §3.3 recusa. O
 que dá para provar agora é o que está abaixo: que a escolha do emissor é
 configuração, que uma configuração impossível é **recusada alto** em vez de cair no
 mock em silêncio, e que a exceção do port é uma só. A fidelidade do documento que o
@@ -516,13 +519,18 @@ def test_asking_for_the_homologacao_emitter_refuses_loudly_instead_of_falling_ba
 
     Uma instância configurada para emitir contra a SEFAZ e servida pelo mock emitiria
     documentos de demonstração achando que emitiu notas, e ninguém descobriria até
-    alguém procurar a nota na SEFAZ. A recusa nomeia a spec que entrega o adapter,
-    para quem leu o erro saber o que fazer com ele.
+    alguém procurar a nota na SEFAZ. A recusa diz por que não há adapter e o que usar
+    no lugar, para quem leu o erro saber o que fazer com ele.
+
+    A asserção é sobre a **saída** que o erro oferece — `NF_EMITTER=mock` —, e não
+    sobre a spec que um dia entregaria o segundo adapter. Ela ancorava numa spec, a
+    spec foi descartada, e o teste teria continuado verde apontando para um arquivo
+    que não existe mais.
     """
     with pytest.raises(EmissorIndisponivel) as recusado:
         emissor_de(HOMOLOGACAO, "chave-fabricada", "https://exemplo.invalido")
 
-    assert "S-09" in str(recusado.value)
+    assert "NF_EMITTER=mock" in str(recusado.value)
 
 
 @pytest.mark.risco("R8")
@@ -539,8 +547,9 @@ def test_the_emitter_returns_the_port_shape_and_never_a_vendor_specific_one() ->
     """R8, ADR-004 — `NotaEmitida`: identidade fiscal, XML e DANFE, e nada de fornecedor.
 
     Código que trata emissão não pode precisar saber qual emissor está configurado.
-    Se precisasse, trocar de adapter deixaria de ser configuração — que é
-    exatamente o que a S-09 vai fazer sem tocar em `fiscal.py`.
+    Se precisasse, trocar de adapter deixaria de ser configuração. Só existe um
+    emissor aqui, mas a forma do retorno é o que permitiria a um segundo entrar sem
+    tocar em `fiscal.py` — e é ela que este teste guarda.
     """
     pedido = _pedido()
     autorizacao = Autorizacao(operador="ana.souza", decidido_em=agora())
