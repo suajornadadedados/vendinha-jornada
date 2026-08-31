@@ -10,8 +10,8 @@ S-04 nomeia. Então a estrutura é a do leiaute 4.00: `nfeProc > NFe > infNFe` c
 **O que ele deliberadamente não é.** Não é assinado — assinatura exige certificado
 digital, e certificado real jamais entra neste repositório (RNF-7). Não tem
 protocolo de autorização, porque nenhuma SEFAZ o autorizou. Os dois faltam de
-propósito e são exatamente o que o `HomologacaoAdapter` da S-09 acrescenta: é essa
-diferença que faz a troca de adapter valer a pena.
+propósito, e são exatamente a diferença entre este documento e um com valor fiscal —
+diferença que este projeto declara em vez de fingir cobrir (ADR-004).
 
 **`tpAmb=2` (homologação), e uma divergência declarada.** A norma manda que em
 homologação a razão social do destinatário seja substituída pela frase de aviso. Aqui

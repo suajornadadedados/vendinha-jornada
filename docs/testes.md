@@ -76,10 +76,14 @@ que ainda não existia — cruzamento que falha em silêncio é pior do que lacu
 **A R8 ganhou uma terceira metade na S-05, e uma lacuna declarada junto.** `test_nota_fiscal.py`
 prova que o documento do `MockNFAdapter` é fiel — destinatário PJ campo a campo, chave de acesso
 com dígito verificador que fecha, tarja nos dois artefatos. O que ele **não** prova é a metade
-que o ADR-004 chama de contrato: *dois* adapters satisfazendo a mesma interface. Só existe um
-emissor até a S-09, e uma fixture parametrizada com um elemento passaria por vacuidade (§3.3).
-A lacuna está escrita aqui e no topo de `test_ports.py`, em vez de coberta por um teste que não
-prova nada.
+que o ADR-004 chama de contrato: *dois* adapters satisfazendo a mesma interface. Existe um
+emissor, e vai continuar existindo um só — o adapter de homologação saiu do escopo do projeto
+(ADR-004) —, e uma fixture parametrizada com um elemento passaria por vacuidade (§3.3). A
+lacuna está escrita aqui e no topo de `test_ports.py`, em vez de coberta por um teste que não
+prova nada. **Ela não é uma dívida esperando spec: é o preço declarado de não emitir nota de
+verdade**, e a metade da R8 que este repositório fecha para o `NFEmitter` é outra — que a
+escolha do emissor é configuração, e que uma configuração impossível é recusada alto em vez de
+cair no mock em silêncio.
 
 **A R3 também tem duas metades, e elas respondem a perguntas diferentes.**
 `test_hitl_invariant.py` responde *"existe caminho até a emissão sem aprovação registrada?"* —

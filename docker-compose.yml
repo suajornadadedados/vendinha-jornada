@@ -4,10 +4,10 @@
 # variável de ambiente (LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY),
 # não por contêiner. Ver .env.example.
 #
-# O deploy de DEV/PROD na VPS é outra coisa e chega na S-08 (ADR-008), em
-# deploy/compose.dev.yml e deploy/compose.prod.yml. Este arquivo é a máquina do
-# desenvolvedor: portas expostas em localhost e senha default, ambos aceitáveis
-# aqui e inaceitáveis lá.
+# O deploy é outra coisa e chega na S-08 (ADR-008), em deploy/docker-compose.yml:
+# um ambiente único, sem denominação, onde api, frontend e nginx sobem junto destes
+# dois. Este arquivo é a máquina do desenvolvedor: portas expostas em localhost e
+# senha default, ambos aceitáveis aqui e inaceitáveis lá.
 
 name: vendinha
 

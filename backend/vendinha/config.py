@@ -249,8 +249,9 @@ class Settings(BaseSettings):
     # boots fine and breaks on the first order. See D-4 and `pagamento.gateway_de`.
     mercadopago_access_token: str | None = None
     # Emissor de NF-e, S-05. `mock` (default) gera DANFE e XML fiéis ao leiaute 55
-    # com tarja "SEM VALOR FISCAL"; `homologacao` é o adapter da S-09 e é recusado
-    # aqui com uma frase que diz isso, em vez de cair no mock em silêncio.
+    # com tarja "SEM VALOR FISCAL". `homologacao` é um nome aceito e sem adapter — e
+    # continuará assim (ADR-004) — e é recusado alto, em vez de cair no mock em
+    # silêncio, que é a única falha aqui que ninguém percebe a tempo.
     #
     # Ao contrário do pagamento, a escolha é EXPLÍCITA (ver `nota.emissor_de`). As
     # três variáveis estavam no `.env.example` desde a S-02 e nenhum código as lia —

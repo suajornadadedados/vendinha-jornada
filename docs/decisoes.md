@@ -12,7 +12,7 @@
 | D8 | Como saber que funciona — e continua? | Unit → security → evals como gate (EDD) | ADR-006 |
 | D9 | Como o time trabalha? | SDD: branch por spec, conventional commits, PR com evidência, autor/revisor | ADR-005 |
 | D10 | Como enxergar produção? | Langfuse desde o commit 1, PII mascarada | ADR-007 |
-| D11 | Como ir pra produção? | Docker + VPS, DEV/PROD isolados, CD com aprovação manual | ADR-008 |
+| D11 | Como ir pra produção? | Um ambiente único, sem denominação: Compose com api, frontend e nginx; deploy manual pelo runbook | ADR-008 |
 | D12 | Como o harness chega em quem clona? | Skills vendorizadas no repo, origem fixada por SHA em `.claude/skills.lock.json` | ADR-009 |
 | D13 | Onde a observabilidade é hospedada? | Langfuse Cloud; o mascaramento na origem é o que torna a nuvem aceitável | ADR-010 |
 | D14 | Quantas camadas de teste automatizado existem? | Duas, e só duas: `unit` (a conta está certa?) e `security` (a ação proibida é alcançável?) | ADR-011 |

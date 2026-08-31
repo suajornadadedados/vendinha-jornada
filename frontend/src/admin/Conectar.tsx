@@ -58,7 +58,7 @@ export function Conectar({ aoConectar }: { aoConectar: () => void }) {
           <AlertDescription>
             O token é o mesmo <span className="mono">OPERADOR_API_TOKEN</span> do{" "}
             <span className="mono">.env</span>, e vale só para esta aba. É aceitável numa demo
-            local e não é aceitável num host público — a S-08 resolve isso.
+            local e não é aceitável num host público.
           </AlertDescription>
         </Alert>
       </form>

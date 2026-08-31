@@ -17,7 +17,8 @@ asserção recalcula um total: ela compara com o número que o pedido de teste d
 
 **Nada real** (RNF-7). A compradora é a `empresa_valida` de `tests/conftest.py`, o
 emitente é fabricado em `nota/documento.py`, e nenhum certificado existe — o mock
-não assina, e é exatamente essa a diferença que o adapter da S-09 vai preencher.
+não assina, e é exatamente essa a diferença entre este documento e um com valor
+fiscal. Ninguém vai preenchê-la: não há segundo adapter (ADR-004).
 """
 
 from collections.abc import Iterator
@@ -309,8 +310,8 @@ def test_the_invoice_number_comes_from_outside_the_adapter(
 ) -> None:
     """R8, ADR-001 — numeração é fato de banco, e o adapter apenas a recebe.
 
-    Deixá-la no adapter faria dois adapters numerarem de dois jeitos, e o da S-09
-    herdaria uma responsabilidade que é do `fiscal.py` — onde ela sai de uma
+    Deixá-la no adapter faria dois adapters numerarem de dois jeitos, e qualquer
+    emissor herdaria uma responsabilidade que é do `fiscal.py` — onde ela sai de uma
     sequência do Postgres, que é a coisa que processo concorrente faz errado e banco
     faz certo.
     """
