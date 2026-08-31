@@ -161,6 +161,27 @@ Cenário: o banco não está exposto
   está indexada e pular a embedagem, e isso é mudança de comportamento em `ingest.py` —
   código de produto, fora do escopo desta spec. Decisão do PO.
 
+- **DESC-5 — o botão "Confirmar pagamento" postava para a raiz do host, e isso é defeito de
+  produto, não de deploy.** Encontrado pelo PO percorrendo a jornada no ambiente empacotado:
+  o pagamento abria e o botão devolvia **405 Not Allowed** do nginx.
+
+  A página de checkout falsa (`app.py`) montava o formulário com
+  `action='/pagamento/mock/{id}/confirmar'` — caminho absoluto, que descarta qualquer
+  prefixo. O POST ia para a raiz do host, onde quem responde é o servidor de estáticos, e
+  405 é a resposta correta dele a um POST: um arquivo não tem o que fazer com um.
+
+  Corrigido para caminho **relativo**, que resolve contra a URL da própria página e funciona
+  com prefixo, sem prefixo, em outra porta ou atrás de um túnel — sem ler configuração.
+
+  **Por que isto foi consertado aqui em vez de virar decisão do PO:** é a REQ-3 não estando
+  cumprida. A spec entrega um ambiente onde a jornada funciona, e sem isto ela para no
+  pagamento. O defeito é *anterior* a esta spec — mora em `app.py` desde a S-04 —, mas só era
+  alcançável com um prefixo na frente, e o prefixo é desta spec (DESC-1).
+
+  Coberto por teste (`test_payment_webhook.py`), e o teste foi falsificado: reintroduzindo o
+  caminho absoluto, ele reprova. As duas rotas já eram testadas antes; o que ninguém olhava
+  era **por onde o botão manda o navegador**.
+
 - **DESC-4 — o `.dockerignore` não pode excluir `deploy/`.** Tentativa registrada porque o
   erro é instrutivo: excluir o diretório inteiro parecia higiene, e quebrou o build da imagem
   do frontend, que copia `deploy/nginx.conf`. Reincluir um arquivo de um diretório excluído

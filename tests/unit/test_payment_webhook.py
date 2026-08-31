@@ -431,3 +431,28 @@ def test_the_mock_page_confirms_through_the_same_idempotent_path(
     assert primeiro.json()["resultado"] == "registrado"
     assert segundo.json()["resultado"] == "duplicado"
     assert gravados.gravados[PEDIDO_ID].status is StatusDoPedido.AGUARDANDO_APROVACAO_NF
+
+
+@pytest.mark.risco("R8")
+def test_the_mock_page_posts_to_a_relative_path_so_a_prefix_survives(
+    gravados: PedidosEmMemoria,
+) -> None:
+    """R8 — o botão de confirmar precisa funcionar atrás de um prefixo de proxy.
+
+    O `action` do formulário não pode começar em `/`. Um caminho absoluto posta na
+    raiz do host e descarta qualquer prefixo — e atrás do nginx da S-08, onde a API
+    vive sob `/api/`, a raiz é o servidor de estáticos, que responde **405** a um
+    POST porque um arquivo não tem o que fazer com ele.
+
+    O defeito existiu e chegou até a demonstração: em desenvolvimento a API é a
+    raiz da própria origem, então o caminho absoluto calhava de estar certo e nada
+    reclamava. As duas rotas já eram testadas — o que faltava era alguém olhar por
+    onde o botão manda o navegador.
+    """
+    from vendinha.pagamento import MockPaymentAdapter
+
+    with _client(gravados, MockPaymentAdapter("http://exemplo.invalido/api")) as client:
+        pagina = client.get(f"/pagamento/mock/{PEDIDO_ID}")
+
+    assert f"action='{PEDIDO_ID}/confirmar'" in pagina.text
+    assert "action='/" not in pagina.text
