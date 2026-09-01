@@ -1,0 +1,59 @@
+# O contexto de build é a RAIZ do repositório, e não `backend/`, porque o layout
+# de diretórios é parte do contrato: `config.py` resolve `REPO_ROOT` como
+# `parents[2]`, e `precos.py` lê `<root>/data/precos-modelos.json` no caminho de
+# runtime de `/admin/metricas`. Copiar `backend/` sozinho quebraria isso — e
+# quebraria só quando alguém abrisse a tela, não no build.
+#
+# Contexto de raiz custa caro sem esta lista: `backend/.venv` e
+# `frontend/node_modules` sozinhos passam de um giga, e o Docker os envia ao
+# daemon antes de executar a primeira linha do Dockerfile.
+
+.git
+.github
+.gitignore
+.gitleaks.toml
+.pre-commit-config.yaml
+
+# Ambientes e artefatos de build da máquina do desenvolvedor. O `node_modules`
+# do host é especialmente perigoso: ele traz binários compilados para o SO de
+# quem buildou, e aqui o desenvolvimento é Windows e a imagem é Linux.
+backend/.venv
+backend/**/__pycache__
+backend/**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+
+# Segredo não entra em imagem. O `.env` já não é versionado, mas o contexto de
+# build lê o disco, não o índice do git — sem esta linha um `.env` presente na
+# máquina de quem builda entraria na camada, e camada de imagem é distribuível.
+.env
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.p12
+*.pfx
+certificados/
+
+# Documentação, harness e suíte não fazem parte de nenhuma das duas imagens.
+# `docs/` sozinho carrega os PNGs dos diagramas, que são megabytes de coisa
+# nenhuma para um servidor de API.
+docs
+evals
+tests
+scripts
+.claude
+*.md
+!README.md
+
+# `deploy/` FICA no contexto de propósito: é de lá que sai o `nginx.conf` que a
+# imagem do frontend copia. São alguns kilobytes de texto, e excluir o diretório
+# para depois reincluir um arquivo dele é a regra que quebra silenciosamente
+# quando aparecer o segundo arquivo.
+#
+# O que não pode entrar de `deploy/` é o `.env`, e ele já está coberto pelo
+# `**/.env` acima — a proteção do segredo não depende desta linha.

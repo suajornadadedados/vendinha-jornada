@@ -5,6 +5,23 @@
 - Revoga um não-objetivo do PRD (§3, *"multi-tenancy e painel administrativo completo"*), e só a
   metade depois do "e". Multi-tenancy continua fora.
 
+> **Nota de 2026-09-01 — as dívidas endereçadas à "S-08" mudaram de gatilho.** Duas passagens
+> deste documento (nas Consequências) dizem que a S-08 resolveria autenticação e a segunda
+> instância do barramento. Foram escritas quando **S-08 significava host público**; o escopo
+> daquela spec foi cortado para um ambiente único, empacotado e sem TLS, que deliberadamente
+> não vai para a internet aberta (ADR-008, revisão de 2026-08-31).
+>
+> **A decisão deste ADR não muda em nada** — o corpo abaixo está intacto. O que muda é *quando*
+> as duas dívidas vencem: **autenticação real, quando o host for público**; **`LISTEN/NOTIFY`,
+> quando existir mais de uma instância de API**. Nenhuma spec do roteiro atual produz qualquer
+> um dos dois, e a S-08 não os paga — a tabela de reetiquetagem está em
+> `docs/specs/S-08-producao.md`, seção *Fora de escopo*.
+>
+> A nota existe porque este ADR tem precedência sobre a spec: sem ela, quem lê o normativo
+> conclui que a S-08 deve autenticação, e a spec afirma o contrário. Apontada pela verificação
+> independente da S-08 (RS-7) — a mesma classe de ponteiro pendurado que a DESC-0 consertou em
+> `schemas.py`.
+
 ## Contexto
 
 O PRD escreveu "painel administrativo completo" como não-objetivo quando o entregável imaginado era

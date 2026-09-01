@@ -1,0 +1,177 @@
+# O ambiente empacotado — um só, e sem denominação (ADR-008).
+#
+# O `docker-compose.yml` da raiz é a máquina do desenvolvedor: ele sobe só o que
+# guarda estado, publica em `127.0.0.1` e aceita senha default. Este sobe o
+# produto inteiro, e as diferenças em relação àquele são todas deliberadas:
+# Postgres e Qdrant NÃO publicam porta (só o nginx publica), a senha vem do
+# ambiente sem default, e a API é imagem, não processo.
+#
+# `name:` próprio para as duas stacks coexistirem na mesma máquina sem disputar
+# volume nem rede — é o que permite subir isto num host onde alguém já rodou
+# `make up` para conferir alguma coisa.
+#
+#     cp deploy/.env.example deploy/.env    # e preencher
+#     docker compose -f deploy/docker-compose.yml up -d --wait
+#
+# O `--wait` só retorna quando os healthchecks passam, e é por isso que o
+# `bootstrap` existe: sem catálogo a API se recusa a subir, de propósito.
+
+name: vendinha-deploy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no deploy/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB no deploy/.env}
+    # Sem `ports:`. O banco é alcançável pela rede do compose e por mais nada —
+    # é a diferença que mais importa em relação ao compose de desenvolvimento,
+    # onde a porta em localhost é conveniência aceitável.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -U explícito pelo mesmo motivo do compose de dev: sem ele o pg_isready
+      # usa o usuário do SO e responde "accepting connections" antes de o banco
+      # da aplicação existir.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  qdrant:
+    # Mesma tag do compose de desenvolvimento, e isso é verificado: o
+    # `qdrant-client` do backend está preso ao mesmo minor, e
+    # `tests/unit/test_deploy_pins.py` reprova se os dois divergirem.
+    image: qdrant/qdrant:v1.13.6
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # CMD + bash explícito, e não CMD-SHELL: /dev/tcp é bashism e o /bin/sh da
+      # imagem é dash. A imagem não traz curl nem wget — verificado, não
+      # presumido. /readyz, e não porta aberta: porta responde antes de o
+      # serviço aceitar consulta.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf 'GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # ─── O bootstrap, e por que ele é um serviço e não um passo do runbook ──────
+  #
+  # A API **se recusa a subir** sem catálogo: `_conferir_catalogo`, no lifespan,
+  # falha se a tabela `produto` não existir ou estiver vazia. É deliberado — sem
+  # catálogo o agente responderia "não encontrei nada" com toda a sinceridade, o
+  # que parece falha do modelo e é falha de setup, a pior classe de erro para
+  # diagnosticar.
+  #
+  # A consequência é que `up -d` sozinho não sobe um host novo. Um passo manual
+  # no runbook resolveria, mas transformaria a subida em três comandos com uma
+  # ordem que só quem leu conhece. Como serviço, a dependência fica declarada
+  # onde o Docker a lê, e `up -d --wait` volta a ser um comando só.
+  #
+  # Os dois são idempotentes: `db.py` é CREATE TABLE IF NOT EXISTS, e o seed faz
+  # upsert por id nos dois lados. Rodar de novo a cada subida re-embeda os 65
+  # produtos — fração de centavo, e o preço de a subida não ter ordem oculta.
+  bootstrap:
+    image: vendinha-api:${VENDINHA_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    command: sh -c "python -m vendinha.db && python -m vendinha.ingest"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: vendinha-api:${VENDINHA_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    env_file: .env
+    environment:
+      # Montadas aqui, e não no `.env`, porque os nomes de host são do compose:
+      # quem edita o `.env` não deveria precisar saber que o serviço se chama
+      # `postgres`. As credenciais continuam vindo do `.env`.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: http://qdrant:6333
+      # Dentro do contêiner, 0.0.0.0 é a resposta certa — a rede do compose é o
+      # limite, e o nginx é o único que publica porta. Fora dele seria o oposto:
+      # ver S-02 D-8, e o `.env.example` da raiz.
+      API_HOST: 0.0.0.0
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      # A imagem é `python:3.12-slim`: sem curl e sem wget. O interpretador que
+      # já está lá é o cliente HTTP disponível, e usá-lo evita instalar um
+      # pacote inteiro para fazer um GET.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  nginx:
+    image: vendinha-web:${VENDINHA_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        # Build time, não runtime: o Vite substitui `import.meta.env`
+        # estaticamente. Mudar isto exige rebuild da imagem, não restart do
+        # contêiner — está escrito no topo do `web.Dockerfile`.
+        VITE_API_BASE_URL: /api
+    ports:
+      # A única porta publicada do ambiente. 8080 do lado de dentro porque a
+      # imagem é a unprivileged (RNF-9).
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      # `service_started`, e NÃO `service_healthy`. A diferença aparece num cold
+      # start em que a API nunca fica healthy — que é o desfecho mais provável de
+      # uma primeira subida malsucedida, pela DESC-3: sem `OPENAI_API_KEY` o
+      # `bootstrap` falha, a `api` nunca inicia, e com `service_healthy` o nginx
+      # também não subiria. O operador ficaria sem a landing, que é estática e não
+      # depende de nada disso.
+      #
+      # É a mesma propriedade que o `resolver` do `nginx.conf` compra — falha
+      # parcial em vez de total —, e mantê-la aqui era desfazê-la no único momento
+      # em que ela mais importa. Apontado pela verificação independente (RS-5).
+      #
+      # Isto não esconde a falha: `up -d --wait` continua esperando o healthcheck
+      # de TODOS os serviços, então uma API quebrada ainda faz o comando falhar.
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  qdrant-data:

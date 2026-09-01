@@ -240,8 +240,8 @@ class PedidoNaFila(BaseModel):
     operador: str | None = Field(
         default=None,
         description=(
-            "Quem decidiu, como se declarou. Este projeto ainda não tem "
-            "autenticação: é declaração, não identidade provada (S-08)."
+            "Quem decidiu, como se declarou. Este projeto não tem "
+            "autenticação: é declaração, não identidade provada."
         ),
     )
     decidido_em: datetime | None = None

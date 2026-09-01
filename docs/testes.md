@@ -136,6 +136,19 @@ Não reabra a negociação a cada sessão.
 
 - **Declare o `R#` na primeira linha do docstring.** É o que deixa o `/verificar-spec` responder
   *"quais riscos esta spec fecha e qual teste prova cada um"* sem ler a implementação.
+  > **Uma exceção, e só uma: o teste de invariante de infraestrutura.** Existe teste que não
+  > fecha risco da matriz e ainda assim vale — o que prende a tag de uma imagem à versão do
+  > cliente que fala com ela, por exemplo (`tests/unit/test_deploy_pins.py`, S-08). Ele guarda
+  > uma **fiação entre dois arquivos**, não um comportamento do produto. Nesse caso, declare no
+  > docstring do módulo **a ausência e o motivo** — que risco ele *não* fecha, e o que fecha no
+  > lugar. O que não se faz é inventar um `R#` para o teste parecer importante: um marcador
+  > falso inverte o mapa da §2, que é justamente o que permite cruzar risco e prova sem ler
+  > implementação.
+  >
+  > A regra chegou aqui pelo caminho certo, e vale dizer: o teste da S-08 já vinha com a
+  > ausência declarada e bem argumentada, e a verificação independente apontou (RS-2) que
+  > exceção a normativo não se cria por prosa dentro do arquivo que a exerce — cria-se emendando
+  > o normativo. É esta emenda.
 - **Nome descreve comportamento, não função:** `test_recommendation_agent_cannot_create_order`,
   nunca `test_tools_registry`.
 - **Valor esperado vem de fonte independente.** Nada de recalcular no teste a mesma conta que o

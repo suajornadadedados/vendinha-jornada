@@ -1156,7 +1156,19 @@ def _rotas_do_mock(app: FastAPI) -> None:
             "nenhum gateway real está configurado nesta instância.</p>"
             f"<p>Pedido <code>{escape(pedido.id)}</code> — total "
             f"<strong>R$ {escape(str(pedido.total))}</strong>.</p>"
-            f"<form method='post' action='/pagamento/mock/{escape(pedido.id)}/confirmar'>"
+            # **Caminho RELATIVO, e nunca um que comece em `/`.** Esta página é
+            # servida por um link que veio de `PUBLIC_BASE_URL`, e essa base pode
+            # ter um prefixo: atrás do nginx da S-08 a API vive sob `/api/`. Um
+            # `action='/pagamento/...'` descarta esse prefixo e posta na raiz do
+            # host, onde quem responde é o servidor de estáticos — que devolve
+            # **405** a um POST, porque um arquivo não tem o que fazer com ele.
+            #
+            # Relativo resolve contra a URL desta página, então funciona com
+            # prefixo, sem prefixo, em outra porta ou atrás de um túnel, sem ler
+            # configuração nenhuma. Encontrado subindo o ambiente empacotado
+            # (S-08); em desenvolvimento nunca apareceu, porque lá a API é a raiz
+            # da própria origem e o caminho absoluto calhava de estar certo.
+            f"<form method='post' action='{escape(pedido.id)}/confirmar'>"
             "<button type='submit'>Confirmar pagamento</button></form></body>"
         )
 
