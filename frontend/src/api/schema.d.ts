@@ -1213,7 +1213,7 @@ export interface components {
             numero_nota?: number | null;
             /**
              * Operador
-             * @description Quem decidiu, como se declarou. Este projeto ainda não tem autenticação: é declaração, não identidade provada (S-08).
+             * @description Quem decidiu, como se declarou. Este projeto não tem autenticação: é declaração, não identidade provada.
              */
             operador?: string | null;
             /** Pedido Id */

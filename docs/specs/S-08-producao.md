@@ -1,7 +1,7 @@
 ---
 id: S-08
 titulo: Deploy — ambiente empacotado (api, frontend e nginx)
-status: aprovada
+status: em-revisao
 branch: spec/s-08-deploy
 issue: #9
 adrs: [ADR-008]
