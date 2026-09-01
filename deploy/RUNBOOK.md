@@ -139,8 +139,26 @@ derivado do catálogo e o `bootstrap` o reconstrói.
 
 ```bash
 docker compose -f deploy/docker-compose.yml exec -T postgres \
-  pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
   > backup-$(date +%F-%H%M).dump
+```
+
+> **As aspas simples em volta do `sh -c` não são estilo.** Elas fazem `$POSTGRES_USER` e
+> `$POSTGRES_DB` serem expandidos **dentro do contêiner**, onde o serviço `postgres` já os
+> define. Com aspas duplas quem expande é o shell do host, onde essas variáveis não existem —
+> elas moram em `deploy/.env`, que o seu shell não lê. O `pg_dump` então tenta conectar como o
+> seu usuário do sistema e falha com `role "root" does not exist`.
+>
+> E falha para o lado ruim: o `>` cria o arquivo **antes** de o comando rodar, então sobra um
+> `.dump` de **0 byte**. Automatizado no `cron`, isso produz uma pasta que *parece* uma pasta
+> de backups. A primeira versão deste runbook tinha exatamente esse defeito, e quem o achou foi
+> a verificação independente da S-08 — rodando o comando como está escrito, que é a única forma
+> de testar um runbook.
+
+**Confira o que saiu, sempre.** Um backup só conta depois de alguém olhar o tamanho:
+
+```bash
+ls -l backup-*.dump          # 0 byte é falha, não é backup vazio
 ```
 
 Guarde fora deste host. Um backup que só existe na máquina que pode pegar fogo não é backup.
@@ -150,9 +168,16 @@ testado é backup que não existe.
 **Restore:**
 
 ```bash
+# 1. Derrube quem escreve. O --clean derruba tabelas, e fazer isso debaixo de uma
+#    aplicação viva deixa a API com conexões apontando para objetos que sumiram.
+docker compose -f deploy/docker-compose.yml stop api nginx
+
+# 2. Restaure. Mesmas aspas simples, e pelo mesmo motivo do backup.
 docker compose -f deploy/docker-compose.yml up -d --wait postgres
 cat backup-2026-08-31-1430.dump | docker compose -f deploy/docker-compose.yml exec -T postgres \
-  pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists
+  sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists'
+
+# 3. Suba tudo de volta.
 docker compose -f deploy/docker-compose.yml up -d --wait
 ```
 

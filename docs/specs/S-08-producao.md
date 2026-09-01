@@ -52,9 +52,17 @@ governa tudo abaixo.
       > único sem heartbeat. Acertar a rota difícil e deixar as outras duas a uma
       > refatoração de distância não era o que o requisito queria dizer.
 - [x] REQ-4 `deploy/.env.example` próprio, com o que muda em relação ao local: `APP_ENV`,
-      `API_HOST=0.0.0.0` (é aqui que `0.0.0.0` é a resposta certa — ver S-02 D-8),
       `PUBLIC_BASE_URL`, `CORS_ORIGINS`, `OPERADOR_API_TOKEN` e as chaves do Langfuse.
       Nenhum secret versionado; o gitleaks do CI continua sendo o portão.
+      > **Emenda de 2026-09-01, após a verificação independente (NC-2).** A redação original
+      > pedia `API_HOST=0.0.0.0` *neste arquivo*, e ele foi entregue no `docker-compose.yml`.
+      > O requisito é que muda, e não o código, porque o lugar entregue é o melhor: no compose,
+      > `environment:` tem **precedência** sobre `env_file:`, então um operador não consegue
+      > derrubar a subida copiando `API_HOST=127.0.0.1` do `.env.example` da raiz — e essa é uma
+      > confusão plausível, já que os dois arquivos são lidos lado a lado. É a mesma regra que o
+      > cabeçalho do `deploy/.env.example` já declarava para `DATABASE_URL` e `QDRANT_URL`
+      > ("o compose as monta"); ela só não tinha sido estendida ao `API_HOST` por escrito, e
+      > agora está — no arquivo e aqui.
 - [x] REQ-5 `deploy/RUNBOOK.md`: subir do zero, hardening mínimo (ufw, SSH por chave,
       containers non-root), backup e restore do Postgres, rollback, e a **região do
       projeto Langfuse (EU/US)** — pendência que o ADR-010 endereça explicitamente ao
@@ -173,14 +181,36 @@ Cenário: o banco não está exposto
   Corrigido para caminho **relativo**, que resolve contra a URL da própria página e funciona
   com prefixo, sem prefixo, em outra porta ou atrás de um túnel — sem ler configuração.
 
-  **Por que isto foi consertado aqui em vez de virar decisão do PO:** é a REQ-3 não estando
-  cumprida. A spec entrega um ambiente onde a jornada funciona, e sem isto ela para no
-  pagamento. O defeito é *anterior* a esta spec — mora em `app.py` desde a S-04 —, mas só era
-  alcançável com um prefixo na frente, e o prefixo é desta spec (DESC-1).
+  **O que o defeito violava — corrigido depois da verificação independente (RS-3).** O registro
+  original dizia "é a REQ-3 não estando cumprida", e isso estava errado: a REQ-3 é a
+  configuração do nginx, e ela **estava** cumprida (buffering, `try_files`, proxy, tudo). O que
+  o defeito quebrava era o **Objetivo** da spec e o **primeiro cenário BDD** — *"o ambiente sobe
+  do zero e **atende**"* —, que é uma âncora mais forte, não mais fraca. O defeito é *anterior*
+  a esta spec (mora em `app.py` desde a S-04), mas só era alcançável com um prefixo na frente, e
+  o prefixo é desta spec (DESC-1).
+
+  **Sobre a decisão de consertar aqui, dita como foi.** O `CLAUDE.md` manda registrar e parar
+  para decisão do PO. O que houve: o PO encontrou o defeito percorrendo a jornada, relatou o
+  405, e eu consertei na sequência — **sem pedir a decisão em separado**. Não vou registrar como
+  "decisão do PO" o que foi julgamento meu sobre um defeito que ele acabara de reportar. A
+  decisão de manter este conserto dentro deste PR, em vez de tirá-lo para um PR próprio, **é do
+  PO e continua aberta até o merge** — o mesmo caminho que a DESC-11 da S-07 usou.
 
   Coberto por teste (`test_payment_webhook.py`), e o teste foi falsificado: reintroduzindo o
   caminho absoluto, ele reprova. As duas rotas já eram testadas antes; o que ninguém olhava
   era **por onde o botão manda o navegador**.
+
+- **DESC-6 — o que a verificação independente mediu e a spec afirmava sem ter medido.** A
+  spec chama a REQ-3 de *"a falha mais provável desta spec inteira"*: sem `proxy_buffering off`,
+  o SSE chegaria em bloco. O revisor tentou **produzir** essa falha e não conseguiu — subiu dois
+  nginx de controle contra a mesma API, um com `proxy_buffering on` e outro 100% default, e os
+  três transmitiram evento a evento. A explicação provável é o tamanho da resposta: com poucos
+  kilobytes o nginx repassa cada buffer assim que o preenche.
+
+  `proxy_buffering off` **fica**: é barato e torna o comportamento independente do tamanho da
+  resposta, em vez de dependente dele. O que muda é a prosa — a frase era uma previsão que
+  ninguém tinha medido, e agora tem medição contrária. Fica registrado para que a próxima spec
+  que copiar a frase saiba que ela nunca foi observada acontecendo aqui.
 
 - **DESC-4 — o `.dockerignore` não pode excluir `deploy/`.** Tentativa registrada porque o
   erro é instrutivo: excluir o diretório inteiro parecia higiene, e quebrou o build da imagem

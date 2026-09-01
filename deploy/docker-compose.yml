@@ -149,8 +149,21 @@ services:
       # imagem é a unprivileged (RNF-9).
       - "${HTTP_PORT:-8080}:8080"
     depends_on:
+      # `service_started`, e NÃO `service_healthy`. A diferença aparece num cold
+      # start em que a API nunca fica healthy — que é o desfecho mais provável de
+      # uma primeira subida malsucedida, pela DESC-3: sem `OPENAI_API_KEY` o
+      # `bootstrap` falha, a `api` nunca inicia, e com `service_healthy` o nginx
+      # também não subiria. O operador ficaria sem a landing, que é estática e não
+      # depende de nada disso.
+      #
+      # É a mesma propriedade que o `resolver` do `nginx.conf` compra — falha
+      # parcial em vez de total —, e mantê-la aqui era desfazê-la no único momento
+      # em que ela mais importa. Apontado pela verificação independente (RS-5).
+      #
+      # Isto não esconde a falha: `up -d --wait` continua esperando o healthcheck
+      # de TODOS os serviços, então uma API quebrada ainda faz o comando falhar.
       api:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8080/ >/dev/null"]
       interval: 10s

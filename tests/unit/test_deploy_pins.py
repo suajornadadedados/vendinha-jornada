@@ -75,15 +75,27 @@ def _faixa_do_cliente() -> tuple[tuple[int, int], tuple[int, int]]:
     return (piso_maior, piso_menor), (teto_maior, teto_menor)
 
 
-@pytest.mark.parametrize("compose", COMPOSES, ids=lambda caminho: caminho.parent.name)
-def test_every_compose_pins_the_same_qdrant_image(compose: Path) -> None:
+def test_every_compose_pins_the_same_qdrant_image() -> None:
     """Os dois compose usam a MESMA imagem do Qdrant.
 
     O de deploy roda longe de quem edita: divergir aqui produz um ambiente que
     indexa contra uma versão e desenvolve contra outra, e a diferença aparece
     como busca ruim, não como erro.
+
+    **Sem `parametrize`, e isso é o conserto de um teste que não mordia.** A
+    primeira versão parametrizava sobre `COMPOSES` e comparava cada um contra
+    `COMPOSES[0]` — que é um dos parametrizados. O caso da raiz virava
+    `assert x == x`: passava por construção, e o relatório do pytest mostrava
+    **dois** casos onde havia uma verificação só. Apontado pela verificação
+    independente da S-08 (RS-1); é exatamente a vacuidade que `docs/testes.md`
+    §3.3 recusa, em escala pequena.
     """
-    assert _minor_da_imagem(compose) == _minor_da_imagem(COMPOSES[0])
+    minors = {compose: _minor_da_imagem(compose) for compose in COMPOSES}
+
+    assert len(set(minors.values())) == 1, (
+        "os compose divergiram na imagem do Qdrant: "
+        + ", ".join(f"{c.parent.name}/{c.name} v{ma}.{me}" for c, (ma, me) in minors.items())
+    )
 
 
 @pytest.mark.parametrize("compose", COMPOSES, ids=lambda caminho: caminho.parent.name)
