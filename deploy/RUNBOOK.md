@@ -56,11 +56,15 @@ imagens e roda o `bootstrap` — conte alguns minutos. Depois disso, abra:
 - **`http://<host>:8080/`** — a landing, onde o cliente é atendido
 - **`http://<host>:8080/admin`** — o painel do operador (peça o `OPERADOR_API_TOKEN` na tela)
 
+> **A porta é a que você pôs em `HTTP_PORT`**, e 8080 é só o default. Se a 8080 já estiver
+> ocupada nesta máquina você terá mudado o valor — e aí é ele que vale nas duas URLs acima.
+> `docker compose -f deploy/docker-compose.yml ps` mostra a porta publicada de verdade.
+
 Para conferir que ficou de pé:
 
 ```bash
 docker compose -f deploy/docker-compose.yml ps          # todos `healthy`
-curl -fsS http://localhost:8080/api/health              # {"status":"ok",...}
+curl -fsS http://localhost:8080/api/health              # {"status":"ok"}
 ```
 
 ## 3. Operação do dia a dia
@@ -240,6 +244,12 @@ cliente e o atendimento segue igual. Indisponibilidade do Langfuse nunca derruba
 essa pendência a este runbook, e este é o lugar de anotá-la:
 
 > **Região do projeto Langfuse em uso:** `_______________` (preencher ao criar o projeto)
+>
+> **Enquanto esta linha estiver em branco, a consequência do ADR-010 continua ABERTA.** Um campo
+> vazio é onde registrar, não um registro — e a verificação independente da S-08 (rodada 2, RS-2)
+> pediu que isso fosse dito em voz alta, para ninguém ler o ADR-010 como quitado. Não há projeto
+> Langfuse neste ambiente (as chaves são opcionais e estão vazias), e não se registra a região de
+> um projeto que não existe; no dia em que existir, o dono desta decisão é este runbook.
 > `LANGFUSE_BASE_URL` é `https://cloud.langfuse.com` para US e `https://eu.cloud.langfuse.com`
 > para EU.
 

@@ -82,6 +82,17 @@ significam outra coisa, e continuar apontando para cá seria fingir que têm don
 | Autenticação real do painel (hoje um token digitado à mão em `sessionStorage`) | ADR-015 · S-07 | **quando o host for público** |
 | `GET /config` aberto em qualquer ambiente; `db.py:main()` imprimindo o DSN; `api_key` na chave do `lru_cache` | S-02, ressalvas R-6/R-7/R-8 | **quando o host for público** |
 | Barramento in-process (`LISTEN/NOTIFY` no lugar) | ADR-015 · S-07 | **quando existir mais de uma instância de API** — e este compose sobe uma |
+| `OPENAI_API_KEY` contraria a letra do RNF-1 e nunca virou ADR | S-03, RS-1 (dono: *PO / S-08*) | **decisão do PO** — e esta spec **agravou** a dívida, ver DESC-3 |
+
+**Eram três, e são quatro** — corrigido depois da rodada 2 da verificação (RS-1). A quarta é a
+mais incômoda das quatro, porque esta spec não só deixou de fechá-la como **piorou o problema**:
+a S-03 registrou que o embedding pela OpenAI contraria a letra do RNF-1 e pedia uma decisão
+formal; a DESC-3 mostra que agora a chave é necessária para o ambiente **subir**, não só para
+semear. Documentada no runbook §7 e §9, mas a decisão que a RS-1 pedia continua não tomada. Quem
+lê a S-03 hoje conclui que a S-08 resolveria; ela não resolveu.
+
+(A outra dívida herdada da S-03 — o pin do `qdrant-client`, RS-6 — **foi paga**, pelo REQ-1 e por
+`tests/unit/test_deploy_pins.py`.)
 
 Nenhuma spec deste roteiro torna o host público. Se isso mudar, muda por decisão do PO, e
 a decisão vira ADR antes de virar branch.
@@ -199,6 +210,49 @@ Cenário: o banco não está exposto
   Coberto por teste (`test_payment_webhook.py`), e o teste foi falsificado: reintroduzindo o
   caminho absoluto, ele reprova. As duas rotas já eram testadas antes; o que ninguém olhava
   era **por onde o botão manda o navegador**.
+
+- **DESC-7 — esta branch emendou dois normativos ACIMA da spec, e isso precisa da sua
+  decisão, não da minha.** Apontado pela rodada 2 (RS-4), e o apontamento está certo.
+
+  | Arquivo | Precedência | O que mudou |
+  |---|---|---|
+  | `docs/testes.md` §4 | **4** (normativo) | exceção nomeada para teste de invariante de infraestrutura, que não fecha risco e declara a ausência no docstring |
+  | `docs/adr/ADR-015` | **5** (ADR) | nota de cabeçalho reetiquetando as dívidas para "quando o host for público"; corpo intacto |
+
+  As duas foram **pedidas pelas condições de fechamento da rodada 1**, e as duas estão bem
+  feitas. O problema é de rastro: o `CLAUDE.md` manda registrar necessidade nova em Descobertas
+  e parar para decisão do PO, e **um revisor não é o PO** — a condição de fechamento pediu a
+  emenda, não dispensou o registro. Sem esta entrada, quem lê só a spec não fica sabendo que
+  esta branch mexeu em duas réguas que governam todas as outras.
+
+  **Fica explícito no PR**: são as duas linhas do diff que valem uma segunda olhada sua, porque
+  valem para o repositório inteiro e não só para o deploy. Reverter qualquer uma custa um
+  commit e não afeta mais nada desta spec.
+
+- **DESC-8 — o redirect automático do FastAPI escapa do prefixo, e a escolha do conserto é
+  sua.** Terceira instância da classe de falha que esta spec já nomeou duas vezes (DESC-2 e
+  DESC-5), encontrada pela rodada 2 (NC-1, Média):
+
+  ```
+  GET /api/pagamento/mock/<id>/   ->  307
+  Location: http://localhost/pagamento/mock/<id>      # sem :8099 e sem /api
+  ```
+
+  O `nginx.conf` repassa `Host $host`, que não carrega a porta, e a API não sabe que vive sob um
+  prefixo. **Alcance pequeno:** toda URL que o produto *entrega* a alguém sai de
+  `PUBLIC_BASE_URL`, que está correta, e o cliente TS usa caminhos exatos. É preciso alguém
+  digitar uma URL de API com barra final para chegar lá.
+
+  Duas saídas, e a diferença entre elas é de princípio:
+
+  - **`absolute_redirect off;` + `Host $http_host` no nginx** — duas linhas, não toca o backend,
+    e **preserva** a propriedade que a DESC-1 comprou (o `openapi.json` não muda).
+  - **`root_path="/api"` no FastAPI** — conserta na origem, mas muda o `openapi.json`, que é
+    exatamente o que a DESC-1 evitou de propósito.
+
+  **Não implementei nenhuma das duas.** O veredito já era APROVADO quando isto apareceu, e
+  mudar o comportamento do proxy depois do veredito exigiria outra rodada de verificação por
+  um defeito que não bloqueia. Recomendo a primeira.
 
 - **DESC-6 — o que a verificação independente mediu e a spec afirmava sem ter medido.** A
   spec chama a REQ-3 de *"a falha mais provável desta spec inteira"*: sem `proxy_buffering off`,

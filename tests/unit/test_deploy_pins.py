@@ -90,6 +90,12 @@ def test_every_compose_pins_the_same_qdrant_image() -> None:
     independente da S-08 (RS-1); é exatamente a vacuidade que `docs/testes.md`
     §3.3 recusa, em escala pequena.
     """
+    # Sem isto, `len(set(...)) == 1` seria verdadeiro para um conjunto de UM
+    # elemento: se algum dia sobrar um compose só, o teste ficaria verde sem
+    # comparar nada. É a mesma vacuidade que a rodada 1 apontou, num gatilho
+    # diferente — apontada pela rodada 2 (RS-3).
+    assert len(COMPOSES) >= 2, "este teste compara compose; com menos de dois não há comparação"
+
     minors = {compose: _minor_da_imagem(compose) for compose in COMPOSES}
 
     assert len(set(minors.values())) == 1, (
