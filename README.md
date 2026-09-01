@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/LangGraph-orquestra%C3%A7%C3%A3o-1C3C3C" alt="LangGraph">
   <img src="https://img.shields.io/badge/evals-23%20casos-0083F9" alt="23 casos de eval">
-  <img src="https://img.shields.io/badge/testes-1021%20em%202%20camadas-26D6FC" alt="1021 testes">
+  <img src="https://img.shields.io/badge/testes-1050%20em%202%20camadas-26D6FC" alt="1050 testes">
 </p>
 
 > ### O LLM decide o que dizer. O código decide o que pode ser feito.
@@ -26,12 +26,11 @@
 
 ## O desafio
 
-O [Desafio Jornada de Dados](https://github.com/suajornadadedados/desafio-jornada) publica, de
-agosto a dezembro de 2026, **um pedido de cliente real por mês** — sem stack, sem arquitetura,
-sem numeração de requisitos. Quem participa faz o discovery, documenta, decide e constrói no
-próprio repositório.
+O [Desafio Jornada de Dados](https://github.com/suajornadadedados/desafio-jornada) publica um
+**pedido de cliente real por mês** — sem stack, sem arquitetura, sem numeração de requisitos.
+Quem participa faz o discovery, documenta, decide e constrói no próprio repositório.
 
-O desafio de agosto é o **Agente de Vendas de Ponta a Ponta**. O cliente chega falando:
+O desafio de agosto é o **Agente de Vendas de Ponta a Ponta**, e o cliente chega falando:
 
 > *"Preciso de um presente pra minha sogra, que ama vinho tinto."*
 >
@@ -88,10 +87,10 @@ Duas abas, lado a lado: a mesma API servindo o cliente e o operador.
 </p>
 
 A conversa começa pedindo o **evento**, não o produto. A landing é o simulador do canal do
-cliente, e é honesta sobre o que existe: os tipos de evento são os que o validador conhece
-(`composicao.TipoDeEvento`), os produtores e as regiões são os do catálogo real em
-`data/catalogo/`, e não há um único número inventado de "clientes atendidos". O `0` de
-*composições fora do orçamento apresentadas* é uma invariante testada, não uma meta de marketing.
+cliente, e é honesta sobre o que existe: os tipos de evento oferecidos são exatamente os que o
+validador sabe conferir, os produtores e as regiões são os do catálogo real, e não há um único
+número inventado de "clientes atendidos". O `0` de *composições fora do orçamento apresentadas* é
+uma invariante testada, não uma meta de marketing.
 
 ### `/admin` — o operador vê o atendimento acontecer
 
@@ -99,8 +98,8 @@ cliente, e é honesta sobre o que existe: os tipos de evento são os que o valid
   <img src="assets/admin.png" alt="Painel do operador: visão geral com atendimentos, conversão, valor vendido, notas aprovadas e sugestões barradas na conferência" width="880">
 </p>
 
-O painel é **read-only** e atualiza sozinho por stream do barramento — não é polling. Repare em
-*Sugestões barradas na conferência*: é a fronteira do ADR-001 exposta como métrica de operação —
+O painel é **read-only** e atualiza sozinho por stream — não é polling. Repare em *Sugestões
+barradas na conferência*: é a fronteira entre modelo e código exposta como métrica de operação —
 quantas composições o código devolveu ao modelo, e por quê.
 
 Num período sem atendimento, conversão e ticket médio aparecem como **traço**, nunca como zero.
@@ -109,82 +108,91 @@ um dia que não aconteceu.
 
 ---
 
-## Como rodar
+## Subir a Vendinha
 
-**Pré-requisitos:** Docker, Python 3.12, [uv](https://docs.astral.sh/uv/) e — para as telas —
-Node 22. `make` é conveniência: cada alvo é uma linha de comando real, e `make help` lista todos.
-
-### 1 · Infraestrutura e testes — sem nenhuma chave de API
+Três comandos, e o produto inteiro sobe: loja, painel, API, banco, índice vetorial e um nginx na
+frente.
 
 ```bash
-cp .env.example .env       # nada precisa ser preenchido para subir a infra
-make up                    # docker compose up -d --wait     (~6s até healthy)
-make test                  # bash scripts/run-tests.sh       (unit + security)
-make lint                  # ruff check . && ruff format --check .
-make hooks                 # instala os portões locais (pre-commit)
+git clone https://github.com/suajornadadedados/vendinha-jornada && cd vendinha-jornada
+cp deploy/.env.example deploy/.env     # preencha as cinco chaves que ele pede
+docker compose -f deploy/docker-compose.yml up -d --wait
 ```
 
-### 2 · Conversar com o agente
+Depois disso:
+
+| Onde | O que é |
+|---|---|
+| **http://localhost:8080/** | a loja — a compradora corporativa conversa com o agente |
+| **http://localhost:8080/admin** | o painel — o operador acompanha e aprova a nota fiscal |
+
+**O host só precisa de Docker.** Não precisa de Python, Node nem nada de build: tudo compila
+dentro das imagens. O `--wait` só volta quando todos os serviços estão saudáveis; na primeira vez
+ele constrói as imagens e carrega o catálogo, e leva alguns minutos.
+
+**O arquivo de exemplo pede cinco chaves e explica cada uma no próprio comentário.** Duas são
+credenciais de modelo, e **as duas são necessárias mesmo que você use só uma**: um provedor
+conversa, o outro transforma o catálogo em vetores. As outras três são a senha do banco, uma
+chave de cifra e o token do painel — o arquivo mostra como gerar cada uma.
+
+**Isto empacota o produto; não o publica.** Sem TLS e sem autenticação real, este host não vai
+para a internet aberta ([ADR-008](docs/adr/ADR-008-deploy-ambiente-unico.md)). Só o nginx publica
+porta: banco e índice vetorial não são alcançáveis de fora, e isso é do desenho, não do firewall.
 
 ```bash
-make db-setup              # cria as tabelas (checkpointer, config, produto, pedido, nota, telemetria)
-make seed                  # carrega os 65 produtos no Postgres e no Qdrant
-make api                   # http://127.0.0.1:8000
+docker compose -f deploy/docker-compose.yml logs -f api      # acompanhar
+docker compose -f deploy/docker-compose.yml restart api      # reiniciar só a API
+git pull && docker compose -f deploy/docker-compose.yml up -d --build --wait   # publicar versão nova
 ```
 
-No `.env`: `ANTHROPIC_API_KEY` (ou `OPENAI_API_KEY`) para a conversa, e **`OPENAI_API_KEY` também
-para o `make seed`** — a Anthropic não oferece API de embedding, e a S-03 decidiu embedar pela
-OpenAI. Isso contraria a letra do RNF-1 ("sem contas externas além da API key do modelo") e está
-declarado assim de propósito ([D-1 da S-03](docs/specs/S-03-recomendacao-ancorada.md)).
+O `--build` da última linha **não é opcional**: sem ele o compose reaproveita a imagem antiga e o
+`git pull` não chega a lugar nenhum — um deploy que parece ter funcionado e não fez nada.
 
-### 3 · As duas telas
-
-```bash
-make web-install           # npm install --prefix frontend
-make web                   # http://localhost:5173 (cliente) e /admin (operador)
-```
-
-| Aba | Onde | Quem é |
-|---|---|---|
-| Esquerda | `localhost:5173/` | a compradora corporativa sendo atendida |
-| Direita | `localhost:5173/admin` | o operador vendo o atendimento acontecer, e aprovando a nota |
-
-Para **aprovar a nota fiscal** é preciso mais uma linha no `.env`: `OPERADOR_API_TOKEN`. Sem ela,
-`GET /operador/fila` e as rotas de aprovar/rejeitar respondem 401 — é o lado seguro, porque essa
-fila lista dados de compradoras e autoriza uma emissão irreversível. O token vai no header
-`X-Operador-Token`; a nota que sai é um mock fiel ao layout NF-e modelo 55, com tarja **SEM VALOR
-FISCAL**, e nenhuma conta externa é necessária para chegar até ela.
-
-▶ **Roteiro completo da demonstração, cena a cena:**
-[`docs/specs/S-07-roteiro-de-demo.md`](docs/specs/S-07-roteiro-de-demo.md)
+▶ **Operar de verdade** — subir num servidor, hardening do host, backup e restore, rollback, e as
+armadilhas que não dão erro compreensível: [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
+Este README não repete nada do que está lá.
 
 <details>
-<summary><strong>Problemas comuns no setup</strong> — porta ocupada, CORS, <code>make</code> no Windows</summary>
+<summary><strong>Rodar em modo de desenvolvimento</strong> — para quem vai mexer no código</summary>
 
 <br>
 
-**A API recusa subir dizendo que falta catálogo.** É deliberado: sem catálogo o atendente responde
-"não encontrei nada" com toda a sinceridade, o que parece falha do modelo e é falha de setup. A
-mensagem diz qual dos dois comandos falta (`make db-setup` ou `make seed`).
+Aqui os pré-requisitos mudam: Docker, Python 3.12, [uv](https://docs.astral.sh/uv/) e Node 22.
+O compose da raiz sobe **só** o banco e o índice; a API e as telas rodam na sua máquina, com
+reload. `make` é conveniência — cada alvo é uma linha de comando real, e `make help` lista todos.
 
-**A porta 5173 é fixa (`strictPort`)** porque ela está na allowlist de CORS do backend
-(`CORS_ORIGINS` no `.env`). Cair para a 5174 em silêncio produziria um erro de CORS numa API
-perfeitamente de pé — a falha mais confusa de diagnosticar do conjunto.
+```bash
+cp .env.example .env       # nada precisa ser preenchido para subir a infra e rodar os testes
+make up                    # banco e índice vetorial, ~6s até healthy
+make test                  # as duas camadas de teste
+make lint                  # a mesma régua do CI
+make hooks                 # instala os portões locais
 
-**Porta ocupada?** `POSTGRES_PORT`, `QDRANT_HTTP_PORT` e `QDRANT_GRPC_PORT` no `.env` mudam apenas
-a porta exposta no host; dentro da rede do compose nada muda. É o caso quando você já tem um
-Postgres nativo em 5432 ou outro projeto ocupando 6333.
+make db-setup              # cria as tabelas
+make seed                  # carrega os 65 produtos
+make api                   # http://127.0.0.1:8000
 
-**Sem `make` no Windows?** O Git Bash não traz `make`. Instale com
-`winget install ezwinports.make` (ou use WSL) — ou rode a linha que está dentro do alvo:
-`make -n <alvo>` mostra exatamente o que ele executaria.
+make web-install
+make web                   # http://localhost:5173 (loja) e /admin (painel)
+```
 
-**Base suja de teste antes de uma demo?** `make limpar-demo` zera conversas, pedidos e notas e
+**A API recusa subir dizendo que falta catálogo?** É deliberado: sem catálogo o atendente
+responderia "não encontrei nada" com toda a sinceridade, o que parece falha do modelo e é falha
+de setup. A mensagem diz qual dos dois comandos falta.
+
+**A porta 5173 é fixa** porque ela está na allowlist de CORS do backend. Cair para a 5174 em
+silêncio produziria um erro de CORS numa API perfeitamente de pé — a falha mais confusa de
+diagnosticar do conjunto. As portas do banco e do índice são configuráveis no `.env`, caso você
+já tenha um Postgres nativo ocupando a 5432.
+
+**Sem `make` no Windows?** O Git Bash não traz. Instale com `winget install ezwinports.make` (ou
+use WSL) — ou rode a linha que está dentro do alvo: `make -n <alvo>` mostra o que ele executaria.
+
+**Base suja antes de uma demo?** `make limpar-demo` zera conversas, pedidos e notas, e
 **preserva** o catálogo e a configuração de modelo.
 
-**O painel não tem autenticação.** O `OPERADOR_API_TOKEN` é pedido numa tela de conexão e vale só
-para a aba. É aceitável numa demo local e não é aceitável num host público
-([ADR-015](docs/adr/ADR-015-painel-de-observacao-do-cliente.md)).
+▶ Roteiro da demonstração, cena a cena:
+[`docs/specs/S-07-roteiro-de-demo.md`](docs/specs/S-07-roteiro-de-demo.md)
 
 </details>
 
@@ -192,73 +200,113 @@ para a aba. É aceitável numa demo local e não é aceitável num host público
 
 ## Arquitetura
 
-![Arquitetura do produto: React+Vite, FastAPI, LangGraph com supervisor e subagents, Postgres, Qdrant, Mercado Pago sandbox, emissor de NF e Langfuse, tudo em Docker](docs/img/arquitetura-produto.svg)
+```mermaid
+flowchart TB
+    landing["a loja<br/>a compradora conversa"]
+    painel["o painel<br/>o operador observa e aprova"]
+    api["API · contratos tipados<br/>chat em streaming"]
 
-| Camada | Escolha | A decisão que a exigiu |
-|---|---|---|
-| Orquestração | **LangGraph** | `interrupt` com estado **persistido** em checkpointer — a pausa antes da NF não é UX, é primitivo ([ADR-003](docs/adr/ADR-003-hitl-interrupt-nf.md)) |
-| API | **FastAPI** | Pydantic → OpenAPI → cliente TypeScript gerado; SSE nativo para o chat ([ADR-004](docs/adr/ADR-004-ports-adapters-mock-first.md)) |
-| Dados | **PostgreSQL + Qdrant** | Postgres é a fonte da verdade de preço, `rendimento` e `contem` **e** o checkpointer do grafo; Qdrant carrega o catálogo semântico e **nenhum fato** |
-| Observabilidade | **Langfuse Cloud** | Trace por sessão com PII mascarada **na origem** ([ADR-007](docs/adr/ADR-007-langfuse-pii.md) · [ADR-010](docs/adr/ADR-010-langfuse-cloud.md)) |
-| Frontend | **React + Vite** | Dois consumidores da mesma API: chat do cliente e painel do operador |
-| Pagamento | **Mercado Pago sandbox** | Port + adapter; só ambiente de teste, nenhum dinheiro real |
-| Documento fiscal | **NFEmitter: Mock (default) / Homologação (opcional)** | Mock fiel ao layout NF-e modelo 55; certificado e CNPJ ficam fora do caminho do quickstart |
+    subgraph grafo ["O agente"]
+        sup["supervisor<br/>só roteia"]
+        rec["recomendação<br/>só lê"]
+        chk["checkout<br/>escreve, com schema"]
+    end
 
-Cada linha da tabela aponta para uma decisão registrada **antes** de existir código. A tabela
-inteira, com a alternativa recusada em cada linha, está em
-[`docs/arquitetura.md`](docs/arquitetura.md).
+    qd[("Qdrant<br/>busca semântica<br/>nenhum fato")]
+    pg[("Postgres<br/>preço, catálogo<br/>e memória da conversa")]
+    mp["Mercado Pago<br/>sandbox"]
+    hook["webhook de pagamento<br/>idempotente · zero IA"]
+    nf["Nota fiscal<br/>mock NF-e 55"]
+    lf["Langfuse"]
 
-### Um supervisor, dois subagents — e a fronteira é de permissão
+    landing --> api
+    painel --> api
+    api --> sup
+    sup --> rec
+    sup --> chk
+    rec --> qd
+    rec --> pg
+    chk --> pg
+    chk --> mp
+    mp --> hook
+    hook --> pausa{{"pausa<br/>aguardando aprovação"}}
+    painel -- aprova, e fica registrado --> pausa
+    pausa --> nf
+    api -.->|"trace por sessão, sem dado pessoal"| lf
+```
 
-| Agente | Tools registradas | Pode escrever? |
-|---|---|---|
-| `supervisor` | roteamento | não |
-| `recomendacao` | `buscar_produtos`, `detalhar_produto`, `consultar_preco`, `validar_composicao`, `consultar_pedido` | **não** — read-only por construção |
-| `checkout` | as cinco acima, mais `validar_dados_cliente`, `criar_pedido`, `gerar_link_pagamento` | sim, com schema rígido |
+| Camada | Escolha |
+|---|---|
+| Orquestração | **LangGraph** — a pausa antes da nota fiscal é primitivo com estado persistido, não UX ([ADR-003](docs/adr/ADR-003-hitl-interrupt-nf.md)) |
+| API | **FastAPI** — contratos tipados que geram o cliente TypeScript, e streaming nativo no chat ([ADR-004](docs/adr/ADR-004-ports-adapters-mock-first.md)) |
+| Dados | **PostgreSQL** — fonte da verdade de preço e catálogo, e a memória das conversas |
+| Busca | **Qdrant** — o catálogo semântico, e **nenhum fato**: nada de preço ou alérgeno vive aqui |
+| Observabilidade | **Langfuse Cloud** — trace por sessão, com dado pessoal mascarado **na origem** ([ADR-007](docs/adr/ADR-007-langfuse-pii.md) · [ADR-010](docs/adr/ADR-010-langfuse-cloud.md)) |
+| Frontend | **React + Vite** — dois consumidores da mesma API: a loja e o painel |
+| Pagamento | **Mercado Pago sandbox** — port + adapter, só ambiente de teste, nenhum dinheiro real |
+| Documento fiscal | **Mock fiel ao layout NF-e modelo 55**, com tarja SEM VALOR FISCAL — certificado e CNPJ ficam fora do caminho |
+| Empacotamento | **Docker + compose** — um comando, tudo mockado ([ADR-008](docs/adr/ADR-008-deploy-ambiente-unico.md)) |
 
-`desconto` **não existe** como tool em nenhum registro. Não é uma ação negada por prompt: ela não
-está lá. `emitir_nf` e `registrar_aprovacao` também não existem e nunca vão existir — emitir nota
-é ato que exige uma pessoa, e o registro da aprovação é uma rota do operador. Um teste da camada
-`security` falha se qualquer tool de escrita vazar para o registro do subagent de recomendação.
+> O desenho completo — o fluxo de dados numa passada, a gestão de falhas e a **alternativa
+> recusada** em cada uma dessas linhas — está em [`docs/arquitetura.md`](docs/arquitetura.md).
 
-### Onde a IA entra — e onde ela não entra
+---
+
+## O agente
+
+Um **supervisor** roteia a conversa e **dois subagents** executam. A divisão não é
+organizacional: é uma **fronteira de permissão**. Um dos dois não tem, no registro, nenhuma ação
+capaz de escrever — e isso é uma propriedade do código, não uma instrução no prompt.
+
+### As tools, e quem pode chamar cada uma
+
+| Tool | O que faz | recomendação | checkout |
+|---|---|:--:|:--:|
+| `buscar_produtos` | busca semântica no catálogo | ✅ | ✅ |
+| `detalhar_produto` | a ficha completa de um item | ✅ | ✅ |
+| `consultar_preco` | o preço, vindo do banco e nunca do modelo | ✅ | ✅ |
+| `validar_composicao` | confere total, valor por pessoa, slots do evento e alérgenos | ✅ | ✅ |
+| `consultar_pedido` | o estado do pedido e o da nota fiscal | ✅ | ✅ |
+| `validar_dados_cliente` | valida razão social, CNPJ e endereço da empresa | — | ✅ |
+| **`criar_pedido`** | grava o pedido, **revalidando** a composição do zero | — | ✅ |
+| **`gerar_link_pagamento`** | o link do gateway, em sandbox | — | ✅ |
+
+As duas em negrito são as únicas que escrevem, e as duas estão de um lado só da porta. Repare que
+`validar_composicao` fica na lane que **só lê**: propor não é side effect. Ela recebe uma lista de
+produtos e devolve um veredito — não autoriza venda nenhuma. Quem autoriza é `criar_pedido`, e
+ele refaz a conferência inteira no servidor em vez de confiar no que já passou.
+
+### As tools que não existem — e é isso que as impede
+
+`desconto` não está em registro nenhum. Não é uma ação negada por prompt: **ela não está lá**.
+Emitir nota fiscal e registrar a aprovação também não são tools, e nunca vão ser — emitir é ato
+que exige uma pessoa, e o registro da aprovação é uma rota do operador. Um teste da camada de
+segurança reprova o build se qualquer tool de escrita vazar para a lane de leitura.
+
+### Onde entra o humano: um ponto, e só um
+
+1. O pagamento é confirmado por **webhook** — código puro, idempotente, zero IA.
+2. O pedido **pausa**, com o estado gravado. A pausa sobrevive a um restart do processo.
+3. O operador vê a fila com os dados completos da nota, e aprova ou rejeita.
+4. A decisão fica registrada com **quem e quando**. A emissão só existe a partir desse registro.
+
+É impossível, por construção, emitir nota sem aprovação registrada — e isso é testado, não
+prometido em prosa.
+
+### Onde a IA entra, e onde ela não entra
 
 | Etapa | Quem resolve |
 |---|---|
 | Entender o evento ("café da manhã pra 40, R$35 por cabeça, tem um celíaco") | **LLM** — o valor está aqui |
-| Escolher os produtos da composição | LLM **ancorado em RAG** |
-| **Validar a composição** (total, slots, restrições, rendimento) | **Código — nunca o modelo** |
-| Informar preço / calcular total | **Código/banco — nunca o modelo** |
-| Coletar dados da empresa (razão social, CNPJ, endereço) | LLM coleta, **código valida** |
-| Gerar link de pagamento | Tool determinística com permissão |
+| Escolher os produtos da composição | LLM **ancorado em busca semântica** |
+| **Validar a composição** (total, slots, restrições, quantas pessoas atende) | **Código — nunca o modelo** |
+| Informar preço, calcular total | **Código/banco — nunca o modelo** |
+| Coletar dados da empresa | LLM coleta, **código valida** |
+| Gerar link de pagamento | Tool determinística, com permissão |
 | Confirmar pagamento | Webhook idempotente — **zero IA** |
-| Emitir NF | Tool + **HITL obrigatório** |
+| Emitir nota fiscal | Só depois de aprovação humana registrada |
 
-A jornada completa está em [`docs/jornada.md`](docs/jornada.md), e é **requisito normativo** do PRD.
-
----
-
-## O que o cliente pediu, e o que o repositório entrega
-
-| O que ele quis | Onde isso vive |
-|---|---|
-| Recomenda pelo que o cliente precisa | RAG sobre Qdrant + composição validada em código ([S-03](docs/specs/S-03-recomendacao-ancorada.md) · [S-11](docs/specs/S-11-composicao-de-evento.md)) |
-| Preço e estoque sempre do banco | Todo fato por tool; `test_recommendation_tools.py`, `test_groundedness.py` |
-| Conversa que fecha a venda | Checkout no fluxo do agente ([S-04](docs/specs/S-04-fronteira-pagamento.md)) |
-| Aprovação humana no irreversível | `interrupt` do LangGraph + fila do operador ([S-05](docs/specs/S-05-hitl-nf.md)) |
-| Cada atendimento auditável | Trace por sessão desde o commit 1 ([S-02](docs/specs/S-02-agente-observavel.md)) |
-| Custo visível e com teto | Budget cap por sessão, timeout por tool, custo somado em `Decimal` no backend |
-| Dados de clientes protegidos | Mascaramento de PII na origem, antes do envio |
-| Sua equipe coloca para rodar | Quickstart em ≤ 10 min, tudo mockado, harness versionado junto |
-
-| O que ele temeu | O que impede |
-|---|---|
-| Alucinação de produto, preço ou atributo | `fato_inventado` reprova a **suíte inteira** de evals |
-| Manipulação conversacional ("desconto na lábia") | A ação não existe no registro; 7 casos adversariais, 100% de resistência exigida |
-| Documento fiscal emitido sem revisão | `tests/security/test_hitl_invariant.py`: não existe caminho até `emitir_nf` sem aprovação registrada |
-| Mágica sem rastro | Painel de observação próprio + Langfuse como visor interno |
-| Conta de IA fora de controle | Budget cap: chegou no teto, o sistema corta |
-| Dado pessoal vazando pelos cantos | `tests/security/test_pii_redaction.py` é invariante de release |
+A jornada completa está em [`docs/jornada.md`](docs/jornada.md).
 
 ---
 
@@ -271,25 +319,25 @@ não requisito.
 
 ### Duas camadas de teste, e só duas ([ADR-011](docs/adr/ADR-011-duas-camadas-de-teste.md))
 
-| | Pergunta | O que produz | Tamanho |
+| | A pergunta que responde | O que produz | Tamanho |
 |---|---|---|---|
-| `tests/unit/` | A função faz a conta certa? | correção | 924 casos |
+| `tests/unit/` | A função faz a conta certa? | correção | 953 casos |
 | `tests/security/` | Existe caminho de código até a ação proibida? | **garantia** | 97 casos |
 
 Nenhuma das duas precisa de contêiner — é consequência de **não existir camada de integração**.
 
-Um teste unitário verde diz que o total foi somado direito. Um teste de segurança verde diz que o
-subagent de recomendação **não possui** a tool de escrita — não que ele foi instruído a não usá-la.
+Um teste unitário verde diz que o total foi somado direito. Um teste de segurança verde diz que a
+lane de recomendação **não possui** a tool de escrita — não que ela foi instruída a não usá-la.
 
 ### 23 casos de eval, escritos antes do agente existir
 
-`evals/` tem **16 casos golden** e **7 adversariais**, versionados e protegidos por CODEOWNERS —
-o que impede que um PR com eval vermelho fique verde editando o caso que reprovou. Cada arquivo
-carrega o critério que o reprova, ao lado do exemplo que o motivou: **não existe arquivo de rubric
-neste repositório** ([ADR-006](docs/adr/ADR-006-evals-como-gate.md)).
+São **16 casos golden** e **7 adversariais**, versionados e protegidos por CODEOWNERS — o que
+impede que um PR com eval vermelho fique verde editando o caso que reprovou. Cada caso carrega o
+critério que o reprova ao lado do exemplo que o motivou: **não existe arquivo de rubric neste
+repositório** ([ADR-006](docs/adr/ADR-006-evals-como-gate.md)).
 
 Não há nota agregada, não há média, não há "9 de 10 passaram". Duas famílias de falha reprovam a
-suíte inteira: **`fato_inventado`** e **`acao_fora_da_allowlist`**.
+suíte inteira: **fato inventado** e **ação fora da allowlist**.
 
 ```bash
 make evals-check           # valida os casos contra o schema — sem agente, sem API
@@ -300,39 +348,49 @@ make evals                 # a suíte inteira, 23 casos (o que o CI faz no pós-
 O gate roda **em camadas** ([ADR-014](docs/adr/ADR-014-gate-de-evals-em-camadas.md)): a parte
 determinística sempre, as sub-suítes afetadas pelo diff no PR, a suíte inteira depois do merge.
 
-### O que o CI exige em todo PR
+---
 
-`commitlint` · `lint` (ruff + actionlint) · `test` (unit + security) · `secrets` (gitleaks) ·
-`skills-drift` · `typecheck` (mypy strict no backend **e** na suíte) · `contrato` (OpenAPI e
-cliente TS regerados batem com o commitado) · `evals`.
+## O harness e a proteção da branch
 
-A `main` é protegida e todos são obrigatórios. Mudar um campo no backend sem rodar `make types`
-quebra o build, em vez de quebrar a tela.
+Quem clona o repositório recebe as regras da sessão junto com o código. O método não é prosa num
+documento: é ferramenta versionada, e boa parte dele **recusa** em vez de pedir.
+
+| O que | Onde vive | O que faz na prática |
+|---|---|---|
+| `/escrever-spec` · `/entregar-spec` | `.claude/commands/` | abre e executa uma spec: uma branch, uma sessão nova, um commit por task |
+| `/fechar-spec` · `/verificar-spec` | `.claude/commands/` | dispara a verificação independente, feita por um revisor que recebe o id da spec e mais nada |
+| `verificador-de-spec` | `.claude/agents/` | o prompt do revisor, **versionado** — enviesar a revisão passa a exigir um commit visível no diff |
+| `gate-pr.py` | `.claude/hooks/` | **recusa** abrir PR numa branch de spec sem relatório de verificação aprovado |
+| Skills vendorizadas | `.claude/skills/` | origem fixada por hash; editar uma à mão reprova o CI |
+
+**A `main` é protegida, e o PR é o único caminho até ela.** Nada entra por push direto: todo
+merge passa por pull request, com os checks obrigatórios verdes, e o merge é por squash. Antes
+disso, o hook local já tinha recusado abrir o PR sem veredito de verificação. São duas travas em
+série, e a de fora — a regra de proteção da branch, no GitHub — é a que não depende de ninguém
+ter lido nada. A configuração está em
+[`docs/workshop/github-setup.md`](docs/workshop/github-setup.md).
+
+Os checks que todo PR precisa passar:
+
+`commitlint` · `lint` · `test` (as duas camadas) · `secrets` · `skills-drift` · `typecheck`
+(estrito, no backend **e** na suíte) · `contrato` (o contrato da API e o cliente TypeScript
+regerados batem com o commitado) · `evals`.
+
+Mudar um campo no backend sem regerar o contrato quebra o build, em vez de quebrar a tela.
+
+```bash
+bash scripts/vendor-skills.sh --check   # as skills batem com o lockfile
+bash scripts/gen-skills-doc.sh --check  # a documentação do harness está em dia
+```
 
 ---
 
-## Como este repositório foi construído
+## Roadmap das specs
 
-![Fluxo de construção do repositório: pedido do cliente, discovery, harness, portões e só então código](docs/img/fluxo-discovery.svg)
-
-As quatro fases aconteceram **inteiras** antes de qualquer código de produto. O método é parte da
-entrega: Spec-Driven Development com autor e revisor separados
-([ADR-005](docs/adr/ADR-005-sdd-autor-revisor.md)).
-
-1. Cada spec = uma issue, uma branch `spec/s-XX-nome` e uma sessão nova do Claude Code.
-2. Cada task da spec = um commit (Conventional Commits, em inglês).
-3. **Verificação independente antes do PR, não antes do merge.** O subagente
-   `verificador-de-spec` — com o prompt versionado em `.claude/agents/`, recebendo o id da spec e
-   mais nada — gera o relatório em `docs/specs/relatorios/`. Sem veredito, não existe PR.
-4. As correções entram na mesma branch. O PR nasce já com elas dentro.
-5. Merge por squash, com os checks obrigatórios verdes.
-
-Instrução escrita à mão por quem implementou não é verificação independente. Com o prompt no
-repositório, enviesar a revisão passa a exigir um commit naquele arquivo — no diff, onde o PO vê.
-O portão é código: `.claude/hooks/gate-pr.py` recusa `gh pr create` numa branch de spec sem
-relatório aprovado.
-
-### Roadmap das specs
+> Cada spec é uma issue, uma branch e uma sessão nova, com **verificação independente antes do
+> PR** — sem veredito, não existe PR. O método está em
+> [ADR-005](docs/adr/ADR-005-sdd-autor-revisor.md) e em
+> [`docs/arquitetura.md`](docs/arquitetura.md).
 
 | Spec | Entrega | Status |
 |---|---|---|
@@ -346,7 +404,7 @@ relatório aprovado.
 | [S-05](docs/specs/S-05-hitl-nf.md) | HITL + emissão de NF | ✅ entregue |
 | [S-06](docs/specs/S-06-qualidade-como-gate.md) | Qualidade como gate (EDD) | ✅ entregue |
 | [S-07](docs/specs/S-07-frontend-integrado.md) | Frontend integrado e API de observação | ✅ entregue |
-| [S-08](docs/specs/S-08-producao.md) | Deploy — ambiente empacotado (api, frontend e nginx) | ⏳ aprovada, não iniciada |
+| [S-08](docs/specs/S-08-producao.md) | Deploy — ambiente empacotado (api, frontend e nginx) | ✅ entregue |
 
 > **Ordem de execução ≠ ordem dos ids.** S-10 e S-11 (o pivô B2B) rodaram **entre a S-03 e a
 > S-04**. Renumerar sairia mais caro que um id fora de ordem — a nota no topo da S-10 explica.
@@ -362,52 +420,18 @@ Leia nesta ordem — cada documento consome o anterior:
 | 1 | [`docs/requisitos.md`](docs/requisitos.md) | Do pedido do cliente em prosa à decisão de engenharia. Separar desejo de requisito |
 | 2 | [`docs/jornada.md`](docs/jornada.md) | Onde a IA entra no fluxo, etapa por etapa, e por quê |
 | 3 | [`docs/riscos.md`](docs/riscos.md) | Matriz R1–R10: risco → mitigação → spec → verificação |
-| 4 | [`docs/PRD.md`](docs/PRD.md) | Requisitos do produto, objetivos e não-objetivos |
+| 4 | [`docs/PRD.md`](docs/PRD.md) | Requisitos do produto, objetivos e **não-objetivos** |
 | 5 | [`docs/decisoes.md`](docs/decisoes.md) | Mapa D1–D18 → os 15 [ADRs](docs/adr/) |
-| 6 | [`docs/arquitetura.md`](docs/arquitetura.md) | Os dois diagramas: como o repo nasceu e como o produto se sustenta |
-| 7 | [`docs/testes.md`](docs/testes.md) | Risco → teste: o seam de cada verificação e o critério de aceite |
+| 6 | [`docs/arquitetura.md`](docs/arquitetura.md) | Como o repositório nasceu e como o produto se sustenta |
+| 7 | [`docs/testes.md`](docs/testes.md) | Risco → teste: onde cada verificação vive e o critério de aceite |
 | 8 | [`docs/specs/`](docs/specs/) | S-00 a S-11, com os [relatórios de verificação](docs/specs/relatorios/) |
 | 9 | [`evals/`](evals/) | A régua de qualidade do agente, escrita antes do agente existir |
+| 10 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Operar o ambiente empacotado: subir, endurecer, salvar, voltar atrás |
 
-Complementos: [`docs/harness/skills.md`](docs/harness/skills.md) (o harness versionado),
+Complementos: [`docs/harness/skills.md`](docs/harness/skills.md),
 [`docs/harness/medicao-de-evals.md`](docs/harness/medicao-de-evals.md) (a variância da régua),
-[`docs/design/sistema-visual.md`](docs/design/sistema-visual.md),
-[`docs/workshop/github-setup.md`](docs/workshop/github-setup.md) (proteção da main e CD).
-
-### O harness também é versionado
-
-Quem clona o repositório recebe as regras da sessão junto com o código: `CLAUDE.md`, os rituais em
-`.claude/commands/` (`/escrever-spec` · `/entregar-spec` · `/fechar-spec` · `/verificar-spec` ·
-`/registrar-adr`), o prompt do revisor em `.claude/agents/`, o hook `gate-pr.py` e as skills
-vendorizadas com origem fixada por SHA
-([ADR-009](docs/adr/ADR-009-skills-vendorizadas.md)).
-
-```bash
-bash scripts/vendor-skills.sh --check   # .claude/skills/ bate com o lockfile
-bash scripts/gen-skills-doc.sh --check  # docs/harness/skills.md em dia
-```
-
-Editar uma skill vendorizada à mão faz o CI reprovar o PR. Para adaptar comportamento ao projeto,
-edite `.claude/skills/vendinha-harness/SKILL.md`.
-
----
-
-## Fora de escopo — e por quê
-
-Nada aqui é omissão silenciosa; cada linha tem motivo registrado em
-[`docs/PRD.md` §3](docs/PRD.md).
-
-- **NF com validade fiscal real** — apenas o mock fiel; não há adapter de homologação SEFAZ.
-  *Certificado e CNPJ reais custam mais do que entregam numa demonstração, e a lacuna que isso
-  deixa na R8 está declarada em `docs/testes.md` §2 em vez de coberta por um teste vazio.*
-- **Dinheiro real** — apenas sandbox do Mercado Pago.
-- **Gestão de estoque, frete e logística** — o cliente pede a *informação* correta, não um sistema
-  de gestão. `disponivel` e `prazo_estimado` são campos lidos, e o eval reprova se o agente
-  inventar qualquer um dos dois.
-- **Autenticação de clientes finais, histórico entre sessões, multi-tenancy.**
-- **CRUD administrativo** — o painel do operador é read-only; prompt não é editável pela interface.
-- **Preço escalonado por faixa de quantidade** — seria legítimo, mas daria a R1 uma segunda forma
-  de estar errado em troca de realismo que a demonstração não precisa.
+[`docs/design/sistema-visual.md`](docs/design/sistema-visual.md) e
+[`docs/workshop/github-setup.md`](docs/workshop/github-setup.md).
 
 ---
 

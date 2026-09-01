@@ -162,15 +162,15 @@
   <rect x="456" y="470" width="330" height="80" rx="9" fill="#FFFFFF" stroke="#B9D9CE"/>
   <rect x="456" y="470" width="330" height="4" rx="2" fill="#1F6F5C"/>
   <text x="472" y="497" font-size="12.5" font-weight="700" fill="#1F6F5C">subagent RECOMENDAÇÃO</text>
-  <text x="472" y="513" font-size="11.5" fill="#4A5450">tools READ-ONLY: buscar_produtos,</text>
-  <text x="472" y="528" font-size="11.5" fill="#4A5450">detalhar_produto, consultar_preco,</text>
+  <text x="472" y="513" font-size="11.5" fill="#4A5450">tools READ-ONLY: buscar_produtos, detalhar_produto,</text>
+  <text x="472" y="528" font-size="11.5" fill="#4A5450">consultar_preco, consultar_pedido,</text>
   <text x="472" y="543" font-size="11.5" fill="#4A5450">validar_composicao (propor não é escrever)</text>
 
   <rect x="814" y="470" width="330" height="80" rx="9" fill="#FFFFFF" stroke="#E5D3B4"/>
   <rect x="814" y="470" width="330" height="4" rx="2" fill="#B4711F"/>
   <text x="830" y="497" font-size="12.5" font-weight="700" fill="#B4711F">subagent CHECKOUT</text>
-  <text x="830" y="518" font-size="11.5" fill="#4A5450">tools de escrita: criar_pedido,</text>
-  <text x="830" y="534" font-size="11.5" fill="#4A5450">gerar_link_pagamento</text>
+  <text x="830" y="518" font-size="11.5" fill="#4A5450">tools de escrita: criar_pedido e</text>
+  <text x="830" y="534" font-size="11.5" fill="#4A5450">gerar_link_pagamento — mais as de leitura</text>
 
   <rect x="600" y="556" width="400" height="22" rx="11" fill="#FDF3F3" stroke="#E8C9C9"/>
   <text x="800" y="571" font-size="10.5" font-weight="700" fill="#A03A3A" text-anchor="middle">fronteira de permissão — desconto não existe (ADR-002 · R2 · R4)</text>
