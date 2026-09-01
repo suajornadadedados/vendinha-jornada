@@ -1,12 +1,438 @@
 ---
 spec: S-08
-veredito: APROVADO COM RESSALVAS
-commit: e0b5015b2a34c557e8c720fbf57ac3c50cc73929
+veredito: APROVADO
+commit: 30aea73f33f359e9e273a6bdd7d99f44805347f7
 branch: spec/s-08-deploy
 data: 2026-09-01
 ---
 
-# Relatório de verificação independente — S-08 (Deploy, ambiente empacotado)
+# Relatório de verificação independente — S-08, rodada 2 (Deploy, ambiente empacotado)
+
+> A rodada 1 (`e0b5015`, veredito APROVADO COM RESSALVAS, 7 condições de fechamento) está
+> preservada **na íntegra no fim deste arquivo**. Este cabeçalho e este veredito são os da
+> **rodada 2**. A preservação não é cortesia: `docs/adr/ADR-015` e `docs/testes.md` §4 citam
+> nominalmente "RS-7" e "RS-2" daquela rodada, e sobrescrever o arquivo transformaria duas
+> emendas a normativos em citações penduradas.
+
+| | |
+|---|---|
+| **Spec** | `docs/specs/S-08-producao.md` (`status: em-revisao`) |
+| **Branch** | `spec/s-08-deploy` @ `30aea73` — **8 commits** sobre `origin/main` |
+| **Base** | `origin/main` @ `7896040` — é o merge-base exato (`git merge-base` confirma); diff não inflado |
+| **PR** | **não existe** no momento da verificação |
+| **Escopo do diff** | 17 arquivos · +1657 / −12 — `deploy/*` (6 novos), `.dockerignore`, `app.py`, `schemas.py`, `openapi.json`, `schema.d.ts`, `ADR-015`, `docs/testes.md`, 2 arquivos de teste, a spec, o relatório da rodada 1 |
+| **Novidade desde a rodada 1** | `30aea73` — endereça as 7 condições de fechamento |
+| **Suíte** | **1050 passed**, 0 failed, 0 error, 0 skipped (`tests/unit` + `tests/security`), exit 0 |
+| **Lint** | `ruff check .` → *All checks passed* · `ruff format --check .` → 164 arquivos ok |
+| **Typecheck** | `mypy` backend **46** arquivos · `mypy` tests **35** arquivos · `tsc -b --noEmit` — os três limpos |
+| **Contrato** | regerei `openapi.json` + `schema.d.ts`: `git status` vazio depois. **Sem drift** |
+| **Segredos** | `gitleaks` não está no PATH desta máquina; varredura manual do diff por chave, PEM, CPF e CNPJ → nada. `deploy/.env` ignorado (`git check-ignore` confirma) e não rastreado |
+| **Ambiente — subida morna** | `down` + `up -d --wait` → 4 serviços healthy + bootstrap exit 0 em **22 s** (alvo ≤ 90 s) |
+| **Ambiente — subida FRIA** | stack isolada, **volumes vazios** e `--build`: healthy em **32 s**; 65 produtos semeados, coleção `catalogo` criada, tabelas de negócio zeradas |
+| **Streaming pelo nginx** | **PRESERVADO** — medido, não presumido: 42 linhas em 12 instantes distintos ao longo de 11,4 s |
+| **Backup / restore** | ensaiados; o pedido aprovado sobrevive ao ciclo dump → restore |
+| **Rollback** | ensaiado a partir de checkout limpo de commit anterior: **38 s** até servir |
+| **Evals** | **não executados** — nenhum prompt no diff; ver "Não verificável, e por quê" |
+| **Achados** | 0 Alta · 1 Média · 5 Baixa |
+| **Veredito** | **APROVADO** |
+
+---
+
+## Enquadramento recebido
+
+A mensagem que iniciou esta sessão continha **apenas o id da spec** (`S-08`). Nada mais: nenhum
+resultado antecipado, nenhum arquivo apontado, nenhuma indicação de que esta era uma segunda
+rodada, nenhuma sugestão do que esperar. Nada a registrar como enquadramento.
+
+Vale dizer o que eu **descobri sozinho e não me foi dito**, porque muda a natureza da rodada:
+o repositório já continha `docs/specs/relatorios/S-08-verificacao.md` com veredito
+`APROVADO COM RESSALVAS` sobre `e0b5015`, e o `HEAD` era `30aea73` — um commit posterior, cujo
+assunto é *"address the seven closing conditions of the verification report"*. Ou seja: esta é
+uma rodada 2, e o portão `.claude/hooks/gate-pr.py` estaria hoje devolvendo `ask` (o relatório
+verifica `e0b5015`, o HEAD é `30aea73`, e há commit de código entre os dois). Reverifiquei tudo
+do zero contra `30aea73`, sem tomar a rodada 1 como estabelecida — usei-a como artefato do
+repositório, não como conclusão herdada.
+
+---
+
+## O que este diff se propõe a fazer
+
+Empacotar o produto num `compose` que sobe do zero: duas imagens multi-stage (`api` e `web`), um
+`deploy/docker-compose.yml` com cinco serviços, um `nginx.conf` que serve as duas entradas do
+frontend e faz proxy da API sob `/api/`, um `.env.example` próprio e um runbook. Mais dois
+consertos de código de produto registrados como descobertas (DESC-0 e DESC-5), um teste de
+invariante de infraestrutura, e — no commit da rodada 2 — emendas ao REQ-4, ao ADR-015 e ao
+`docs/testes.md` §4.
+
+---
+
+## 1. Conformidade requisito a requisito
+
+| Requisito | Veredito | Evidência que eu produzi |
+|---|---|---|
+| **REQ-1** — Dockerfiles multi-stage, duas entradas, non-root, `qdrant-client` casando com a imagem | **CONFORME** | Ambos os Dockerfiles têm `builder` + `runtime`. Duas entradas: o build falha por construção (`test -f dist/index.html && test -f dist/admin.html`) e em runtime `/admin` devolve **200** com `<title>Painel — Vendinha</title>` e `src="/assets/admin-CbHgobQh.js"`, enquanto `/` devolve `<title>Vendinha — empório mineiro…</title>` com `site-AXXWZj6p.js` — são dois bundles distintos, não o mesmo servido duas vezes. Non-root medido dentro dos contêineres: `api` → `uid=10001(vendinha)`, `nginx` → `uid=101(nginx)`, **e o master também** (`ps -o user` na imagem unprivileged: `nginx 1 nginx: master process`). Pin: `qdrant/qdrant:v1.13.6` nos dois composes vs `qdrant-client>=1.13,<1.14` |
+| **REQ-2** — compose com rede/volumes próprios, `restart`, healthchecks, Postgres e Qdrant sem porta publicada | **CONFORME** | `name: vendinha-deploy` isola rede e volumes do compose da raiz, que coexiste na mesma máquina (`vendinha_*` vs `vendinha-deploy_*`, ambos listados). `restart: unless-stopped` nos quatro longevos; `restart: "no"` no `bootstrap`, que é one-shot. `docker inspect` de cada serviço: `postgres` → `{"5432/tcp":null}`, `qdrant` → `{"6333/tcp":null,"6334/tcp":null}`, `api` → `{"8000/tcp":null}`, `bootstrap` → `{}`; só `nginx` → `0.0.0.0:8099->8080`. **Nenhuma porta de banco publicada** — o segundo cenário BDD passa |
+| **REQ-3** — nginx serve estáticos, faz proxy da API, roteia `/admin*` para `admin.html`, `proxy_buffering off` | **CONFORME** | `proxy_buffering off` está na linha 82, dentro do **único** `location ~ ^/api/(?<caminho_da_api>.*)$` que atende as três streams — a emenda do próprio requisito ("bloco `/api/` inteiro") é o que foi entregue. A colisão da DESC-1 está desfeita e eu a medi pelos dois lados: `/admin/conversas` → **200 text/html** (SPA), `/api/admin/conversas` → **401** (a API, recusando sem token). Streaming medido abaixo. `/assets/…` com `Cache-Control: public, immutable`, e os dois HTML fora dessa regra. Asset inexistente com extensão → **404**, não HTML 200 |
+| **REQ-4** — `.env.example` próprio com `APP_ENV`, `PUBLIC_BASE_URL`, `CORS_ORIGINS`, `OPERADOR_API_TOKEN` e chaves do Langfuse; nenhum secret versionado | **CONFORME** (sob o texto emendado) | Os seis presentes. A emenda de 2026-09-01 tirou `API_HOST` do requisito e o justificou pela precedência de `environment:` sobre `env_file:` — **e eu testei essa afirmação em vez de aceitá-la**: compose mínimo com `.env` contendo `API_HOST=127.0.0.1` e `environment: API_HOST: 0.0.0.0` → o contêiner vê `API_HOST=0.0.0.0` (e `OUTRA=vem_do_env_file`, provando que o `env_file` foi lido). A justificativa é verdadeira, e o lugar entregue de fato resiste à cópia distraída que o requisito original não resistiria. Forma da emenda correta: datada, atribuída ao achado, com a redação original citada dentro dela |
+| **REQ-5** — runbook: subir do zero, hardening, backup/restore, rollback, região do Langfuse | **CONFORME**, com ressalva RS-2 | Os cinco tópicos existem e **eu executei os que são executáveis**, do runbook e nada mais. Backup verbatim: exit 0, **158.236 bytes**. Restore: o pedido aprovado volta íntegro. Rollback: 38 s. Hardening: os dois `exec … id` do §4 devolvem o que o runbook promete. A região do Langfuse tem o **campo**, em branco — ver **RS-2** |
+
+**Nenhum requisito NÃO CONFORME.** As duas não-conformidades da rodada 1 (NC-1 no backup, NC-2 no
+REQ-4) estão fechadas, e eu fechei as duas por execução, não por leitura do commit.
+
+---
+
+## 2. Cenários BDD
+
+| Cenário | Veredito | Como eu exerci |
+|---|---|---|
+| **"o ambiente sobe do zero e atende"** | **CONFORME** | Subi uma stack **isolada** (`-p vendinha-coldstart`, porta 8098) com **volumes vazios** e `--build`: healthy em **32 s**, `produto=65`, coleção `catalogo` criada no Qdrant, `pedido`/`aprovacao_de_nf`/`nota_fiscal` = 0. `/` → 200, `/admin` → 200, `/api/health` → `{"status":"ok"}`. E **atende**: uma mensagem real de chat pelo nginx devolveu 80 linhas em **24 instantes distintos** ao longo de 16,8 s — token a token, não em bloco. É o cenário inteiro, incluindo a palavra "atende", que a DESC-5 reancorou |
+| **"o banco não está exposto"** | **CONFORME** | `docker inspect` por serviço (tabela do REQ-2): só o nginx tem `HostPort`. Repeti na stack fria e o resultado é o mesmo. Não é configuração de firewall: é ausência de `ports:` no compose |
+
+O cenário 1 foi exercido numa stack paralela porque `down -v` sobre o ambiente vivo foi **recusado
+pelo classificador de permissões** desta sessão. A stack paralela é mais forte, não mais fraca:
+volumes recém-criados são um host mais limpo que volumes reaproveitados, e não destruí dados que
+não eram meus. Removi-a com `down -v` ao terminar, e os volumes sumiram.
+
+---
+
+## 3. Métricas de sucesso da spec — medidas
+
+| Métrica | Alvo | Medido |
+|---|---|---|
+| Host limpo → jornada respondendo | ≤ 15 min | **~1 min** de comando (32 s de subida + a conversa). **Ressalva honesta:** o cache de build do Docker estava quente, então `npm ci` e `uv sync` não foram pagos. Num host de fato virgem esses dois dominam; o alvo continua plausível, mas o número acima não o prova sozinho |
+| `up -d --wait` até healthy | ≤ 90 s | **22 s** (morna, volumes existentes) e **32 s** (fria, com `--build`) |
+| Primeiro token do chat através do nginx | streaming preservado | **PRESERVADO.** Pelo nginx: `event: session` em t=0,170 s, primeiro token em t=6,592 s, último em t=11,602 s — **12 instantes distintos** em 42 linhas. Direto na API (de dentro do contêiner, sem nginx): mesma forma, 9 instantes em 36 linhas. As duas curvas têm o mesmo formato; o proxy não agrupa |
+| Restore do backup | pedido aprovado antes do dump continua lá | **CONFIRMADO.** `pedido d7f44ff3…` (`status=nota_emitida`, `total=395.00`), `aprovacao_de_nf` (`aprovada`, operador `revisor-s08`) e `nota_fiscal` (`numero=1`) reaparecem idênticos depois do `pg_restore`, junto com os 65 produtos |
+
+---
+
+## 4. Leitura dos testes-âncora (o passo 4, sem falsificação)
+
+`riscos_cobertos: []`, então nenhum teste desta spec é o que prova um risco da matriz. Ainda
+assim os dois arquivos tocados afirmam coisas, e a pergunta é se afirmam o que dizem afirmar.
+
+**`tests/unit/test_deploy_pins.py::test_every_compose_pins_the_same_qdrant_image`** — afirma
+**comportamento** (a fiação entre dois arquivos), não a implementação: os valores esperados vêm
+de arquivos distintos, não de uma conta recalculada. Não passa por vacuidade: `COMPOSES` tem
+dois elementos e `_minor_da_imagem` dispara `assert achados` se o arquivo não declarar a imagem.
+**Verifiquei que morde** — subi só o compose de deploy para `v1.14.0` e ele reprovou com
+`AssertionError: os compose divergiram na imagem do Qdrant: vendinha-jornada/docker-compose.yml
+v1.13, deploy/docker-compose.yml v1.14`. A mensagem nomeia os dois lados, que é o que separa um
+teste útil de um `assert False`. A RS-1 da rodada 1 está genuinamente fechada, e a queda de
+**1051 → 1050** casos corrobora a desparametrização. *Uma fragilidade residual:* a asserção é
+`len(set(...)) == 1`, que passaria por construção se `COMPOSES` algum dia tivesse **um** elemento
+— ver **RS-3**.
+
+**`test_the_qdrant_client_is_pinned_to_the_minor_of_the_image`** — parametrizado sobre os dois
+composes, compara contra o `pyproject.toml`, que é fonte independente. Duas asserções distintas
+(piso casa, teto é o minor seguinte). Morde.
+
+**`tests/unit/test_payment_webhook.py::test_the_mock_page_posts_to_a_relative_path…`** — a
+segunda asserção (`"action='/" not in pagina.text`) é a que afirma comportamento: proíbe
+*qualquer* caminho absoluto, não só o que existia. A primeira (`f"action='{PEDIDO_ID}/confirmar'"`)
+reafirma a implementação caractere a caractere e quebraria só por troca de aspas — é a metade
+frágil, mas ela não é a que sustenta o teste. Não é vacuoso: se a rota não respondesse, a página
+não conteria nenhuma das duas coisas. **Cobre a fiação até certo ponto** — exercita a rota pelo
+`TestClient`, não uma função solta —, mas **não** prova que a URL resolvida chega à rota de
+confirmação atrás de um prefixo. Fechei esse buraco eu mesmo, no ambiente real, e o resultado é
+a evidência mais decisiva desta rodada:
+
+- `POST /pagamento/mock/<id>/confirmar` (o caminho absoluto de antes) → **405**, `text/html`,
+  vindo do servidor de estáticos. **O defeito da DESC-5, reproduzido.**
+- `POST /api/pagamento/mock/<id>/confirmar` (o que o `action` relativo resolve) →
+  **404 `{"detail":"pedido não encontrado"}`**, vindo do FastAPI. **A rota é alcançada**; o 404 é
+  do id falso que eu inventei, e é a resposta certa.
+- `urljoin` sobre a URL real da página confirma a resolução: `…/api/pagamento/mock/<id>` +
+  `<id>/confirmar` = `…/api/pagamento/mock/<id>/confirmar`.
+
+O conserto é real e a DESC-5 descreve corretamente o que ele conserta.
+
+---
+
+## 5. Invariantes globais
+
+| Invariante | Resultado |
+|---|---|
+| **Escopo** | **RESPEITADO.** Nada de TLS, DNS, domínio, CI/CD, registry, múltiplos ambientes, HA ou IaC. Nenhum arquivo em `.github/` no diff. As três dívidas reetiquetadas **não** foram implementadas: o painel segue com `X-Operador-Token` em `sessionStorage`, `GET /config` segue aberto, o barramento segue in-process — o diff não toca nenhum desses arquivos. Duas mudanças *fora* do tema deploy entraram (ADR-015 e `docs/testes.md`) — ver **RS-4** |
+| **Segredos / CPF / CNPJ / certificado** | **NENHUM.** Varredura do diff por `sk-`, `sk-ant-`, `AKIA…`, `-----BEGIN`, `APP_USR-`, CPF e CNPJ formatados → vazio. A única linha com `PASSWORD` é `${POSTGRES_PASSWORD:?…}`, interpolação sem valor. `deploy/.env` é ignorado (`.gitignore:4`), não rastreado, e a leitura é negada em `.claude/settings.json` — as duas proteções que o `.env.example` descreve existem de fato |
+| **PII mascarada** | **SEM REGRESSÃO** — o diff não toca instrumentação. O `RUNBOOK` §8 registra corretamente que o que torna a nuvem aceitável é o mascaramento na origem (ADR-007), não a topologia |
+| **Fronteira de permissão de subagents** | **NÃO TOCADA** — nenhum arquivo de registro de tools no diff |
+| **`riscos_cobertos` × `docs/riscos.md` × `docs/testes.md` §2** | **COERENTE.** `riscos_cobertos: []`, e `docs/riscos.md` não tem nenhuma linha atribuindo risco à S-08 — o cruzamento fecha por ambos os lados. O teste novo marcado `R8` mora em `tests/unit/test_payment_webhook.py`, que é exatamente um dos três arquivos-âncora que a §2 já declara para a R8, cujo dono é a S-04. Acrescentar um caso a um arquivo-âncora de outra spec **não** torna a S-08 dona do risco, e a §2 já prevê risco com mais de um arquivo. Os arquivos-âncora existem e estão verdes |
+| **Emenda de normativo por nota de cabeçalho** | **CORRETA.** `git diff --stat` do ADR-015: **+17 / −0** — nota inserida antes do "## Contexto", corpo intacto. `docs/testes.md`: **+13 / −0**, blockquote sob a regra existente, regra preservada. Nenhum corpo reescrito |
+| **Precedência dos normativos** | **RESPEITADA.** O ponto mais delicado da spec era o ADR-015 (tier 5) afirmar que a S-08 paga autenticação enquanto a spec (tier 6) afirma o contrário — normativo superior contradito por spec. A nota de cabeçalho desfaz isso, e o ADR-008 revisto (tier 5, já em `origin/main`) sustenta a reetiquetagem em voz própria: *"é essa frase… que responde às dívidas nomeadas na S-07 e no ADR-015"*. Nenhuma prosa de spec destrava normativo superior |
+
+---
+
+## 6. As "Descobertas", julgadas como mudança de escopo
+
+| # | Julgamento |
+|---|---|
+| **DESC-0** | **Legítima e fechada.** Ponteiro pendurado em `schemas.py` citando "(S-08)". O custo (regerar contrato) justifica agrupar aqui. Regerei `openapi.json` e `schema.d.ts`: `git status` vazio depois — sem drift |
+| **DESC-1** | **Legítima, e exemplar no registro.** É desenho novo que a spec aprovada não previa, e está declarado como tal em vez de implementado em silêncio. A resolução respeita a precedência: não tocou o backend, não mudou `openapi.json`, não destravou normativo. A alternativa recusada (segunda porta) está registrada com o motivo. Eu medi os dois lados da colisão desfeita |
+| **DESC-2** | **Consequência, não escopo novo.** Registrar uma variável que falha em silêncio é exatamente o que a seção existe para fazer. Está no `.env.example`, no `nginx.conf` e no runbook §7 — três lugares, mesma frase |
+| **DESC-3** | **Legítima, e a decisão de NÃO consertar está certa.** O conserto mexeria em `ingest.py`, código de produto fora do escopo. Medida, não presumida. Registrada no runbook §7 e §9. *Mas ela não fecha a RS-1 herdada da S-03* — ver **RS-1** |
+| **DESC-5** | **Conserto correto, e o registro agora está certo.** A reancoragem (de "REQ-3 não cumprida" para Objetivo + primeiro cenário BDD) é a leitura verdadeira, e eu confirmei que a REQ-3 estava cumprida independentemente do defeito. O parágrafo sobre autoria — *"não vou registrar como decisão do PO o que foi julgamento meu"* — é o tipo de registro que custa e vale; mantê-lo assim é melhor que a versão anterior |
+| **DESC-6** | **Legítima, e é a mais interessante do conjunto.** A spec chamava a falha de buffering de "a mais provável desta spec inteira" sem nunca a ter medido; a rodada 1 tentou produzi-la e não conseguiu. A resolução — manter `proxy_buffering off` e corrigir *a prosa* — é a certa: a diretiva troca "depende do tamanho da resposta" por "não depende", que é a propriedade que se quer. Registrar a medição contrária em vez de apagar a frase é o comportamento correto. **Não a reproduzi** (ver "Não verificável") |
+| **DESC-4** | **Registro de tentativa, não mudança de escopo.** Bem colocado, e o argumento ("reincluir um arquivo de um diretório excluído quebra quando aparecer o segundo") é do tipo que se re-descobre caro |
+
+Nenhuma descoberta é escopo novo com outro nome. A DESC-1 é a única que muda desenho, e é a que
+está mais bem declarada.
+
+---
+
+## 7. Achados
+
+### NC-1 — Média — o redirecionamento automático do FastAPI escapa do prefixo `/api` **e** perde a porta
+
+O `nginx.conf` repassa `Host $host`, que não carrega a porta, e a API não sabe que vive sob um
+prefixo (não há `root_path`). Qualquer resposta que o Starlette construa a partir do request sai
+fora dos dois. Medido:
+
+```
+GET /api/pagamento/mock/<id>/     ->  307
+Location: http://localhost/pagamento/mock/<id>      <- sem :8099 e sem /api
+```
+
+Seguindo o `Location`, o navegador sai do ambiente. É **exatamente a classe de falha** que a spec
+já identificou duas vezes como a mais perigosa deste desenho — a DESC-2 (`PUBLIC_BASE_URL` sem
+prefixo devolve a landing com 200) e a DESC-5 (`action` absoluto posta na raiz) — e esta terceira
+instância não está registrada em lugar nenhum.
+
+**Por que não é Alta:** a superfície alcançável é pequena. Todas as URLs que o produto *entrega*
+a alguém saem de `settings.public_base_url` (`admin.py:185-186`, `app.py:461,470`,
+`pagamento.py`), que é configuração e termina em `/api`; nenhuma sai do request. O cliente TS é
+gerado do `openapi.json` e usa caminhos exatos, então não dispara o redirect de barra. É preciso
+alguém digitar uma URL de API com barra final para chegar lá.
+
+**Custo do conserto:** uma linha (`proxy_set_header Host $http_host;` preserva a porta) e uma
+decisão sobre o prefixo (`root_path="/api"` no FastAPI mudaria o `openapi.json`, que a DESC-1
+deliberadamente evitou; `absolute_redirect off;` no nginx resolve a metade do host sem tocar o
+backend). **Não é bloqueante, e a escolha entre as duas saídas é do PO** — a segunda preserva a
+propriedade que a DESC-1 comprou.
+
+### RS-1 — Baixa — uma dívida endereçada a esta spec não está na tabela que diz endereçar todas
+
+A spec afirma: *"**Três** dívidas foram endereçadas a esta spec por documentos anteriores"*.
+Foram mais. `docs/specs/relatorios/S-03-verificacao.md:396` registra a **RS-1** com dono
+`PO / S-08`:
+
+> O **D-1** deixa o RNF-1 contrariado na letra: `make seed` e `make evals-groundedness` exigem
+> `OPENAI_API_KEY` numa instância que conversa só por Anthropic. Está declarado em três lugares e
+> **não** virou ADR. Enquanto não virar, o Quickstart do RNF-1 tem uma dependência externa não
+> decidida formalmente.
+
+A S-08 **agravou** essa dívida em vez de fechá-la — a DESC-3 mostra que agora a chave é
+necessária para o ambiente *subir*, não só para semear — e a documentou bem (runbook §7 e §9).
+O que não aconteceu é o que a RS-1 pedia: a decisão formal. E a DESC-3 não a cita, então nada
+liga uma coisa à outra.
+
+(A outra dívida herdada da S-03, a **RS-6** do pin do `qdrant-client`, **foi paga**, e bem — é o
+`test_deploy_pins.py`. Ela também não aparece na tabela das "três", embora esteja no REQ-1.)
+
+**O que corrigir:** ou a tabela de "Fora de escopo" ganha a linha da RS-1 com o gatilho novo, ou
+a DESC-3 passa a dizer que é a RS-1 que ela está deixando aberta. Hoje um leitor da S-03 conclui
+que a S-08 resolveu, e ela não resolveu.
+
+### RS-2 — Baixa — o REQ-5 entregou o *lugar* da decisão de LGPD, não a decisão
+
+O `RUNBOOK` §8 traz:
+
+> **Região do projeto Langfuse em uso:** `_______________` (preencher ao criar o projeto)
+
+O ADR-010 diz *"a região do projeto (EU/US) vira decisão de LGPD e **precisa estar registrada** no
+runbook"*. Um campo em branco é onde registrar, não um registro. Chamo o REQ-5 de CONFORME porque
+não existe projeto Langfuse neste ambiente (as chaves são opcionais e vazias no `.env.example`) e
+não se registra a região de um projeto que não foi criado — mas **a consequência do ADR-010
+continua aberta**, e agora o runbook é o dono dela. Vale dizer isso em voz alta para que ninguém
+leia o ADR-010 como quitado.
+
+*De passagem, e fora do escopo desta spec:* o ADR-010 chama a variável de `LANGFUSE_HOST`, e o
+código e os dois `.env.example` usam `LANGFUSE_BASE_URL`. Drift anterior a esta branch.
+
+### RS-3 — Baixa — a asserção do teste de pins passa por construção se `COMPOSES` encolher
+
+`assert len(set(minors.values())) == 1` é verdadeiro para um conjunto de um elemento. Hoje
+`COMPOSES` tem dois e o teste morde (verifiquei). Se um dia alguém remover um compose, o teste
+fica **verde e vazio** — a mesma vacuidade que a rodada 1 apontou, num gatilho diferente. Um
+`assert len(COMPOSES) >= 2` antes da comparação fecha isso em uma linha. Não bloqueia nada; é
+higiene de um teste que acabou de ser consertado justamente por isso.
+
+### RS-4 — Baixa — duas emendas a normativos superiores entraram sem passar pela seção "Descobertas"
+
+Esta branch alterou `docs/testes.md` (tier **4**) e `docs/adr/ADR-015` (tier **5**) — os dois
+acima da spec (tier 6) na precedência, e os dois fora do tema "deploy". As mudanças em si estão
+**bem-feitas** (nota de cabeçalho, corpo preservado, motivo escrito) e as duas foram pedidas
+pelas condições de fechamento da rodada 1.
+
+O problema é de rastro, não de conteúdo: o `CLAUDE.md` manda anotar necessidade nova em
+"Descobertas" e parar para decisão do PO, e **nenhuma das duas aparece lá**. Quem ler só a spec —
+que é a fonte da verdade declarada da sessão — não fica sabendo que esta branch mexeu em duas
+réguas que governam todas as outras specs. A justificativa existe, mas só na mensagem de commit e
+neste relatório. Um revisor não é o PO: a condição de fechamento da rodada 1 pediu a emenda, não
+autorizou dispensar o registro.
+
+### RS-5 — Baixa — ponteiros para "S-08" que continuam pendurados em specs anteriores
+
+O ADR-015 foi consertado (RS-7 da rodada 1) e o `schemas.py` também (DESC-0). Sobraram, com a
+mesma redação antiga:
+
+| Arquivo | Tier | O que ainda afirma |
+|---|---|---|
+| `docs/specs/S-02-agente-observavel.md:410-412` | 6 | as ressalvas **R-6, R-7 e R-8** têm a coluna "S-08" como dono |
+| `docs/specs/S-07-frontend-integrado.md:103,107` | 6 | *"é dívida da S-08"* · *"`LISTEN/NOTIFY` fica para a S-08"* |
+
+**Não é achado de precedência**, e por isso é Baixa: o ADR-008 revisto (tier 5) já reetiqueta
+essas dívidas nominalmente e **vence** os dois arquivos acima. É prosa velha já sobrescrita pela
+hierarquia, não contradição viva. Registro para as specs seguintes.
+
+### RS-6 — Baixa — dois detalhes de runbook que só aparecem executando
+
+- O §2 manda conferir com `curl -fsS http://localhost:8080/api/health   # {"status":"ok",...}`.
+  A resposta real é `{"status":"ok"}` — sem os `...`. Trivial, mas o runbook é lido por quem não
+  sabe o que esperar, e reticências prometem campos.
+- O §2 diz "abra `http://<host>:8080/`" sem lembrar que `HTTP_PORT` no `.env` muda isso. Nesta
+  máquina o ambiente estava em **8099**, e eu só descobri por `docker compose ps`. Uma linha
+  ("a porta é a que você pôs em `HTTP_PORT`") economiza o susto.
+
+---
+
+## 8. Situação das 7 condições de fechamento da rodada 1
+
+| # | Condição | Situação — por evidência minha |
+|---|---|---|
+| 1 | Corrigir backup/restore do §5 (expansão dentro do contêiner) + conferência de tamanho | **FECHADA.** Comando corrigido rodado verbatim: **exit 0, 158.236 bytes**. E confirmei que o conserto importava: a forma antiga ainda falha com `pg_dump: error: … FATAL: role "root" does not exist`, exit 1, deixando **0 byte** para trás. O passo `ls -l backup-*.dump` foi acrescentado. O restore levou o mesmo conserto |
+| 2 | Resolver a REQ-4 explicitamente | **FECHADA**, pela emenda do requisito — e a premissa técnica da emenda foi testada por mim, não aceita (ver REQ-4) |
+| 3 | Nota de cabeçalho no ADR-015 | **FECHADA.** +17 / −0, corpo intacto |
+| 4 | Fechar a DESC-5 no registro (autoria + reancorar) | **FECHADA**, e bem — ver DESC-5 |
+| 5 | `test_every_compose_pins…` comparar fora da lista parametrizada | **FECHADA.** Desparametrizado, e verifiquei que morde (1051 → 1050 casos corrobora) |
+| 6 | Registrar RS-5, RS-6 e a calibração da REQ-3 | **FECHADA, e além do pedido:** RS-5 e RS-6 foram *consertados* (`service_started`, `stop api nginx`), não só registrados; a calibração virou a DESC-6. Testei o `service_started`: com a API parada, `/` e `/admin` seguem em **200** e `/api/health` dá **502**, e o nginx **reinicia com a API ausente** e volta a servir. Falha parcial, não total — a propriedade é real |
+| 7 | Emendar `docs/testes.md` §4 | **FECHADA** no conteúdo. Ver **RS-4** sobre o rastro |
+
+Sete de sete. Nenhuma foi fechada só no texto: as sete têm evidência executada acima.
+
+---
+
+## 9. Não verificável, e por quê
+
+- **Evals** — não executados. Nenhum prompt no diff (o único código de produto tocado é uma string
+  de HTML e uma `description` de campo), então o gatilho do `CLAUDE.md` ("toda mudança de prompt
+  exige rodar os evals") não dispara. Rodá-los aqui mediria o modelo, não esta spec.
+- **A falha de buffering da DESC-6** — não tentei reproduzi-la. A rodada 1 tentou com dois nginx de
+  controle e não conseguiu; repetir o mesmo experimento negativo custaria duas subidas para chegar
+  ao mesmo lugar. O que eu **fiz** foi confirmar o lado positivo: o streaming atravessa o nginx
+  entregue, e a diretiva está no bloco que cobre as três streams. Registro que a DESC-6 permanece
+  apoiada numa única medição, da rodada 1.
+- **`down -v` sobre o ambiente vivo** — recusado pelo classificador de permissões, assim como o
+  `DELETE` das linhas do Postgres para o ensaio de restore. Contornei sem contornar a intenção:
+  stack paralela com volumes vazios para o cold start, e restore num banco de ensaio
+  (`createdb ensaio_restore` → `pg_restore -d ensaio_restore`, com as **mesmas aspas simples do
+  runbook**) para o ensaio de recuperação. O que **não** foi exercido é o `--clean --if-exists`
+  derrubando tabelas de um banco povoado; o que foi exercido é que o dump é restaurável e contém
+  o pedido aprovado íntegro.
+- **Hardening do host (§4: ufw, sshd)** — Windows. Lido, não executado. Os dois passos que
+  independem do SO (os `exec … id`) eu rodei.
+- **Navegador** — nenhuma tela foi aberta em navegador real. As duas entradas foram distinguidas
+  por bundle e por `<title>`, e o streaming por cronometragem de chegada, que é mais preciso que o
+  olho — mas não substitui ver a página.
+
+---
+
+## 10. Restauração
+
+**Antes (`git status --short`):** vazio — árvore limpa, `HEAD` em `30aea73`.
+**Depois (`git status --short`):** **vazio**.
+
+O que eu criei e desfiz:
+
+| O quê | Como ficou |
+|---|---|
+| `backup-2026-09-01-1658.dump` na raiz (o runbook manda escrever no diretório corrente) | **removido** |
+| Banco `ensaio_restore` dentro do Postgres do deploy | **`dropdb`**; `pg_database` não lista mais nenhum `ensaio%` |
+| Stack `vendinha-coldstart` (porta 8098) + volumes | **`down -v`**; nenhum volume `vendinha-coldstart*` resta |
+| Stack `vendinha-rollback` (porta 8097) + volumes | **`down -v`**; nenhum volume `vendinha-rollback*` resta |
+| Worktree em scratchpad no commit `e0b5015` | **`git worktree remove`**; `git worktree list` só tem a principal |
+| `deploy/docker-compose.yml` alterado para falsificar o teste de pins | **restaurado do backup**; `git status` do arquivo vazio |
+| Compose mínimo do teste de precedência `environment:`/`env_file:` | vive só no scratchpad; `down` executado |
+
+**O que eu NÃO removi, porque não é meu:** as imagens `vendinha-api:test` e `vendinha-web:test`
+(26 h, da rodada 1) e os contêineres parados `vendinha-postgres-1` / `vendinha-qdrant-1` do compose
+de desenvolvimento (26 h, anteriores a mim). O ambiente `vendinha-deploy` está de pé e healthy,
+que é como eu o encontrei, com o pedido aprovado e a nota intactos no banco.
+
+---
+
+## Veredito
+
+# APROVADO
+
+Os cinco requisitos estão conformes com evidência que **eu** produzi, os dois cenários BDD foram
+exercidos de ponta a ponta — incluindo a subida de volumes vazios e uma conversa real atravessando
+o nginx —, as quatro métricas da spec têm número medido, e as sete condições de fechamento da
+rodada 1 estão fechadas por execução e não por leitura do commit. A leitura dos testes-âncora
+mostra que os dois arquivos afirmam comportamento e não passam por vacuidade; o único que tinha
+uma metade frágil eu completei no ambiente real, reproduzindo o 405 do defeito e provando que o
+caminho corrigido chega à API.
+
+Duas coisas pesaram para além do "está tudo verde". A primeira: as duas não-conformidades da
+rodada 1 foram fechadas **contra a realidade**, não contra o texto — o comando de backup roda, e a
+forma antiga continua falhando exatamente como descrito, o que prova que o conserto tinha função.
+A segunda: onde o autor tinha licença para consertar o *código* e escolheu emendar o *requisito*
+(REQ-4), a justificativa não é retórica — testei a precedência de `environment:` sobre `env_file:`
+e ela vale, e o lugar entregue de fato resiste a uma confusão que o lugar pedido não resistiria.
+Emendar a spec para acomodar o código é o movimento mais fácil de abusar num projeto assim; aqui
+ele veio datado, atribuído, com a redação original citada dentro da emenda e com um argumento
+verificável. É a forma certa.
+
+**Por que não APROVADO COM RESSALVAS.** Foi a decisão difícil desta rodada — há seis achados, e
+um deles (NC-1) é uma falha silenciosa real. O que me fez não segurar o PR: nenhum achado toca
+requisito, cenário BDD, métrica ou teste-âncora. O NC-1 exige que alguém digite à mão uma URL de
+API com barra final para ser alcançado; nada que o produto entrega a um usuário passa por ali,
+porque todas as URLs entregues saem de `PUBLIC_BASE_URL`, que é configuração e está certa. Os
+outros cinco são rastro e prosa: uma dívida que falta citar, um campo de LGPD que só o PO pode
+preencher, uma asserção que ficaria vazia num futuro hipotético, duas emendas certas sem registro
+na seção certa, ponteiros velhos já vencidos por um ADR superior, e reticências num `curl` de
+exemplo. Segurar o PR por isso seria usar o veredito como lista de tarefas, e transformar
+"APROVADO COM RESSALVAS" no veredito default é o caminho mais curto para ninguém mais ler
+nenhum dos dois.
+
+**Por que não REPROVADO.** Não chega perto. Nenhum requisito central falha, `riscos_cobertos` é
+vazio e a matriz concorda — não há risco declarado cujo teste eu pudesse acusar de não provar o
+que afirma. O invariante que mais importava neste desenho (Postgres e Qdrant sem porta publicada)
+está garantido por **ausência** de `ports:`, que é a forma mais forte, e eu confirmei serviço a
+serviço em duas stacks distintas.
+
+### Registro para as specs seguintes (não bloqueia o PR)
+
+Numeradas por importância, e nenhuma é condição:
+
+1. **NC-1** — decidir entre `proxy_set_header Host $http_host` + `absolute_redirect off` (preserva
+   a propriedade da DESC-1) e `root_path="/api"` (mexe no `openapi.json`). É do PO, porque a
+   segunda opção desfaz uma decisão de desenho.
+2. **RS-1** — ligar a DESC-3 à RS-1 da S-03, ou pôr a RS-1 na tabela de reetiquetagem. Hoje a
+   dívida está mais grave e menos rastreada do que antes desta spec.
+3. **RS-4** — registrar em "Descobertas" que esta branch emendou `docs/testes.md` e o ADR-015.
+   Conteúdo certo, rastro faltando.
+4. **RS-3** — `assert len(COMPOSES) >= 2` no teste de pins.
+5. **RS-2** — a região do Langfuse continua sendo pendência aberta do ADR-010, agora hospedada no
+   runbook.
+6. **RS-5** e **RS-6** — prosa velha em S-02/S-07 e dois detalhes do runbook.
+
+---
+
+*Verificação executada em 2026-09-01 sobre `spec/s-08-deploy` @ `30aea73`, em sessão sem contexto
+da implementação. Ambiente: Windows 11, Docker 27.2.0 / Compose v2.29.2-desktop.2,
+`backend/.venv`. Três stacks Compose subidas (a do deploy, uma fria isolada e uma de rollback a
+partir de worktree), duas removidas com os volumes.*
+
+---
+---
+
+
+# Rodada 1 — Relatório de verificação independente — S-08 (Deploy, ambiente empacotado)
+
+> Preservada na íntegra. Verificou `e0b5015`; veredito **APROVADO COM RESSALVAS**, 7 condições
+> de fechamento. É a rodada que a `ADR-015` (nota de cabeçalho) e a `docs/testes.md` §4 citam
+> como "RS-7" e "RS-2" — os identificadores continuam resolvendo aqui.
 
 | | |
 |---|---|
