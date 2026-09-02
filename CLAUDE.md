@@ -21,7 +21,7 @@ Construído como estudo de caso público de decisões de engenharia em projetos 
 - `docs/jornada.md` — onde a IA entra no fluxo e por quê
 - `docs/riscos.md` — matriz R1-R10: risco → mitigação → spec → verificação
 - `docs/testes.md` — risco → teste: onde cada verificação da matriz vive e o que faz um teste ser aceito
-- `docs/decisoes.md` — mapa D1-D16 → ADRs
+- `docs/decisoes.md` — mapa D1-D18 → ADRs
 - `docs/PRD.md` — requisitos do produto
 - `docs/specs/S-XX-*.md` — a spec em execução é a fonte da verdade da sessão
 

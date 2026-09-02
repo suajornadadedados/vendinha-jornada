@@ -83,7 +83,7 @@
       <circle cx="30" cy="30" r="12" fill="#1F6F5C"/>
       <text x="30" y="35" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
       <text x="50" y="35" font-size="13.5" font-weight="700" fill="#1A1714" font-family="ui-monospace, Consolas, Menlo, monospace">decisoes.md + adr/</text>
-      <text x="20" y="72">D1-D16 → ADR-001..013.</text>
+      <text x="20" y="72">D1-D18 → ADR-001..015.</text>
       <text x="20" y="90">Todo ADR exige 2 alternativas</text>
       <text x="20" y="108">e a consequência negativa.</text>
       <rect x="20" y="126" width="190" height="1" fill="#EDE7DE"/>
