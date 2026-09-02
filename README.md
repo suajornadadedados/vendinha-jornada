@@ -110,47 +110,36 @@ um dia que não aconteceu.
 
 ## Subir a Vendinha
 
-Três comandos, e o produto inteiro sobe: loja, painel, API, banco, índice vetorial e um nginx na
-frente.
+**Pré-requisito:** Docker rodando (no Windows e no macOS, o Docker Desktop aberto).
 
 ```bash
 git clone https://github.com/suajornadadedados/vendinha-jornada && cd vendinha-jornada
-cp deploy/.env.example deploy/.env     # preencha as cinco chaves que ele pede
-docker compose -f deploy/docker-compose.yml up -d --wait
+cp deploy/.env.example deploy/.env
 ```
 
-Depois disso:
+Preencha as cinco chaves de `deploy/.env` — o arquivo explica cada uma. Depois, um comando sobe
+tudo:
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build --wait
+```
 
 | Onde | O que é |
 |---|---|
 | **http://localhost:8080/** | a loja — a compradora corporativa conversa com o agente |
 | **http://localhost:8080/admin** | o painel — o operador acompanha e aprova a nota fiscal |
 
-**O host só precisa de Docker.** Não precisa de Python, Node nem nada de build: tudo compila
-dentro das imagens. O `--wait` só volta quando todos os serviços estão saudáveis; na primeira vez
-ele constrói as imagens e carrega o catálogo, e leva alguns minutos.
-
-**O arquivo de exemplo pede cinco chaves e explica cada uma no próprio comentário.** Duas são
-credenciais de modelo, e **as duas são necessárias mesmo que você use só uma**: um provedor
-conversa, o outro transforma o catálogo em vetores. As outras três são a senha do banco, uma
-chave de cifra e o token do painel — o arquivo mostra como gerar cada uma.
+```bash
+docker compose -f deploy/docker-compose.yml logs -f api
+docker compose -f deploy/docker-compose.yml down
+```
 
 **Isto empacota o produto; não o publica.** Sem TLS e sem autenticação real, este host não vai
 para a internet aberta ([ADR-008](docs/adr/ADR-008-deploy-ambiente-unico.md)). Só o nginx publica
-porta: banco e índice vetorial não são alcançáveis de fora, e isso é do desenho, não do firewall.
-
-```bash
-docker compose -f deploy/docker-compose.yml logs -f api      # acompanhar
-docker compose -f deploy/docker-compose.yml restart api      # reiniciar só a API
-git pull && docker compose -f deploy/docker-compose.yml up -d --build --wait   # publicar versão nova
-```
-
-O `--build` da última linha **não é opcional**: sem ele o compose reaproveita a imagem antiga e o
-`git pull` não chega a lugar nenhum — um deploy que parece ter funcionado e não fez nada.
+porta: banco e índice vetorial não são alcançáveis de fora.
 
 ▶ **Operar de verdade** — subir num servidor, hardening do host, backup e restore, rollback, e as
 armadilhas que não dão erro compreensível: [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
-Este README não repete nada do que está lá.
 
 <details>
 <summary><strong>Rodar em modo de desenvolvimento</strong> — para quem vai mexer no código</summary>
