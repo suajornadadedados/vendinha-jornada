@@ -110,6 +110,10 @@ um dia que não aconteceu.
 
 ## Subir a Vendinha
 
+> **Existem dois compose no repositório, e eles fazem coisas diferentes.** O de `deploy/` sobe o
+> **produto inteiro** — é o desta seção. O da **raiz** sobe só o banco e o índice, para você
+> desenvolver e rodar os testes na sua máquina; ele está no bloco recolhido ao fim desta seção.
+
 **Pré-requisito:** Docker rodando (no Windows e no macOS, o Docker Desktop aberto).
 
 ```bash
@@ -150,8 +154,14 @@ armadilhas que não dão erro compreensível: [`deploy/RUNBOOK.md`](deploy/RUNBO
 <br>
 
 Aqui os pré-requisitos mudam: Docker, Python 3.12, [uv](https://docs.astral.sh/uv/) e Node 22.
-O compose da raiz sobe **só** o banco e o índice; a API e as telas rodam na sua máquina, com
-reload. `make` é conveniência — cada alvo é uma linha de comando real, e `make help` lista todos.
+
+Quem sobe agora é o **`docker-compose.yml` da raiz**: só Postgres e Qdrant, com as portas
+expostas em `localhost` para a API e as telas rodarem na sua máquina, com reload. **Todos os
+alvos de `make` usam esse compose, nunca o de `deploy/`** — `make test` não precisa de contêiner
+nenhum, e `make seed`, `make api` e `make evals` precisam dele de pé. O arquivo de configuração
+correspondente é o `.env` da **raiz**, e não o de `deploy/`.
+
+`make help` lista todos os alvos; cada um é uma linha de comando real.
 
 ```bash
 cp .env.example .env       # nada precisa ser preenchido para subir a infra e rodar os testes
