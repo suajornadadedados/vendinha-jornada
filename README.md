@@ -129,6 +129,9 @@ docker compose -f deploy/docker-compose.yml up -d --build --wait
 | **http://localhost:8080/** | a loja — a compradora corporativa conversa com o agente |
 | **http://localhost:8080/admin** | o painel — o operador acompanha e aprova a nota fiscal |
 
+Se a porta 8080 estiver ocupada, `deploy/.env` deixa trocá-la — e aí troque **nos dois campos**
+que a citam, não só no primeiro: o segundo é o que monta o link de pagamento entregue ao cliente.
+
 ```bash
 docker compose -f deploy/docker-compose.yml logs -f api
 docker compose -f deploy/docker-compose.yml down
