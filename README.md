@@ -265,13 +265,6 @@ As duas em negrito são as únicas que escrevem, e as duas estão de um lado só
 produtos e devolve um veredito — não autoriza venda nenhuma. Quem autoriza é `criar_pedido`, e
 ele refaz a conferência inteira no servidor em vez de confiar no que já passou.
 
-### As tools que não existem — e é isso que as impede
-
-`desconto` não está em registro nenhum. Não é uma ação negada por prompt: **ela não está lá**.
-Emitir nota fiscal e registrar a aprovação também não são tools, e nunca vão ser — emitir é ato
-que exige uma pessoa, e o registro da aprovação é uma rota do operador. Um teste da camada de
-segurança reprova o build se qualquer tool de escrita vazar para a lane de leitura.
-
 ### Onde entra o humano: um ponto, e só um
 
 1. O pagamento é confirmado por **webhook** — código puro, idempotente, zero IA.
